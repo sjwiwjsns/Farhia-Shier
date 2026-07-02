@@ -15,6 +15,8 @@ never the art direction.
 | Reflections | none | none | env-map on glass & water | + aircraft fuselage (metalness 0.3) |
 | Ambient occlusion | — | — | — | approximated via hemisphere/contact tuning (no SSAO pass — perf first) |
 | Ground clutter density | 0 | 0.4 | 0.7 | 1.0 |
+| Grass blades (instanced, 1 draw call) | 12 000 | 30 000 | 60 000 | 100 000 |
+| Grass carpet radius (camera-following) | 150 m | 190 m | 230 m | 265 m |
 | Parked aircraft at gates | 0 | ≤ ~8 (detail 0.4) | ≤ ~11 | ≤ 14 |
 | Moving ground vehicles | – | – | 6 | 6 |
 | Texture ceiling | liveries 1024×256, runways ≤1700px | 1536×384, ≤2550px | 2048×512, ≤3400px | 2048×512, ≤3400px, anisotropy 8 |
@@ -33,7 +35,14 @@ never the art direction.
 ## Where the frame time goes
 
 - **1 draw call per particle type** (smoke/fire/sparks/dust are single `THREE.Points`
-  pools with shader-attenuated sprites).
+  pools with shader-attenuated sprites). Dust and smoke integrate wind advection and
+  jet-blast acceleration cones on the CPU (≤ ~2 300 live particles, trivial cost).
+- **1 draw call for all grass** — an `InstancedBufferGeometry` of 5-vertex blades whose
+  wrap-around tile follows the camera (toroidal modulo in the vertex shader), so the
+  entire blade budget always forms a dense carpet around the player. A 1024² pavement
+  mask texture (rasterized once from the airport's pavement registry) is sampled per
+  blade to zero-scale anything over runways/taxiways/aprons. Wind sway and jet-blast
+  bending are pure vertex-shader work.
 - Runway/taxiway markings are baked into canvas textures — zero marking geometry.
 - Liveries are canvas textures generated once per (airline, tier) and cached for
   parked traffic.

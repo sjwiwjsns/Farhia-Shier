@@ -145,12 +145,27 @@ export function buildAirport(airport, tier, fleetPool = []) {
     group.add(water);
   }
 
-  // Airport pavement pad under runways/terminals
-  const pad = new THREE.Mesh(new THREE.CircleGeometry(2400, 36), lambertOrStandard(tier, { color: '#5c6055' }));
-  pad.rotation.x = -Math.PI / 2;
-  pad.position.y = 0.08;
-  pad.receiveShadow = tier.shadows;
-  group.add(pad);
+  // Pavement registry: every paved surface registers its footprint so grass
+  // placement and wheel-dust logic can ask isPavement(x, z). Rects are
+  // oriented (dir = long axis); circles are radial.
+  const pavement = { rects: [], circles: [] };
+  const paveRect = (cx, cz, dirX, dirZ, halfL, halfW) =>
+    pavement.rects.push({ cx, cz, dirX, dirZ, halfL, halfW });
+  const paveCircle = (x, z, r) => pavement.circles.push({ x, z, r });
+  const isPavement = (x, z) => {
+    for (const c of pavement.circles) {
+      const dx = x - c.x, dz = z - c.z;
+      if (dx * dx + dz * dz < c.r * c.r) return true;
+    }
+    for (const r of pavement.rects) {
+      const dx = x - r.cx, dz = z - r.cz;
+      const along = dx * r.dirX + dz * r.dirZ;
+      if (Math.abs(along) > r.halfL) continue;
+      const across = dx * -r.dirZ + dz * r.dirX;
+      if (Math.abs(across) < r.halfW) return true;
+    }
+    return false;
+  };
 
   // ---------------------------------------------------------------- runways
   const runways = [];
@@ -175,6 +190,17 @@ export function buildAirport(airport, tier, fleetPool = []) {
     mesh.receiveShadow = tier.shadows;
     group.add(mesh);
 
+    // graded shoulder strip under/around the runway
+    const shoulder = new THREE.Mesh(new THREE.PlaneGeometry(rw.widM + 36, rw.lenM + 90),
+      lambertOrStandard(tier, { color: '#5b5f56' }));
+    shoulder.rotation.order = 'YXZ';
+    shoulder.rotation.y = -h;
+    shoulder.rotation.x = -Math.PI / 2;
+    shoulder.position.set(rw.x, 0.06, rw.z);
+    shoulder.receiveShadow = tier.shadows;
+    group.add(shoulder);
+    paveRect(rw.x, rw.z, dir.x, dir.z, rw.lenM / 2 + 60, rw.widM / 2 + 30);
+
     const [endA, endB] = rw.id.split('/');
     runways.push({
       id: rw.id, endA, endB, hdg: rw.hdg, lenM: rw.lenM, widM: rw.widM,
@@ -194,6 +220,7 @@ export function buildAirport(airport, tier, fleetPool = []) {
     taxi.rotation.x = -Math.PI / 2;
     taxi.position.set(rw.x + perp.x * off, 0.14, rw.z + perp.z * off);
     group.add(taxi);
+    paveRect(taxi.position.x, taxi.position.z, dir.x, dir.z, rw.lenM * 0.46 + 10, 22);
     for (const f of [-0.46, 0, 0.46]) {
       const c = new THREE.Mesh(new THREE.PlaneGeometry(20, Math.abs(off) + 12), lambertOrStandard(tier, { color: '#4e5257' }));
       c.rotation.order = 'YXZ';
@@ -202,15 +229,29 @@ export function buildAirport(airport, tier, fleetPool = []) {
       const p = center.clone().addScaledVector(dir, f * rw.lenM).addScaledVector(perp, off / 2);
       c.position.set(p.x, 0.12, p.z);
       group.add(c);
+      paveRect(p.x, p.z, perp.x, perp.z, (Math.abs(off) + 12) / 2 + 10, 20);
     }
   }
 
-  // Apron slab around terminals
+  // Apron slab around terminals + one slab per terminal footprint (covers
+  // gates and parked aircraft), so the buildings never sit on turf.
   const apron = new THREE.Mesh(new THREE.CircleGeometry(520, 28), lambertOrStandard(tier, { color: '#63666a' }));
   apron.rotation.x = -Math.PI / 2;
   apron.position.set(apronCentroid.x, 0.10, apronCentroid.z);
   apron.receiveShadow = tier.shadows;
   group.add(apron);
+  paveCircle(apronCentroid.x, apronCentroid.z, 560);
+  const slabMat = lambertOrStandard(tier, { color: '#616468' });
+  for (const t of airport.terminals) {
+    const slabR = Math.max(t.lenM, t.widM) / 2 + t.widM + 55;
+    const slab = new THREE.Mesh(new THREE.CircleGeometry(slabR, 24), slabMat);
+    slab.rotation.x = -Math.PI / 2;
+    slab.position.set(t.x, 0.09, t.z);
+    slab.receiveShadow = tier.shadows;
+    group.add(slab);
+    paveCircle(t.x, t.z, slabR + 10);
+  }
+  paveCircle(airport.tower.x, airport.tower.z, 30);
 
   // ---------------------------------------------------------------- terminals
   const wallMat = lambertOrStandard(tier, { color: '#c9c6bd' });
@@ -385,7 +426,7 @@ export function buildAirport(airport, tier, fleetPool = []) {
   // ---------------------------------------------------------------- scenery
   buildScenery(airport, tier, group, collidables, rng, has);
 
-  return { group, collidables, runways, gates, movers, apronCentroid };
+  return { group, collidables, runways, gates, movers, apronCentroid, pavement, isPavement };
 }
 
 // ---------------------------------------------------------------- scenery

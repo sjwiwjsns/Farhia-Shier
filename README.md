@@ -6,6 +6,11 @@ with stall/ground-effect/crosswind, toggleable crash-breakup physics, four graph
 and a fixed always-day VFR world — targeting GTA IV-era stylized-realistic fidelity at a
 smooth frame rate. Built on Three.js with **no build step**.
 
+The airfield itself is alive: **12k–100k individual grass blades** (one instanced draw
+call) sway in the wind, flatten under your jet blast, and never grow through pavement;
+**dust physics** drifts with the crosswind, gets blasted downstream by engine exhaust,
+sprays from the wheels when you roll onto turf, and erupts on off-runway touchdowns.
+
 ## Quick start
 
 ```bash

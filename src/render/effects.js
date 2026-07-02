@@ -6,29 +6,37 @@ const VERT = `
 attribute float size;
 attribute float alpha;
 varying float vAlpha;
+#include <common>
+#include <logdepthbuf_pars_vertex>
 void main() {
   vAlpha = alpha;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_PointSize = size * (300.0 / -mv.z);
   gl_Position = projectionMatrix * mv;
+  #include <logdepthbuf_vertex>
 }`;
 const FRAG = `
 uniform vec3 uColor;
 varying float vAlpha;
+#include <common>
+#include <logdepthbuf_pars_fragment>
 void main() {
+  #include <logdepthbuf_fragment>
   vec2 d = gl_PointCoord - 0.5;
   float r = length(d);
   if (r > 0.5) discard;
-  float soft = smoothstep(0.5, 0.1, r);
-  gl_FragColor = vec4(uColor, vAlpha * soft);
+  float soft = smoothstep(0.1, 0.5, r);
+  gl_FragColor = vec4(uColor, vAlpha * (1.0 - soft));
 }`;
 
 class Pool {
-  constructor(scene, { count, color, blending, gravity, drag, grow }) {
+  constructor(scene, { count, color, blending, gravity, drag, grow, windMix = 0, fieldMix = 0 }) {
     this.count = count;
     this.gravity = gravity;
     this.drag = drag;
     this.grow = grow;
+    this.windMix = windMix;   // how strongly particles are advected toward ambient wind
+    this.fieldMix = fieldMix; // how strongly jet-blast fields accelerate particles
     this.pos = new Float32Array(count * 3);
     this.vel = new Float32Array(count * 3);
     this.life = new Float32Array(count);     // seconds remaining
@@ -62,20 +70,46 @@ class Pool {
     this.baseAlpha[i] = alpha;
   }
 
-  update(dt) {
+  update(dt, wind, fields) {
     const { pos, vel, life, maxLife, size, alpha, baseAlpha } = this;
     const dragF = Math.exp(-this.drag * dt);
+    const wMix = this.windMix > 0 && wind ? 1 - Math.exp(-this.windMix * dt) : 0;
+    const useFields = this.fieldMix > 0 && fields && fields.length > 0;
     for (let i = 0; i < this.count; i++) {
       if (life[i] <= 0) { alpha[i] = 0; continue; }
       life[i] -= dt;
       const t = Math.max(life[i] / maxLife[i], 0);
-      vel[i * 3] *= dragF;
-      vel[i * 3 + 1] = vel[i * 3 + 1] * dragF + this.gravity * dt;
-      vel[i * 3 + 2] *= dragF;
-      pos[i * 3] += vel[i * 3] * dt;
-      pos[i * 3 + 1] += vel[i * 3 + 1] * dt;
-      pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
-      if (pos[i * 3 + 1] < 0.1) { pos[i * 3 + 1] = 0.1; vel[i * 3 + 1] *= -0.2; }
+      const i3 = i * 3;
+      vel[i3] *= dragF;
+      vel[i3 + 1] = vel[i3 + 1] * dragF + this.gravity * dt;
+      vel[i3 + 2] *= dragF;
+      // ambient wind advection: velocity relaxes toward the wind vector
+      if (wMix > 0) {
+        vel[i3] += (wind.x - vel[i3]) * wMix;
+        vel[i3 + 2] += (wind.z - vel[i3 + 2]) * wMix;
+      }
+      // jet-blast acceleration cones (dust/smoke physically pushed by exhaust)
+      if (useFields) {
+        for (const f of fields) {
+          const dx = pos[i3] - f.x, dy = pos[i3 + 1] - f.y, dz = pos[i3 + 2] - f.z;
+          const along = dx * f.dx + dy * f.dy + dz * f.dz;
+          if (along < -4 || along > f.len) continue;
+          const rx = dx - f.dx * along, ry = dy - f.dy * along, rz = dz - f.dz * along;
+          const r2 = rx * rx + ry * ry + rz * rz;
+          const sigma = f.r2 + along * along * 0.20;
+          const g = Math.exp(-r2 / sigma) * (1 - Math.max(along, 0) / f.len);
+          if (g < 0.01) continue;
+          const a = f.str * g * this.fieldMix * dt;
+          const rInv = 1 / Math.sqrt(r2 + 1);
+          vel[i3] += (f.dx + rx * rInv * 0.5) * a;
+          vel[i3 + 1] += (f.dy + ry * rInv * 0.5 + 0.25) * a;
+          vel[i3 + 2] += (f.dz + rz * rInv * 0.5) * a;
+        }
+      }
+      pos[i3] += vel[i3] * dt;
+      pos[i3 + 1] += vel[i3 + 1] * dt;
+      pos[i3 + 2] += vel[i3 + 2] * dt;
+      if (pos[i3 + 1] < 0.1) { pos[i3 + 1] = 0.1; vel[i3 + 1] *= -0.2; }
       size[i] += this.grow * dt;
       alpha[i] = baseAlpha[i] * Math.min(1, t * 3) * t;
     }
@@ -89,11 +123,24 @@ class Pool {
 export class Effects {
   constructor(scene) {
     this.scene = scene;
-    this.smoke = new Pool(scene, { count: 900, color: 0x3c3c3e, blending: THREE.NormalBlending, gravity: 1.4, drag: 0.6, grow: 6 });
-    this.fire = new Pool(scene, { count: 500, color: 0xff7a1a, blending: THREE.AdditiveBlending, gravity: 2.2, drag: 1.2, grow: 2.5 });
+    this.smoke = new Pool(scene, { count: 900, color: 0x3c3c3e, blending: THREE.NormalBlending, gravity: 1.4, drag: 0.6, grow: 6, windMix: 0.9, fieldMix: 0.8 });
+    this.fire = new Pool(scene, { count: 500, color: 0xff7a1a, blending: THREE.AdditiveBlending, gravity: 2.2, drag: 1.2, grow: 2.5, windMix: 0.35, fieldMix: 0.5 });
     this.sparks = new Pool(scene, { count: 400, color: 0xffd28a, blending: THREE.AdditiveBlending, gravity: -14, drag: 0.4, grow: 0 });
-    this.dust = new Pool(scene, { count: 400, color: 0x9a938a, blending: THREE.NormalBlending, gravity: 0.6, drag: 1.6, grow: 8 });
+    this.dust = new Pool(scene, { count: 900, color: 0x9a8d78, blending: THREE.NormalBlending, gravity: 0.6, drag: 1.4, grow: 7, windMix: 0.6, fieldMix: 1.0 });
     this.emitters = [];
+    this.wind = new THREE.Vector3();  // ambient wind (m/s), set by the sim
+    this.fields = [];                 // jet-blast cones: {x,y,z, dx,dy,dz, len, r2, str}
+  }
+
+  // Emit particles with a directed initial velocity (wheel spray, blast pickup).
+  dustKick(p, v, count, size = 3, life = 1.6, alpha = 0.5) {
+    for (let i = 0; i < count; i++) {
+      this.dust.emit(
+        p.x + (Math.random() - 0.5) * 2.5, Math.max(p.y + (Math.random() - 0.5), 0.3), p.z + (Math.random() - 0.5) * 2.5,
+        v.x * (0.6 + Math.random() * 0.8), v.y * (0.6 + Math.random() * 0.8), v.z * (0.6 + Math.random() * 0.8),
+        life * (0.6 + Math.random() * 0.8), size * (0.6 + Math.random() * 0.9), alpha
+      );
+    }
   }
 
   burst(type, p, count, speed, life, size, alpha = 0.8) {
@@ -137,10 +184,10 @@ export class Effects {
         );
       }
     }
-    this.smoke.update(dt);
-    this.fire.update(dt);
+    this.smoke.update(dt, this.wind, this.fields);
+    this.fire.update(dt, this.wind, this.fields);
     this.sparks.update(dt);
-    this.dust.update(dt);
+    this.dust.update(dt, this.wind, this.fields);
   }
 
   dispose() {

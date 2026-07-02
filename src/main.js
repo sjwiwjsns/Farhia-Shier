@@ -8,6 +8,7 @@ import { createSky } from './render/sky.js';
 import { CameraRig } from './render/cameras.js';
 import { Effects } from './render/effects.js';
 import { buildAirport, updateAirportDynamics } from './world/airportBuilder.js';
+import { createGrass } from './world/grass.js';
 import { AircraftEntity } from './aircraft/entity.js';
 import { airlineOperates } from './aircraft/liveries.js';
 import { DamageSystem } from './physics/damage.js';
@@ -88,6 +89,11 @@ class Sim {
     const windKts = this.arcade ? 4 : 7;
     this.wind = new THREE.Vector3(-Math.sin(windFrom), 0, Math.cos(windFrom)).multiplyScalar(windKts * KTS2MS);
     this.windInfo = { dir: 240, kts: windKts };
+    this.effects.wind.copy(this.wind);
+
+    // instanced grass field (tens of thousands of blades, one draw call)
+    this.grass = createGrass(config.airport, this.tier, this.world, this.wind);
+    if (this.grass.mesh) this.scene.add(this.grass.mesh);
 
     // radio
     this.radioEl = $('radio');
@@ -233,7 +239,14 @@ class Sim {
       if (ev.type === 'touchdown' && ev.gear !== 'nose') {
         this.shared.audio.event('touchdown', clamp(ev.vsFpm / 400, 0.3, 2));
         if (ev.vsFpm < this.damage.hardFpm && ev.vsFpm > 60) {
-          this.effects.tireSmoke(new THREE.Vector3(fm.pos.x, 0.5, fm.pos.z), ev.vsFpm / 500);
+          if (this.world.isPavement(fm.pos.x, fm.pos.z)) {
+            this.effects.tireSmoke(new THREE.Vector3(fm.pos.x, 0.5, fm.pos.z), ev.vsFpm / 500);
+          } else {
+            // turf touchdown: throw a proper dirt cloud instead of tyre smoke
+            this.effects.dustKick(new THREE.Vector3(fm.pos.x, 0.6, fm.pos.z),
+              new THREE.Vector3(-fm.vel.x * 0.3, 3 + ev.vsFpm / 250, -fm.vel.z * 0.3),
+              Math.ceil(clamp(ev.vsFpm / 80, 4, 16)), 3.5, 2.2, 0.55);
+          }
         }
       }
     }
@@ -242,9 +255,74 @@ class Sim {
     this.shared.audio.update(dt, fm);
   }
 
+  // Jet-blast cone behind the engines (drives grass bending, dust fields
+  // and turf scouring). Null when the engines are quiet or well airborne.
+  computeBlast() {
+    const fm = this.fm;
+    if (this.crashed || this.entity.broken || fm.n1 < 0.22 || fm.aglM > 25) return null;
+    const offs = this.entity.info.engineOffsets;
+    if (!offs.length) return null;
+    const mean = new THREE.Vector3();
+    for (const o of offs) mean.add(o);
+    mean.divideScalar(offs.length);
+    const pos = this.entity.worldPoint(mean);
+    const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(fm.quat);
+    if (fm.reversers) dir.negate();
+    dir.y *= 0.2;
+    dir.normalize();
+    const len = (35 + fm.n1 * fm.n1 * 170) * (fm.reversers ? 0.45 : 1);
+    return { pos, dir, len, n1: fm.n1 };
+  }
+
+  spawnGroundDust(dt, blast) {
+    const fm = this.fm;
+    // wheels rolling on turf spray dirt behind the mains
+    if (fm.onGround && !this.crashed) {
+      const speed = Math.hypot(fm.vel.x, fm.vel.z);
+      if (speed > 4 && !this.world.isPavement(fm.pos.x, fm.pos.z)) {
+        this._wheelDustAcc = (this._wheelDustAcc || 0) + dt * Math.min(speed, 60) * 0.9;
+        while (this._wheelDustAcc >= 1) {
+          this._wheelDustAcc -= 1;
+          for (const g of ['left', 'right']) {
+            const p = this.entity.worldPoint(fm.gearPoints[g]);
+            p.y = Math.max(p.y, 0.4);
+            this.effects.dustKick(p,
+              new THREE.Vector3(-fm.vel.x * 0.22, 1.6 + Math.random() * 2.2, -fm.vel.z * 0.22),
+              2, 2.6, 1.5, 0.5);
+          }
+        }
+      }
+    }
+    // jet blast scouring dirt off the turf behind the engines
+    if (blast && blast.n1 > 0.45 && fm.aglM < 14) {
+      this._blastDustAcc = (this._blastDustAcc || 0) + dt * blast.n1 * 34;
+      while (this._blastDustAcc >= 1) {
+        this._blastDustAcc -= 1;
+        const along = 6 + Math.random() * blast.len * 0.6;
+        const bp = blast.pos.clone().addScaledVector(blast.dir, along);
+        bp.y = 0.4;
+        if (this.world.isPavement(bp.x, bp.z)) continue;
+        this.effects.dustKick(bp,
+          blast.dir.clone().multiplyScalar(12 + 32 * blast.n1).setY(1.2 + Math.random() * 3),
+          3, 3.8, 2.0, 0.55);
+      }
+    }
+  }
+
   frame(dt) {
     this.time += dt;
     this.entity.syncVisual(dt);
+    const blast = this.computeBlast();
+    this.grass.update(dt, this.time, blast, this.camera.position);
+    this.effects.fields.length = 0;
+    if (blast) {
+      this.effects.fields.push({
+        x: blast.pos.x, y: blast.pos.y, z: blast.pos.z,
+        dx: blast.dir.x, dy: blast.dir.y, dz: blast.dir.z,
+        len: blast.len, r2: 90, str: 50 * blast.n1 * blast.n1
+      });
+    }
+    this.spawnGroundDust(dt, blast);
     this.effects.update(dt);
     updateAirportDynamics(this.world, dt, this.time);
     this.rig.update(dt, this.entity, this.shared.input, this.tower);
@@ -264,6 +342,8 @@ class Sim {
   dispose() {
     this.entity.dispose();
     this.effects.dispose();
+    this.grass.dispose();
+    if (this.grass.mesh) this.scene.remove(this.grass.mesh);
     this.sky.dispose();
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();

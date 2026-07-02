@@ -10,25 +10,25 @@ export const TIERS = {
     id: 'low', label: 'Low',
     px: 0.75, lowMat: true, shadows: false, shadowMap: 0,
     draw: 9000, clutter: 0, reflections: false, fuselageReflections: false,
-    texScale: 0.5, anisotropy: 1
+    texScale: 0.5, anisotropy: 1, grass: 12000
   },
   medium: {
     id: 'medium', label: 'Medium',
     px: 1.0, lowMat: false, shadows: true, shadowMap: 1024,
     draw: 16000, clutter: 0.4, reflections: false, fuselageReflections: false,
-    texScale: 0.75, anisotropy: 2
+    texScale: 0.75, anisotropy: 2, grass: 30000
   },
   high: {
     id: 'high', label: 'High',
     px: 1.0, lowMat: false, shadows: true, shadowMap: 2048,
     draw: 26000, clutter: 0.7, reflections: true, fuselageReflections: false,
-    texScale: 1, anisotropy: 4
+    texScale: 1, anisotropy: 4, grass: 60000
   },
   max: {
     id: 'max', label: 'Maximum',
     px: 0, /* 0 = native devicePixelRatio */ lowMat: false, shadows: true, shadowMap: 4096,
     draw: 40000, clutter: 1, reflections: true, fuselageReflections: true,
-    texScale: 1, anisotropy: 8
+    texScale: 1, anisotropy: 8, grass: 100000
   }
 };
 

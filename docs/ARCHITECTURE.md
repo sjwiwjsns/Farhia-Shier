@@ -23,7 +23,7 @@ src/
   core/    math.js loop.js input.js         helpers, fixed-120Hz loop, kb/mouse/gamepad
   physics/ flightModel.js damage.js         rigid-body-lite FDM, crash state machine
   aircraft/ aircraftFactory.js liveries.js entity.js   procedural meshes, canvas liveries, view+breakup
-  world/   airportBuilder.js                runways/terminals/scenery/collidables from JSON
+  world/   airportBuilder.js grass.js       runways/terminals/scenery/collidables from JSON; instanced grass
   render/  graphics.js sky.js cameras.js effects.js    tiers, always-day sky, camera rig, particles
   ui/      menu.js hud.js atc.js            selection UI, glass HUD + cockpit panels, ATC-lite
   audio/   engineSound.js                   synthesized engines/warnings/impacts
@@ -141,6 +141,28 @@ wing/nose strikes, structures). Arcade thresholds are ~1.6× more forgiving.
 Crash physics ON: `entity.breakup()` detaches wings/engines/tail as ballistic debris,
 ignites fire/smoke emitters, crumples the fuselage, then shows the respawn overlay.
 OFF: soft "landing reset" back to the spawn point.
+
+## Grass & dust physics (`world/grass.js`, `render/effects.js`)
+
+Grass is a single `InstancedBufferGeometry` draw call of 12k–100k five-vertex blades
+(per tier). Blades live in a **wrap-around tile that follows the camera** — a toroidal
+modulo in the vertex shader — so the full budget always forms a dense carpet around the
+player instead of thinning out over the 45 km world. The airport's **pavement registry**
+(every runway shoulder, taxiway, connector, apron and terminal slab records its
+footprint) is rasterized once into a 1024² mask texture; each blade samples it and
+zero-scales itself over pavement. The same registry backs a CPU `isPavement(x, z)`
+query used by gameplay. Blade animation is all vertex-shader: two-octave wind sway
+biased along the ambient wind, plus a jet-blast cone behind the player's engines that
+flattens blades outward/downstream with a flutter term.
+
+Dust (and smoke) particles integrate real forces: gravity and drag, **advection toward
+the ambient wind vector**, and **jet-blast acceleration cones** fed from the same blast
+model the grass uses. Dust sources: main-gear spray when rolling on turf, exhaust
+scouring loose dirt behind the engines (both gated by `isPavement`), and touchdown
+bursts on off-pavement landings. Note for custom shaders: the renderer uses a
+logarithmic depth buffer, so every `ShaderMaterial` must include the `logdepthbuf_*`
+chunks or it will lose the depth test (and reversed-argument `smoothstep()` is
+undefined behavior in GLSL — both bit us during development).
 
 ## Graphics tiers (`render/graphics.js`)
 
