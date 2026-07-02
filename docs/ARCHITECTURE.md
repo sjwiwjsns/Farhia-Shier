@@ -23,6 +23,8 @@ src/
   core/    math.js loop.js input.js         helpers, fixed-120Hz loop, kb/mouse/gamepad
   physics/ flightModel.js damage.js         rigid-body-lite FDM, crash state machine
   aircraft/ aircraftFactory.js liveries.js entity.js   procedural meshes, canvas liveries, view+breakup
+  aircraft/a380/  spec.js fuselage.js wing.js engines.js gear.js tail.js index.js
+                                       bespoke from-scratch A380-800 (see below)
   world/   airportBuilder.js grass.js       runways/terminals/scenery/collidables from JSON; instanced grass
   render/  graphics.js sky.js cameras.js effects.js    tiers, always-day sky, camera rig, particles
   ui/      menu.js hud.js atc.js            selection UI, glass HUD + cockpit panels, ATC-lite
@@ -141,6 +143,31 @@ wing/nose strikes, structures). Arcade thresholds are ~1.6× more forgiving.
 Crash physics ON: `entity.breakup()` detaches wings/engines/tail as ballistic debris,
 ignites fire/smoke emitters, crumples the fuselage, then shows the respawn overlay.
 OFF: soft "landing reset" back to the spawn point.
+
+## Bespoke A380 (`aircraft/a380/`)
+
+The flagship is NOT built by the generic family factory: `buildAircraft()` delegates
+`a380-800` at player detail to a dedicated module that returns the same
+`{ group, parts, info }` contract (so physics, surface/gear animation and crash
+breakup work unchanged; parked/ambient A380s still use the cheap generic path).
+
+- **`spec.js`** — a structured dimensional dossier: 22 fuselage cross-section
+  stations, 4 wing planform segments, 8 slat + 2 flap + 8 spoiler + aileron
+  spans, 8 door stations across two decks, all 22 wheels, engine and tail data.
+- **`fuselage.js`** — a true double-bubble loft (per-station width + separate
+  upper/lower half-heights blends the deep two-deck crown into the low cockpit
+  brow), wing-to-body belly fairing loft, 6-pane cockpit glazing with frame
+  posts, 16 recessed cabin doors, blade antennas, beacon, pitots, APU exhaust.
+- **`wing.js`** — cranked four-panel wing with per-segment sweep/dihedral/taper,
+  8 leading-edge slats, two flap bodies on swept hinge lines, flap-track
+  fairing pods, 8 spoiler panels, outboard aileron and the up/down tip fence.
+- **`engines.js`** — lathe-profiled cowls, 24 individually placed fan blades per
+  engine, spinner, core + plug, shaped pylons — and reverser sleeves on the
+  INBOARD pair only, matching the real aircraft.
+- **`gear.js`** — twin steerable nose gear with scissor links and landing
+  lights, two 4-wheel wing bogies, two 6-wheel body bogies (22 wheels total),
+  with bogie tilt, struts and braces; retraction uses the standard channels.
+- Dual-deck window rows come from the livery painter (`deck: double` families).
 
 ## Grass & dust physics (`world/grass.js`, `render/effects.js`)
 

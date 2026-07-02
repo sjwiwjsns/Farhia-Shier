@@ -26,7 +26,7 @@ Any static file server works — there is no bundler, no framework, no install.
 | Family | Variants |
 |---|---|
 | Boeing | 707-320, 717, 727-100/200, 737 (-200, Classic, NG, MAX — 13 variants), 747-100/200/400/8I/8F, 757-200/300, 767-200/300ER/400ER, 777-200/200ER/300/300ER, 777-8/9, 787-8/9/10 |
-| Airbus | A300-600, A310, A318/319/320/321 (ceo + neo), A330-200/300/900neo, A340-200/300/500/600, A350-900/1000, A380-800 |
+| Airbus | A300-600, A310, A318/319/320/321 (ceo + neo), A330-200/300/900neo, A340-200/300/500/600, A350-900/1000, **A380-800 (bespoke from-scratch build: lofted double-deck hull, 22-wheel gear, per-blade fans, inboard-only reversers — see docs)** |
 | McDonnell Douglas | DC-9-10/30/50, MD-81/82/83/88, MD-90, DC-10-10/30/40, MD-11 (+ freighter), **MD-12 (concept — never built, house colors only)** |
 | Supersonic | Concorde, Boom Overture (in development) |
 

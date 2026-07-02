@@ -49,12 +49,18 @@ export function generateLivery(airline, variant, texScale = 1) {
     g.fillRect(W * 0.02, H * (fy + 0.024), W * 0.97, H * 0.016);
   }
 
-  // Passenger windows (skip on freighters).
+  // Passenger windows (skip on freighters). Double-deck types get a second
+  // full-length window row per side (A380) — the MD-12 concept shares it.
   if (!isFreighter) {
     g.fillStyle = '#1c232b';
     const step = W * 0.0088;
-    for (const fy of [0.745, 0.245]) {
-      for (let x = W * 0.10; x < W * 0.88; x += step) {
+    const doubleDeck = variant.family === 'a380' || variant.family === 'md12';
+    const rows = doubleDeck ? [0.775, 0.685, 0.215, 0.305] : [0.745, 0.245];
+    for (const fy of rows) {
+      const upperRow = doubleDeck && (fy === 0.685 || fy === 0.305);
+      const x0 = upperRow ? W * 0.15 : W * 0.10;
+      const x1 = upperRow ? W * 0.80 : W * 0.88;
+      for (let x = x0; x < x1; x += step) {
         g.fillRect(x, H * fy - H * 0.009, step * 0.42, H * 0.018);
       }
     }
@@ -77,21 +83,28 @@ export function generateLivery(airline, variant, texScale = 1) {
     g.fill();
   }
 
-  // Titles above the window line. The right side of the fuselage (v 0.25→0.5,
-  // canvas rows 0.5H→0.75H) reads nose→tail right-to-left from a viewer, so
-  // that copy is drawn mirrored; the left side copy is drawn normally.
+  // Titles above the window line. Verified in-engine: the right-side band
+  // (v 0.25→0.5, canvas rows ~0.615H) displays the texture unreversed, while
+  // the left-side band (canvas rows ~0.415H) appears mirrored to a viewer —
+  // so the LEFT copy is drawn flipped and the right copy is drawn normally.
   const titles = airline.titles || airline.name;
   const fs = H * 0.085;
   g.font = `bold ${fs}px Arial, Helvetica, sans-serif`;
   g.fillStyle = col.text;
-  g.save(); // right side (mirrored)
-  g.translate(W * 0.30, H * 0.615);
-  g.scale(-1, 1);
   g.textAlign = 'center';
+  // Flank mapping nailed down empirically (dual-orientation colour-band
+  // experiments): the ~0.615H canvas band is the aircraft's LEFT flank and
+  // displays upright/unmirrored; the ~0.415H band is the RIGHT flank and is
+  // displayed rotated 180° (u view-mirror + v inversion), so that copy is
+  // drawn pre-rotated 180°.
+  g.textBaseline = 'middle';
+  g.fillText(titles, W * 0.30, H * 0.615 - fs * 0.35); // left flank
+  g.save(); // right flank (pre-rotated 180°)
+  g.translate(W * 0.30, H * 0.415 - fs * 0.35);
+  g.scale(-1, -1);
   g.fillText(titles, 0, 0);
   g.restore();
-  g.textAlign = 'center';
-  g.fillText(titles, W * 0.30, H * 0.415);
+  g.textBaseline = 'alphabetic';
 
   const fuselageMap = new THREE.CanvasTexture(cv);
   fuselageMap.anisotropy = 4;

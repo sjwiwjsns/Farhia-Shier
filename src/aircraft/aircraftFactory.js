@@ -5,6 +5,7 @@
 // the crash-breakup system.
 import * as THREE from 'three';
 import { DEG2RAD, clamp, lerp } from '../core/math.js';
+import { buildA380 } from './a380/index.js';
 
 function mergeGeo(family, variant) {
   const g = JSON.parse(JSON.stringify(family.geometry));
@@ -157,6 +158,11 @@ function makeGear({ strutLen, wheelR, bogie, dark, grey, detail }) {
 export function buildAircraft(variant, family, livery, opts = {}) {
   const quality = opts.quality || 'high';
   const detail = opts.detail ?? 1;
+  // The A380 has its own from-scratch high-detail builder (src/aircraft/a380/).
+  // Parked/ambient copies (low detail) still use the cheap generic path.
+  if (variant.id === 'a380-800' && detail >= 0.9) {
+    return buildA380(livery, { quality, detail });
+  }
   const geo = mergeGeo(family, variant);
   const { len, span } = variant.dims;
   const R = geo.fusR;
