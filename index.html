@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Sky Rider - 3D Airplane Game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #87ceeb; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #fff; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #game { position: fixed; inset: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* HUD */
+  #hud { position: fixed; top: env(safe-area-inset-top, 10px); left: 10px; right: 10px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; z-index: 10; text-shadow: 0 2px 4px rgba(0,0,0,0.6); }
+  .panel { background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; padding: 10px 14px; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .stat { font-size: 14px; line-height: 1.5; }
+  .stat b { display: inline-block; min-width: 60px; opacity: 0.75; font-weight: 500; }
+  .val { font-weight: 700; font-size: 15px; }
+  #score { font-size: 22px; font-weight: 800; text-align: center; }
+  #score small { display: block; font-size: 11px; opacity: 0.75; font-weight: 500; margin-top: 2px; letter-spacing: 1px; }
+
+  /* Controls (mobile) */
+  #controls { position: fixed; bottom: env(safe-area-inset-bottom, 20px); left: 0; right: 0; padding: 0 20px 20px; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; z-index: 10; }
+  #joystick { width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,0.12); border: 2px solid rgba(255,255,255,0.35); position: relative; pointer-events: auto; touch-action: none; }
+  #stick { width: 60px; height: 60px; border-radius: 50%; background: rgba(255,255,255,0.85); position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  #throttle { display: flex; flex-direction: column; gap: 12px; pointer-events: auto; }
+  .tbtn { width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.4); color: #fff; font-size: 28px; font-weight: 700; display: flex; align-items: center; justify-content: center; touch-action: none; user-select: none; }
+  .tbtn.active { background: rgba(255,255,255,0.4); }
+  #throttle-label { font-size: 11px; text-align: center; opacity: 0.8; margin-top: -4px; }
+
+  /* Overlay screens */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; backdrop-filter: blur(4px); }
+  .card { background: linear-gradient(135deg, #1e3a5f, #0f2439); border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; padding: 30px 25px; max-width: 400px; width: 100%; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
+  .card h1 { font-size: 32px; margin-bottom: 8px; background: linear-gradient(90deg, #ffd54f, #ff8f00); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .card .sub { font-size: 14px; opacity: 0.8; margin-bottom: 20px; }
+  .card p { font-size: 14px; line-height: 1.6; margin-bottom: 16px; opacity: 0.9; }
+  .card ul { text-align: left; font-size: 14px; line-height: 1.8; margin-bottom: 20px; padding-left: 20px; opacity: 0.9; }
+  button.play { background: linear-gradient(135deg, #ff8f00, #ff6f00); color: #fff; border: none; padding: 14px 40px; font-size: 18px; font-weight: 700; border-radius: 12px; cursor: pointer; box-shadow: 0 6px 20px rgba(255,111,0,0.4); }
+  button.play:active { transform: scale(0.97); }
+  .final-score { font-size: 42px; font-weight: 800; color: #ffd54f; margin: 10px 0; }
+  .hidden { display: none !important; }
+
+  @media (min-width: 900px) {
+    #controls { display: none; }
+    #hud { top: 20px; left: 20px; right: 20px; }
+    .stat { font-size: 16px; }
+    .val { font-size: 17px; }
+  }
+</style>
+</head>
+<body>
+<div id="game"></div>
+
+<div id="hud">
+  <div class="panel">
+    <div class="stat"><b>Speed</b><span class="val" id="speed">0</span></div>
+    <div class="stat"><b>Altitude</b><span class="val" id="alt">0</span></div>
+  </div>
+  <div class="panel" id="score">
+    0
+    <small>SCORE</small>
+  </div>
+  <div class="panel">
+    <div class="stat"><b>Rings</b><span class="val" id="rings">0</span></div>
+    <div class="stat"><b>Time</b><span class="val" id="time">0s</span></div>
+  </div>
+</div>
+
+<div id="controls">
+  <div id="joystick"><div id="stick"></div></div>
+  <div id="throttle">
+    <div class="tbtn" id="btn-up">+</div>
+    <div class="tbtn" id="btn-down">-</div>
+  </div>
+</div>
+
+<div class="overlay" id="start-screen">
+  <div class="card">
+    <h1>Sky Rider</h1>
+    <div class="sub">3D Airplane Flying Game</div>
+    <p>Fly through as many golden rings as you can before time runs out. Avoid crashing into the ground or mountains!</p>
+    <ul>
+      <li><b>Mobile:</b> Left joystick to steer, +/- buttons for throttle</li>
+      <li><b>Desktop:</b> Arrow keys or WASD, Shift/Ctrl for throttle</li>
+      <li>Each ring = <b>+100 points</b></li>
+      <li>You have <b>90 seconds</b></li>
+    </ul>
+    <button class="play" id="btn-start">Take Off</button>
+  </div>
+</div>
+
+<div class="overlay hidden" id="end-screen">
+  <div class="card">
+    <h1 id="end-title">Flight Over</h1>
+    <div class="sub" id="end-reason">You landed safely.</div>
+    <div class="final-score" id="final-score">0</div>
+    <p><span id="final-rings">0</span> rings collected</p>
+    <button class="play" id="btn-restart">Fly Again</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ---------------- Scene setup ----------------
+const container = document.getElementById('game');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 400, 1400);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.5, 3000);
+camera.position.set(0, 30, 60);
+
+const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 2, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = false;
+container.appendChild(renderer.domElement);
+
+// Lights
+const ambient = new THREE.HemisphereLight(0xbfe3ff, 0x556b3a, 0.9);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(200, 400, 100);
+scene.add(sun);
+
+// ---------------- Terrain ----------------
+const TERRAIN_SIZE = 4000;
+const terrainGeo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, 120, 120);
+terrainGeo.rotateX(-Math.PI / 2);
+const pos = terrainGeo.attributes.position;
+for (let i = 0; i < pos.count; i++) {
+  const x = pos.getX(i), z = pos.getZ(i);
+  const d = Math.sqrt(x * x + z * z);
+  // Ring of mountains around the play area, flat middle
+  const ringHeight = Math.max(0, (d - 900) * 0.15) + (Math.sin(x * 0.01) + Math.cos(z * 0.01)) * 6;
+  const noise = (Math.sin(x * 0.03) * Math.cos(z * 0.028)) * 8 + (Math.sin(x * 0.11 + z * 0.07)) * 3;
+  pos.setY(i, ringHeight + noise);
+}
+terrainGeo.computeVertexNormals();
+const terrainMat = new THREE.MeshLambertMaterial({ color: 0x4a7a3a, flatShading: true });
+const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+scene.add(terrain);
+
+// Water plane at y=-5
+const waterMat = new THREE.MeshLambertMaterial({ color: 0x2a6fa8 });
+const water = new THREE.Mesh(new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE), waterMat);
+water.rotation.x = -Math.PI / 2;
+water.position.y = -3;
+scene.add(water);
+
+// Clouds
+const cloudGroup = new THREE.Group();
+const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+for (let i = 0; i < 40; i++) {
+  const c = new THREE.Group();
+  const n = 3 + Math.floor(Math.random() * 3);
+  for (let j = 0; j < n; j++) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(10 + Math.random() * 10, 6, 6), cloudMat);
+    s.position.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 30);
+    c.add(s);
+  }
+  c.position.set((Math.random() - 0.5) * 2000, 120 + Math.random() * 200, (Math.random() - 0.5) * 2000);
+  const sc = 0.7 + Math.random() * 0.8;
+  c.scale.setScalar(sc);
+  cloudGroup.add(c);
+}
+scene.add(cloudGroup);
+
+// Trees scattered on the middle plain
+for (let i = 0; i < 120; i++) {
+  const t = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.5, 6, 5), new THREE.MeshLambertMaterial({ color: 0x5a3a1e }));
+  trunk.position.y = 3;
+  const leaves = new THREE.Mesh(new THREE.ConeGeometry(6, 14, 6), new THREE.MeshLambertMaterial({ color: 0x2e5c22 }));
+  leaves.position.y = 12;
+  t.add(trunk); t.add(leaves);
+  const r = 200 + Math.random() * 600;
+  const a = Math.random() * Math.PI * 2;
+  t.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+  scene.add(t);
+}
+
+// ---------------- Airplane ----------------
+function buildPlane() {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xd93636 });
+  const accentMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+
+  const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.0, 8, 12), bodyMat);
+  fuselage.rotation.z = Math.PI / 2;
+  g.add(fuselage);
+
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(1.0, 2.5, 12), bodyMat);
+  nose.rotation.z = -Math.PI / 2;
+  nose.position.x = 5.2;
+  g.add(nose);
+
+  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(1.1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x88ccee, transparent: true, opacity: 0.7 }));
+  cockpit.position.set(1.0, 0.8, 0);
+  g.add(cockpit);
+
+  // Main wing
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.3, 14), accentMat);
+  wing.position.set(0.5, 0, 0);
+  g.add(wing);
+
+  // Tail
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 5), accentMat);
+  tail.position.set(-3.5, 0.3, 0);
+  g.add(tail);
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, 0.25), accentMat);
+  fin.position.set(-3.6, 1.2, 0);
+  g.add(fin);
+
+  // Propeller
+  const propHub = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.3, 8), darkMat);
+  propHub.rotation.z = Math.PI / 2;
+  propHub.position.x = 6.5;
+  g.add(propHub);
+  const propGroup = new THREE.Group();
+  propGroup.position.x = 6.6;
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.15, 4, 0.4), darkMat);
+  propGroup.add(blade);
+  const blade2 = blade.clone();
+  blade2.rotation.x = Math.PI / 2;
+  propGroup.add(blade2);
+  g.add(propGroup);
+  g.userData.prop = propGroup;
+
+  return g;
+}
+const plane = buildPlane();
+plane.position.set(0, 80, 0);
+scene.add(plane);
+
+// ---------------- Rings ----------------
+const RING_COUNT = 20;
+const rings = [];
+const ringMat = new THREE.MeshLambertMaterial({ color: 0xffd54f, emissive: 0x554400 });
+function makeRing() {
+  const geo = new THREE.TorusGeometry(12, 1.2, 8, 24);
+  const m = new THREE.Mesh(geo, ringMat);
+  m.userData.spin = Math.random() * 0.02 + 0.005;
+  return m;
+}
+function placeRing(m) {
+  const angle = Math.random() * Math.PI * 2;
+  const r = 100 + Math.random() * 600;
+  m.position.set(Math.cos(angle) * r, 40 + Math.random() * 140, Math.sin(angle) * r);
+  m.rotation.set(Math.random() * 0.4 - 0.2, Math.random() * Math.PI * 2, Math.random() * 0.4 - 0.2);
+  m.userData.collected = false;
+  m.visible = true;
+  m.material = ringMat;
+}
+for (let i = 0; i < RING_COUNT; i++) {
+  const r = makeRing();
+  placeRing(r);
+  scene.add(r);
+  rings.push(r);
+}
+
+// ---------------- State ----------------
+const state = {
+  running: false,
+  speed: 0.6,       // forward speed (units/frame)
+  minSpeed: 0.25,
+  maxSpeed: 1.6,
+  throttle: 0,      // -1..1 delta
+  pitch: 0,         // input
+  roll: 0,          // input
+  score: 0,
+  ringsHit: 0,
+  timeLeft: 90,
+  lastT: performance.now(),
+  crashed: false,
+};
+
+// ---------------- Input ----------------
+const keys = {};
+window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+// Joystick
+const joystick = document.getElementById('joystick');
+const stick = document.getElementById('stick');
+let jActive = false, jId = null, jCenter = { x: 0, y: 0 }, jVec = { x: 0, y: 0 };
+function jStart(e) {
+  const t = e.touches ? e.touches[0] : e;
+  const rect = joystick.getBoundingClientRect();
+  jCenter.x = rect.left + rect.width / 2;
+  jCenter.y = rect.top + rect.height / 2;
+  jActive = true;
+  jId = e.touches ? t.identifier : 'mouse';
+  jMove(e);
+  e.preventDefault();
+}
+function jMove(e) {
+  if (!jActive) return;
+  let t;
+  if (e.touches) {
+    for (const touch of e.touches) if (touch.identifier === jId) { t = touch; break; }
+    if (!t) return;
+  } else t = e;
+  const dx = t.clientX - jCenter.x;
+  const dy = t.clientY - jCenter.y;
+  const max = 55;
+  const d = Math.min(Math.sqrt(dx * dx + dy * dy), max);
+  const ang = Math.atan2(dy, dx);
+  const x = Math.cos(ang) * d;
+  const y = Math.sin(ang) * d;
+  stick.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+  jVec.x = x / max;
+  jVec.y = y / max;
+  e.preventDefault();
+}
+function jEnd(e) {
+  if (e.touches) {
+    for (const touch of e.touches) if (touch.identifier === jId) return; // still down
+  }
+  jActive = false;
+  jVec.x = 0; jVec.y = 0;
+  stick.style.transform = 'translate(-50%, -50%)';
+}
+joystick.addEventListener('touchstart', jStart, { passive: false });
+joystick.addEventListener('touchmove', jMove, { passive: false });
+window.addEventListener('touchend', jEnd);
+window.addEventListener('touchcancel', jEnd);
+joystick.addEventListener('mousedown', jStart);
+window.addEventListener('mousemove', jMove);
+window.addEventListener('mouseup', jEnd);
+
+// Throttle buttons
+function bindHold(id, onDown, onUp) {
+  const el = document.getElementById(id);
+  const down = (e) => { el.classList.add('active'); onDown(); e.preventDefault(); };
+  const up = (e) => { el.classList.remove('active'); onUp(); if (e) e.preventDefault(); };
+  el.addEventListener('touchstart', down, { passive: false });
+  el.addEventListener('touchend', up);
+  el.addEventListener('touchcancel', up);
+  el.addEventListener('mousedown', down);
+  el.addEventListener('mouseup', up);
+  el.addEventListener('mouseleave', up);
+}
+bindHold('btn-up', () => state.throttle = 1, () => state.throttle = 0);
+bindHold('btn-down', () => state.throttle = -1, () => state.throttle = 0);
+
+// ---------------- Game control ----------------
+const hudSpeed = document.getElementById('speed');
+const hudAlt = document.getElementById('alt');
+const hudScore = document.getElementById('score');
+const hudRings = document.getElementById('rings');
+const hudTime = document.getElementById('time');
+
+function reset() {
+  plane.position.set(0, 80, 0);
+  plane.rotation.set(0, 0, 0);
+  state.speed = 0.6;
+  state.score = 0;
+  state.ringsHit = 0;
+  state.timeLeft = 90;
+  state.crashed = false;
+  rings.forEach(placeRing);
+  updateHUD();
+}
+
+function updateHUD() {
+  hudSpeed.textContent = Math.round(state.speed * 200) + ' km/h';
+  hudAlt.textContent = Math.max(0, Math.round(plane.position.y)) + ' m';
+  hudScore.innerHTML = state.score + '<small>SCORE</small>';
+  hudRings.textContent = state.ringsHit + '/' + RING_COUNT;
+  hudTime.textContent = Math.max(0, Math.ceil(state.timeLeft)) + 's';
+}
+
+function endGame(reason, title) {
+  state.running = false;
+  document.getElementById('final-score').textContent = state.score;
+  document.getElementById('final-rings').textContent = state.ringsHit;
+  document.getElementById('end-title').textContent = title || 'Flight Over';
+  document.getElementById('end-reason').textContent = reason || '';
+  document.getElementById('end-screen').classList.remove('hidden');
+}
+
+document.getElementById('btn-start').addEventListener('click', () => {
+  document.getElementById('start-screen').classList.add('hidden');
+  reset();
+  state.running = true;
+  state.lastT = performance.now();
+});
+document.getElementById('btn-restart').addEventListener('click', () => {
+  document.getElementById('end-screen').classList.add('hidden');
+  reset();
+  state.running = true;
+  state.lastT = performance.now();
+});
+
+// ---------------- Terrain height lookup ----------------
+function terrainHeight(x, z) {
+  const d = Math.sqrt(x * x + z * z);
+  const ringHeight = Math.max(0, (d - 900) * 0.15) + (Math.sin(x * 0.01) + Math.cos(z * 0.01)) * 6;
+  const noise = (Math.sin(x * 0.03) * Math.cos(z * 0.028)) * 8 + (Math.sin(x * 0.11 + z * 0.07)) * 3;
+  return ringHeight + noise;
+}
+
+// ---------------- Main loop ----------------
+const tmpQ = new THREE.Quaternion();
+const forward = new THREE.Vector3();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  const dt = Math.min(0.05, (now - state.lastT) / 1000);
+  state.lastT = now;
+
+  // Read inputs
+  let pitchIn = jVec.y;   // joystick y: down = pitch up (nose up)
+  let rollIn = jVec.x;
+  if (keys['ArrowUp'] || keys['KeyW']) pitchIn -= 1;
+  if (keys['ArrowDown'] || keys['KeyS']) pitchIn += 1;
+  if (keys['ArrowLeft'] || keys['KeyA']) rollIn -= 1;
+  if (keys['ArrowRight'] || keys['KeyD']) rollIn += 1;
+  pitchIn = Math.max(-1, Math.min(1, pitchIn));
+  rollIn = Math.max(-1, Math.min(1, rollIn));
+
+  let throttleIn = state.throttle;
+  if (keys['ShiftLeft'] || keys['ShiftRight']) throttleIn = 1;
+  if (keys['ControlLeft'] || keys['ControlRight']) throttleIn = -1;
+
+  if (state.running) {
+    // Update throttle -> speed
+    state.speed += throttleIn * 0.5 * dt;
+    state.speed = Math.max(state.minSpeed, Math.min(state.maxSpeed, state.speed));
+
+    // Rotate plane locally: pitch around local Z (because model faces +X), roll around local X, yaw follows roll
+    const pitchAmt = -pitchIn * 1.2 * dt; // nose up when joystick pulled back (negative y)
+    const rollAmt = -rollIn * 1.8 * dt;
+    const yawAmt = -rollIn * 0.9 * dt;    // banked turn
+
+    plane.rotateZ(pitchAmt); // model +X forward -> pitch around Z
+    plane.rotateX(rollAmt);  // roll around forward axis X
+    plane.rotateY(yawAmt);
+
+    // Forward vector (local +X)
+    forward.set(1, 0, 0).applyQuaternion(plane.quaternion);
+    plane.position.addScaledVector(forward, state.speed * 60 * dt);
+
+    // Auto-stabilise roll slightly when no input
+    if (Math.abs(rollIn) < 0.05) {
+      // reduce roll toward 0 by projecting up vector
+      // (simple damping: rotate a bit back around X)
+      // no-op keeps it feeling free — comment out damping for arcade feel
+    }
+
+    // Prop spin
+    if (plane.userData.prop) plane.userData.prop.rotation.x += 0.6 + state.speed * 0.5;
+
+    // Rings collision + spin
+    for (const r of rings) {
+      r.rotation.z += r.userData.spin;
+      if (r.userData.collected) continue;
+      const dx = plane.position.x - r.position.x;
+      const dy = plane.position.y - r.position.y;
+      const dz = plane.position.z - r.position.z;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist < 14) {
+        r.userData.collected = true;
+        r.visible = false;
+        state.score += 100;
+        state.ringsHit += 1;
+        // Bonus time for every 5 rings
+        if (state.ringsHit % 5 === 0) state.timeLeft += 10;
+        // Respawn if all collected
+        if (state.ringsHit >= RING_COUNT) {
+          rings.forEach(placeRing);
+        }
+      }
+    }
+
+    // Timer
+    state.timeLeft -= dt;
+    if (state.timeLeft <= 0) {
+      state.timeLeft = 0;
+      endGame('Time up! Nice flying.', 'Flight Complete');
+    }
+
+    // Crash checks
+    const th = terrainHeight(plane.position.x, plane.position.z);
+    if (plane.position.y < th + 2) {
+      state.crashed = true;
+      endGame('You crashed into the ground.', 'Crashed!');
+    }
+    if (plane.position.y > 500) {
+      // Soft ceiling
+      plane.position.y = 500;
+    }
+    // Boundary
+    const bd = Math.sqrt(plane.position.x * plane.position.x + plane.position.z * plane.position.z);
+    if (bd > 1600) {
+      // Turn back nudge
+      const back = new THREE.Vector3(-plane.position.x, 0, -plane.position.z).normalize();
+      plane.position.x += back.x * 4;
+      plane.position.z += back.z * 4;
+    }
+
+    updateHUD();
+  }
+
+  // Camera chase: sit behind and above the plane, look ahead
+  forward.set(1, 0, 0).applyQuaternion(plane.quaternion);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(plane.quaternion);
+  const camTarget = plane.position.clone().addScaledVector(forward, -22).addScaledVector(up, 8);
+  camera.position.lerp(camTarget, 0.12);
+  const lookAt = plane.position.clone().addScaledVector(forward, 20);
+  camera.lookAt(lookAt);
+
+  // Gentle cloud drift
+  cloudGroup.rotation.y += 0.0002;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// ---------------- Resize ----------------
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Prevent scroll/bounce on iOS
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => { if (e.target.tagName !== 'BUTTON') e.preventDefault(); }, { passive: false });
+</script>
+</body>
+</html>
