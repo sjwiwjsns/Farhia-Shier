@@ -49,7 +49,7 @@ export function keelYAt(t) { const s = sectionAt(t); return s.yC - s.lo; }
 function buildLoft(materials, detail) {
   const L = A380.length;
   const radial = Math.round(A380.fuselage.radialSegments * clamp(detail, 0.4, 1));
-  const lengthSegs = Math.round(64 * clamp(detail, 0.4, 1));
+  const lengthSegs = Math.round(88 * clamp(detail, 0.4, 1));
   const pos = [], uv = [], idx = [];
 
   for (let i = 0; i <= lengthSegs; i++) {
@@ -198,6 +198,17 @@ function buildDetails(materials) {
     new THREE.MeshBasicMaterial({ color: 0xd22a1e }));
   beacon.position.set(0, crownYAt(det.beaconX / L) + 0.06, -L / 2 + det.beaconX);
   grp.add(beacon);
+
+  // satcom dome fairing on the spine (low blister aft of the wing box)
+  const sd = A380.fuselage.satcomDome;
+  if (sd) {
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), materials.white);
+    dome.scale.set(sd.width / 2, sd.height, sd.length / 2);
+    dome.position.set(0, crownYAt(sd.t) - 0.06, -L / 2 + sd.t * L);
+    dome.castShadow = true;
+    grp.add(dome);
+  }
 
   // pitot probes near the nose
   for (const side of [1, -1]) {

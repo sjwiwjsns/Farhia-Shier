@@ -28,25 +28,38 @@ export function generateLivery(airline, variant, texScale = 1) {
   cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
   const col = airline.colors;
+  const cleanHull = airline.id === 'emirates'; // real scheme: white hull, NO cheatline
 
   // Base + belly shading (canvas top AND bottom rows are the fuselage belly).
-  g.fillStyle = col.fuselage;
+  g.fillStyle = cleanHull ? '#f7f8f9' : col.fuselage;
   g.fillRect(0, 0, W, H);
-  const belly = shade(col.fuselage, 0.72);
-  g.fillStyle = belly;
-  g.fillRect(0, 0, W, H * 0.10);
-  g.fillRect(0, H * 0.90, W, H * 0.10);
-  // Subtle top highlight (crown of fuselage = canvas middle row)
-  g.fillStyle = shade(col.fuselage, 1.06);
-  g.fillRect(0, H * 0.42, W, H * 0.16);
+  const belly = cleanHull ? '#b9bec4' : shade(col.fuselage, 0.72);
+  // soft belly gradient instead of a hard band
+  for (const [y0, y1] of [[0, H * 0.12], [H * 0.88, H]]) {
+    const gr = g.createLinearGradient(0, y0, 0, y1);
+    if (y0 === 0) { gr.addColorStop(0, belly); gr.addColorStop(1, 'rgba(0,0,0,0)'); }
+    else { gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, belly); }
+    g.fillStyle = gr;
+    g.fillRect(0, y0, W, y1 - y0);
+  }
+  // Smooth crown highlight (canvas middle rows = top of fuselage)
+  const crown = g.createLinearGradient(0, H * 0.36, 0, H * 0.64);
+  const hi = cleanHull ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.18)';
+  crown.addColorStop(0, 'rgba(255,255,255,0)');
+  crown.addColorStop(0.5, hi);
+  crown.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = crown;
+  g.fillRect(0, H * 0.36, W, H * 0.28);
 
   // Cheatlines at window level: right side v≈0.28 (cy 0.72H), left v≈0.72 (cy 0.28H).
-  const cheatY = [0.715, 0.275];
-  for (const fy of cheatY) {
-    g.fillStyle = col.cheat1;
-    g.fillRect(W * 0.02, H * (fy - 0.015), W * 0.97, H * 0.035);
-    g.fillStyle = col.cheat2;
-    g.fillRect(W * 0.02, H * (fy + 0.024), W * 0.97, H * 0.016);
+  if (!cleanHull) {
+    const cheatY = [0.715, 0.275];
+    for (const fy of cheatY) {
+      g.fillStyle = col.cheat1;
+      g.fillRect(W * 0.02, H * (fy - 0.015), W * 0.97, H * 0.035);
+      g.fillStyle = col.cheat2;
+      g.fillRect(W * 0.02, H * (fy + 0.024), W * 0.97, H * 0.016);
+    }
   }
 
   // Passenger windows (skip on freighters). Double-deck types get a second
@@ -87,24 +100,37 @@ export function generateLivery(airline, variant, texScale = 1) {
   // (v 0.25→0.5, canvas rows ~0.615H) displays the texture unreversed, while
   // the left-side band (canvas rows ~0.415H) appears mirrored to a viewer —
   // so the LEFT copy is drawn flipped and the right copy is drawn normally.
-  const titles = airline.titles || airline.name;
-  const fs = H * 0.085;
-  g.font = `bold ${fs}px Arial, Helvetica, sans-serif`;
-  g.fillStyle = col.text;
-  g.textAlign = 'center';
   // Flank mapping nailed down empirically (dual-orientation colour-band
   // experiments): the ~0.615H canvas band is the aircraft's LEFT flank and
   // displays upright/unmirrored; the ~0.415H band is the RIGHT flank and is
   // displayed rotated 180° (u view-mirror + v inversion), so that copy is
-  // drawn pre-rotated 180°.
-  g.textBaseline = 'middle';
-  g.fillText(titles, W * 0.30, H * 0.615 - fs * 0.35); // left flank
-  g.save(); // right flank (pre-rotated 180°)
-  g.translate(W * 0.30, H * 0.415 - fs * 0.35);
-  g.scale(-1, -1);
-  g.fillText(titles, 0, 0);
-  g.restore();
-  g.textBaseline = 'alphabetic';
+  // drawn pre-rotated 180°. dy < 0 places text higher on the aircraft.
+  const drawFlankText = (str, u, dy, font, color) => {
+    g.font = font;
+    g.fillStyle = color;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(str, W * u, H * 0.615 + dy);      // left flank
+    g.save();                                     // right flank (180°)
+    g.translate(W * u, H * 0.415);
+    g.scale(-1, -1);
+    g.fillText(str, 0, dy);
+    g.restore();
+    g.textBaseline = 'alphabetic';
+  };
+
+  const titles = airline.titles || airline.name;
+  if (cleanHull) {
+    // Emirates: gold serif wordmark forward on the upper deck, with the
+    // Arabic wordmark above it — no cheatline on the real scheme.
+    const fs = H * 0.078;
+    const gold = '#b98d3e';
+    drawFlankText('Emirates', 0.175, -fs * 0.30, `italic bold ${fs}px Georgia, "Times New Roman", serif`, gold);
+    drawFlankText('طيران الإمارات', 0.175, -fs * 1.15, `bold ${fs * 0.55}px "Noto Naskh Arabic", "Arial", sans-serif`, gold);
+  } else {
+    const fs = H * 0.085;
+    drawFlankText(titles, 0.30, -fs * 0.35, `bold ${fs}px Arial, Helvetica, sans-serif`, col.text);
+  }
 
   const fuselageMap = new THREE.CanvasTexture(cv);
   fuselageMap.anisotropy = 4;
@@ -227,11 +253,11 @@ export function generateTailTexture(airline, texScale = 1) {
       g.fillStyle = '#ffffff';
       g.beginPath(); g.moveTo(0, S * 0.72); g.quadraticCurveTo(cx, S * 0.5, S, S * 0.66); g.lineTo(S, S * 0.72); g.quadraticCurveTo(cx, S * 0.58, 0, S * 0.8); g.closePath(); g.fill();
       break;
-    case 'tricolor':
-      g.fillStyle = '#00732f'; g.fillRect(0, 0, S, S * 0.33);
-      g.fillStyle = '#ffffff'; g.fillRect(0, S * 0.33, S, S * 0.34);
-      g.fillStyle = '#1a1a1a'; g.fillRect(0, S * 0.67, S, S * 0.33);
-      g.fillStyle = '#c60c30'; g.fillRect(0, 0, S * 0.3, S);
+    case 'tricolor': // UAE flag (public domain): red hoist + green/white/black
+      g.fillStyle = '#00843d'; g.fillRect(0, 0, S, S * 0.334);
+      g.fillStyle = '#ffffff'; g.fillRect(0, S * 0.334, S, S * 0.333);
+      g.fillStyle = '#0b0b0b'; g.fillRect(0, S * 0.667, S, S * 0.333);
+      g.fillStyle = '#ce1126'; g.fillRect(0, 0, S * 0.27, S);
       break;
     case 'kangaroo':
       g.fillStyle = fus;

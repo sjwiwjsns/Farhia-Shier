@@ -21,11 +21,13 @@ export const A380 = {
       { t: 0.000, w: 0.06, up: 0.06, lo: 0.06, yC: -1.35 },  // nose tip (low — cockpit sits at main deck)
       { t: 0.008, w: 0.55, up: 0.50, lo: 0.52, yC: -1.30 },
       { t: 0.020, w: 1.25, up: 1.05, lo: 1.10, yC: -1.15 },
-      { t: 0.035, w: 1.95, up: 1.75, lo: 1.72, yC: -0.92 },  // cockpit windows band
-      { t: 0.055, w: 2.55, up: 2.55, lo: 2.30, yC: -0.62 },  // brow rising to the upper deck
-      { t: 0.080, w: 3.02, up: 3.35, lo: 2.85, yC: -0.30 },
-      { t: 0.110, w: 3.35, up: 4.00, lo: 3.45, yC: -0.06 },
-      { t: 0.150, w: 3.53, up: 4.35, lo: 3.90, yC: 0.00 },
+      { t: 0.035, w: 1.90, up: 1.68, lo: 1.70, yC: -0.94 },  // cockpit windows band
+      { t: 0.045, w: 2.22, up: 2.10, lo: 2.00, yC: -0.78 },  // brow rise begins (eased)
+      { t: 0.058, w: 2.58, up: 2.62, lo: 2.32, yC: -0.60 },
+      { t: 0.075, w: 2.92, up: 3.18, lo: 2.72, yC: -0.38 },
+      { t: 0.095, w: 3.20, up: 3.68, lo: 3.15, yC: -0.16 },
+      { t: 0.120, w: 3.40, up: 4.08, lo: 3.55, yC: -0.04 },
+      { t: 0.150, w: 3.53, up: 4.32, lo: 3.90, yC: 0.00 },
       { t: 0.200, w: 3.57, up: 4.42, lo: 4.10, yC: 0.00 },   // full constant section
       { t: 0.300, w: 3.57, up: 4.42, lo: 4.10, yC: 0.00 },
       { t: 0.400, w: 3.57, up: 4.42, lo: 4.10, yC: 0.00 },
@@ -41,7 +43,8 @@ export const A380 = {
       { t: 0.985, w: 0.42, up: 0.55, lo: 0.28, yC: 2.76 },
       { t: 1.000, w: 0.10, up: 0.12, lo: 0.08, yC: 2.88 }    // tail cone / APU
     ],
-    radialSegments: 36,
+    radialSegments: 46,
+    satcomDome: { t: 0.555, length: 3.4, width: 1.7, height: 0.55 },
     // Belly fairing (wing-to-body): big blended bulge under the centre section.
     bellyFairing: { tStart: 0.30, tEnd: 0.70, halfW: 3.9, depth: 1.35, yTop: -2.6 }
   },
