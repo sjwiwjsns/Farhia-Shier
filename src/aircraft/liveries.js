@@ -96,28 +96,31 @@ export function generateLivery(airline, variant, texScale = 1) {
     g.fill();
   }
 
-  // Titles above the window line. Verified in-engine: the right-side band
-  // (v 0.25→0.5, canvas rows ~0.615H) displays the texture unreversed, while
-  // the left-side band (canvas rows ~0.415H) appears mirrored to a viewer —
-  // so the LEFT copy is drawn flipped and the right copy is drawn normally.
-  // Flank mapping nailed down empirically (dual-orientation colour-band
-  // experiments): the ~0.615H canvas band is the aircraft's LEFT flank and
-  // displays upright/unmirrored; the ~0.415H band is the RIGHT flank and is
-  // displayed rotated 180° (u view-mirror + v inversion), so that copy is
-  // drawn pre-rotated 180°. dy < 0 places text higher on the aircraft.
+  // Flank text mapping, established empirically with four-orientation marker
+  // words after the hull winding fix (outward-facing loft triangles):
+  //   RIGHT flank <- canvas ~0.615H band, drawn pre-mirrored horizontally;
+  //                  aircraft-up = smaller canvas y there.
+  //   LEFT flank  <- canvas ~0.415H band, drawn pre-flipped vertically;
+  //                  aircraft-up = LARGER canvas y there (v runs inverted).
+  // dy < 0 places text higher on the aircraft on both flanks.
   const drawFlankText = (str, u, dy, font, color) => {
     g.font = font;
     g.fillStyle = color;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText(str, W * u, H * 0.615 + dy);      // left flank
-    g.save();                                     // right flank (180°)
-    g.translate(W * u, H * 0.415);
-    g.scale(-1, -1);
-    g.fillText(str, 0, dy);
+    g.save(); // right flank (pre-mirrored)
+    g.translate(W * u, H * 0.615 + dy);
+    g.scale(-1, 1);
+    g.fillText(str, 0, 0);
+    g.restore();
+    g.save(); // left flank (pre-flipped vertically)
+    g.translate(W * u, H * 0.415 - dy);
+    g.scale(1, -1);
+    g.fillText(str, 0, 0);
     g.restore();
     g.textBaseline = 'alphabetic';
   };
+
 
   const titles = airline.titles || airline.name;
   if (cleanHull) {

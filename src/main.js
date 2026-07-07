@@ -205,7 +205,12 @@ class Sim {
 
     for (const action of input.consumeActions()) {
       if (action === 'pause') { this.setPaused(true); return; }
-      else if (action === 'camera') { toast('Camera: ' + this.rig.cycle(input), 1200); }
+      else if (action === 'camera') {
+        const mode = this.rig.cycle(input, this.entity);
+        toast(mode === 'cabin'
+          ? 'Camera: cabin — I/J/K/L walk, U main deck, O upper deck'
+          : 'Camera: ' + mode, mode === 'cabin' ? 3200 : 1200);
+      }
       else if (action === 'hud') { toast('HUD: ' + this.shared.hud.cycle(), 1200); }
       else if (action === 'mute') {
         this.config.settings.muted = !this.config.settings.muted;

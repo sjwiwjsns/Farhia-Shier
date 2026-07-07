@@ -167,6 +167,15 @@ breakup work unchanged; parked/ambient A380s still use the cheap generic path).
 - **`gear.js`** — twin steerable nose gear with scissor links and landing
   lights, two 4-wheel wing bogies, two 6-wheel body bogies (22 wheels total),
   with bogie tilt, struts and braces; retraction uses the standard channels.
+- **`cabin.js`** — full two-deck interior in the real Emirates arrangement:
+  14 First Class suites (1-2-1) with gold trim + two shower-spa rooms, 76
+  Business pods (1-2-1) and the rear lounge/bar with backlit shelf and sofas
+  on the upper deck; 56 Premium Economy (2-4-2) and ~330 Economy (3-4-3,
+  narrowing in the tail) on the main deck — plus galleys, bulkheads, bins,
+  both staircases and an inward-wound BackSide-free liner that encloses it
+  all. Seats are one InstancedMesh per class. A walkable **cabin camera**
+  (C to cycle; I/J/K/L walk, U/O switch decks) tours it, even in flight.
+  Skipped on the Low tier.
 - Dual-deck window rows come from the livery painter (`deck: double` families).
 
 ## Grass & dust physics (`world/grass.js`, `render/effects.js`)

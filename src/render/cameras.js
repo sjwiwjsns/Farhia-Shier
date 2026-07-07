@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { clamp, damp, RAD2DEG } from '../core/math.js';
 
-const MODES = ['chase', 'cockpit', 'tower', 'free'];
+const MODES = ['chase', 'cockpit', 'cabin', 'tower', 'free'];
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _e = new THREE.Euler();
@@ -18,13 +18,16 @@ export class CameraRig {
     this.baseFov = 68;
   }
 
-  cycle(input) {
-    const i = MODES.indexOf(this.mode);
-    this.setMode(MODES[(i + 1) % MODES.length], input);
+  cycle(input, entity) {
+    let i = MODES.indexOf(this.mode);
+    let next = MODES[(i + 1) % MODES.length];
+    // 'cabin' only exists on aircraft with a built interior (A380)
+    if (next === 'cabin' && !entity?.info.cabin) next = MODES[(i + 2) % MODES.length];
+    this.setMode(next, input, entity);
     return this.mode;
   }
 
-  setMode(mode, input) {
+  setMode(mode, input, entity) {
     this.mode = mode;
     if (input) { input.look.x = 0; input.look.y = 0; }
     if (mode === 'free') {
@@ -32,6 +35,11 @@ export class CameraRig {
       _e.setFromQuaternion(this.camera.quaternion, 'YXZ');
       this.freeYaw = _e.y;
       this.freePitch = _e.x;
+    }
+    if (mode === 'cabin' && entity?.info.cabin) {
+      this.cabinLocal = entity.info.cabin.start.clone();
+      this.cabinDeck = 1; // start on the upper deck (First Class)
+      if (input) input.look.x = Math.PI; // face aft, down the cabin
     }
     if (mode !== 'tower') this.setFov(this.baseFov);
   }
@@ -75,6 +83,29 @@ export class CameraRig {
       // mouse look inside the cockpit
       cam.quaternion.multiply(_q.setFromEuler(_e.set(-look.y, -look.x, 0, 'YXZ')));
       this.setFov(this.baseFov + look.zoom * -14);
+    } else if (this.mode === 'cabin' && entity.info.cabin) {
+      // Walk the cabin: I/K forward/back, J/L strafe, U/O switch decks —
+      // all in the aircraft's frame, so it works in flight.
+      const decks = entity.info.cabin.decks;
+      if (input.keys.has('KeyU')) this.cabinDeck = 0;
+      if (input.keys.has('KeyO')) this.cabinDeck = 1;
+      const deck = decks[Math.min(this.cabinDeck, decks.length - 1)];
+      const lx = look.x;
+      const speed = 3.2 * dt;
+      // camera local facing (yaw only): rotY(-lx) applied to -Z / +X
+      const fx = Math.sin(lx), fz = -Math.cos(lx);   // forward
+      const rx = Math.cos(lx), rz = Math.sin(lx);    // right
+      if (input.keys.has('KeyI')) { this.cabinLocal.x += fx * speed; this.cabinLocal.z += fz * speed; }
+      if (input.keys.has('KeyK')) { this.cabinLocal.x -= fx * speed; this.cabinLocal.z -= fz * speed; }
+      if (input.keys.has('KeyL')) { this.cabinLocal.x += rx * speed; this.cabinLocal.z += rz * speed; }
+      if (input.keys.has('KeyJ')) { this.cabinLocal.x -= rx * speed; this.cabinLocal.z -= rz * speed; }
+      this.cabinLocal.x = clamp(this.cabinLocal.x, -deck.halfW, deck.halfW);
+      this.cabinLocal.z = clamp(this.cabinLocal.z, deck.zMin, deck.zMax);
+      this.cabinLocal.y = damp(this.cabinLocal.y, deck.eyeY, 8, dt);
+      cam.position.copy(entity.worldPoint(this.cabinLocal, _v));
+      cam.quaternion.copy(fm.quat);
+      cam.quaternion.multiply(_q.setFromEuler(_e.set(-look.y, -look.x, 0, 'YXZ')));
+      this.setFov(this.baseFov);
     } else if (this.mode === 'tower') {
       cam.position.set(towerPos.x, towerPos.y, towerPos.z);
       cam.lookAt(fm.pos);

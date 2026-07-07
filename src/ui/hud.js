@@ -35,6 +35,7 @@ export class HUD {
     const W = this.canvas.width, H = this.canvas.height;
     g.clearRect(0, 0, W, H);
     this.blink += dt;
+    if (camMode === 'cabin') { this.drawWarnings(fm, W, H); this.drawFps(extra.fps); return; }
     if (this.mode === 'off' && camMode !== 'cockpit') { this.drawFps(extra.fps); return; }
 
     if (camMode === 'cockpit') this.drawPanel(fm, entity, W, H);

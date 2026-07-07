@@ -69,7 +69,8 @@ function buildLoft(materials, detail) {
   for (let i = 0; i < lengthSegs; i++) {
     for (let j = 0; j < radial; j++) {
       const a = i * ring + j, b = a + ring;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
+      // outward-facing winding (front faces point out of the hull)
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -111,7 +112,7 @@ function buildBellyFairing(materials, detail) {
   for (let i = 0; i < segsL; i++) {
     for (let j = 0; j < segsR; j++) {
       const a = i * ring + j, b = a + ring;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const geo = new THREE.BufferGeometry();

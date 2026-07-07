@@ -57,7 +57,7 @@ desert, the Vegas Strip, the Gateway Arch, DC monuments, Diamond Head…
 | `Shift` / `Ctrl` | throttle up / down |
 | `G` `F` `V` `Space` `Z` `B` | gear, flaps down/up, spoilers, reversers, brakes |
 | `[` `]` | pitch trim |
-| `C` `H` `T` `M` `P` | camera, HUD mode, radio log, mute, pause |
+| `C` `H` `T` `M` `P` | camera (incl. walkable A380 cabin), HUD mode, radio log, mute, pause |
 | Mouse drag / wheel | look / zoom · Free cam: `I J K L U O` |
 | Gamepad/joystick | sticks = pitch/roll, pedals or right stick = rudder, lever/triggers = throttle |
 

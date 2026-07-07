@@ -55,7 +55,8 @@ function buildFuselage(len, R, geo, supersonic, radialSegs, lengthSegs) {
   for (let i = 0; i < lengthSegs; i++) {
     for (let j = 0; j < radialSegs; j++) {
       const a = i * ring + j, b = a + ring;
-      idx.push(a, b, a + 1, b, b + 1, a + 1);
+      // outward-facing winding (front faces point out of the hull)
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
   const g = new THREE.BufferGeometry();
