@@ -178,6 +178,17 @@ breakup work unchanged; parked/ambient A380s still use the cheap generic path).
   Skipped on the Low tier.
 - Dual-deck window rows come from the livery painter (`deck: double` families).
 
+## Wind & atmosphere (`physics/wind.js`)
+
+One `WindField` per flight (seeded) = steady base wind + five incommensurate
+gust octaves (Dryden-flavoured, with spatial phase so gusts sweep across the
+field) + a boundary-layer altitude profile + low-altitude turbulence intensity.
+Everything that feels air samples the SAME field: the flight model (wind vector
+per step + band-limited turbulence jolts), grass sway/gust waves, dust
+advection, windsocks (yaw + droop + flutter), ATC wind calls ("wind 240 at 8
+gusting 14") and the HUD readout. Fuel burn (TSFC-flavoured, thrust-scaled)
+reduces mass live; exhaustion causes a genuine flameout.
+
 ## Grass & dust physics (`world/grass.js`, `render/effects.js`)
 
 Grass is a single `InstancedBufferGeometry` draw call of 12k–100k five-vertex blades

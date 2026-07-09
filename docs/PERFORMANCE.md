@@ -15,8 +15,8 @@ never the art direction.
 | Reflections | none | none | env-map on glass & water | + aircraft fuselage (metalness 0.3) |
 | Ambient occlusion | — | — | — | approximated via hemisphere/contact tuning (no SSAO pass — perf first) |
 | Ground clutter density | 0 | 0.4 | 0.7 | 1.0 |
-| Grass blades (instanced, 1 draw call) | 12 000 | 30 000 | 60 000 | 100 000 |
-| Grass carpet radius (camera-following) | 150 m | 190 m | 230 m | 265 m |
+| Grass blades (chunked clipmap, v2) | 302 400 | 1 200 000 | 2 419 200 | **10 000 000** |
+| Grass chunks (frustum-culled) | 3×3 ×100 m | 4×4 ×110 m | 4×4 ×125 m | 5×5 ×130 m |
 | Parked aircraft at gates | 0 | ≤ ~8 (detail 0.4) | ≤ ~11 | ≤ 14 |
 | Moving ground vehicles | – | – | 6 | 6 |
 | Texture ceiling | liveries 1024×256, runways ≤1700px | 1536×384, ≤2550px | 2048×512, ≤3400px | 2048×512, ≤3400px, anisotropy 8 |
@@ -37,12 +37,14 @@ never the art direction.
 - **1 draw call per particle type** (smoke/fire/sparks/dust are single `THREE.Points`
   pools with shader-attenuated sprites). Dust and smoke integrate wind advection and
   jet-blast acceleration cones on the CPU (≤ ~2 300 live particles, trivial cost).
-- **1 draw call for all grass** — an `InstancedBufferGeometry` of 5-vertex blades whose
-  wrap-around tile follows the camera (toroidal modulo in the vertex shader), so the
-  entire blade budget always forms a dense carpet around the player. A 1024² pavement
-  mask texture (rasterized once from the airport's pavement registry) is sampled per
-  blade to zero-scale anything over runways/taxiways/aprons. Wind sway and jet-blast
-  bending are pure vertex-shader work.
+- **Grass v2 is a chunked clipmap**: an N×N grid of chunk meshes (one shared tuft
+  geometry + one shared material = one shader program) snaps around the camera each
+  frame. Each *instance* is a whole 8–25-blade tuft, and each chunk carries a proper
+  bounding sphere, so three.js frustum-culls off-screen chunks — typically only
+  ~35–45 % of the blade budget is vertex-processed. That is what makes 10M blades at
+  Maximum playable (verified: 10M blades hold ~54 fps even on a software rasterizer
+  at spawn; a discrete GPU is recommended for that tier in motion). The 1024² pavement
+  mask, live WindField sway/gusts and jet-blast bending all run in the vertex shader.
 - Runway/taxiway markings are baked into canvas textures — zero marking geometry.
 - Liveries are canvas textures generated once per (airline, tier) and cached for
   parked traffic.

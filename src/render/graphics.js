@@ -10,25 +10,29 @@ export const TIERS = {
     id: 'low', label: 'Low',
     px: 0.75, lowMat: true, shadows: false, shadowMap: 0,
     draw: 9000, clutter: 0, reflections: false, fuselageReflections: false,
-    texScale: 0.5, anisotropy: 1, grass: 12000
+    texScale: 0.5, anisotropy: 1,
+    grass: { chunk: 100, grid: 3, perChunk: 4200, tuft: 8 }      // ~300k blades
   },
   medium: {
     id: 'medium', label: 'Medium',
     px: 1.0, lowMat: false, shadows: true, shadowMap: 1024,
     draw: 16000, clutter: 0.4, reflections: false, fuselageReflections: false,
-    texScale: 0.75, anisotropy: 2, grass: 30000
+    texScale: 0.75, anisotropy: 2,
+    grass: { chunk: 110, grid: 4, perChunk: 6250, tuft: 12 }     // 1.2M blades
   },
   high: {
     id: 'high', label: 'High',
     px: 1.0, lowMat: false, shadows: true, shadowMap: 2048,
     draw: 26000, clutter: 0.7, reflections: true, fuselageReflections: false,
-    texScale: 1, anisotropy: 4, grass: 60000
+    texScale: 1, anisotropy: 4,
+    grass: { chunk: 125, grid: 4, perChunk: 8400, tuft: 18 }     // ~2.4M blades
   },
   max: {
     id: 'max', label: 'Maximum',
     px: 0, /* 0 = native devicePixelRatio */ lowMat: false, shadows: true, shadowMap: 4096,
     draw: 40000, clutter: 1, reflections: true, fuselageReflections: true,
-    texScale: 1, anisotropy: 8, grass: 100000
+    texScale: 1, anisotropy: 8,
+    grass: { chunk: 130, grid: 5, perChunk: 16000, tuft: 25 }    // 10M blades (100x v1)
   }
 };
 

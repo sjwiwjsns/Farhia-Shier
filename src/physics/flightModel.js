@@ -26,7 +26,13 @@ export class FlightModel {
     this.flags = variant.flags || [];
     this.supersonic = this.flags.includes('supersonic');
 
-    this.mass = p.emptyKg + 0.45 * (p.mtowKg - p.emptyKg); // mid-weight
+    // Weight & balance: empty weight + fixed payload + burnable fuel.
+    // Starting mass matches the old fixed mid-weight (0.45 load factor), but
+    // fuel now burns off in flight, so the jet gets lighter and livelier.
+    this.payloadKg = 0.20 * (p.mtowKg - p.emptyKg);
+    this.fuelCapacityKg = 0.25 * (p.mtowKg - p.emptyKg);
+    this.fuelKg = this.fuelCapacityKg;
+    this.mass = p.emptyKg + this.payloadKg + this.fuelKg;
     this.S = p.wingAreaM2;
     this.span = variant.dims.span;
     this.len = variant.dims.len;
@@ -110,6 +116,9 @@ export class FlightModel {
     this.buffet = 0;
     this.gForce = 1;
     this.events = [];
+    this.burnKgS = 0;
+    this.flameout = false;
+    this._turb = { p: 0, q: 0, y: 0, tp: 0, tq: 0, ty: 0, timer: 0 };
     // Readouts
     this.iasKts = 0; this.tasKts = 0; this.mach = 0; this.vsFpm = 0;
     this.hdgDeg = 0; this.aglM = 0; this.alphaDeg = 0; this.stallWarn = false;
@@ -123,6 +132,9 @@ export class FlightModel {
     this.quat.copy(pose.quat);
     this.vel.copy(pose.vel || _v1.set(0, 0, 0));
     this.rates.p = this.rates.q = this.rates.r = 0;
+    this.fuelKg = pose.fuelKg ?? this.fuelCapacityKg;
+    this.mass = this.variant.perf.emptyKg + this.payloadKg + this.fuelKg;
+    this.flameout = false;
     this.throttle = pose.throttle ?? 0;
     this.n1 = this.throttle;
     this.trim = pose.trim ?? 0;
@@ -154,10 +166,21 @@ export class FlightModel {
 
     // --- Systems ---
     st.gearAnim = clamp01(st.gearAnim + (st.gearDown ? dt / 3 : -dt / 3));
-    let thrTarget = st.throttle;
+    st.flameout = st.fuelKg <= 0;
+    let thrTarget = st.flameout ? 0 : st.throttle;
     // engine spool lag
     st.n1 += clamp(thrTarget - st.n1, -0.28 * dt, 0.22 * dt);
     if (!st.onGround) st.reversers = false;
+
+    // --- Fuel burn & live mass (TSFC-flavoured: burn scales with thrust) ---
+    if (!st.flameout) {
+      st.burnKgS = st.n1 * st.maxThrust * 1.15e-5 *
+        (st.supersonic && st.throttle > 0.95 ? 2.6 : 1);
+      st.fuelKg = Math.max(0, st.fuelKg - st.burnKgS * dt);
+      st.mass = this.variant.perf.emptyKg + st.payloadKg + st.fuelKg;
+    } else {
+      st.burnKgS = 0;
+    }
 
     // --- Atmosphere & relative wind ---
     const altM = st.pos.y + (env.fieldElevM || 0);
@@ -269,6 +292,28 @@ export class FlightModel {
     if (Math.abs(alpha) > 0.42) {
       const dq = Math.exp(-2.2 * dt);
       st.rates.q *= dq; st.rates.p *= dq;
+    }
+
+    // --- Turbulence (bumps): band-limited jolts from the wind field.
+    // Targets resample every ~0.35 s and the applied rates chase them, which
+    // reads as honest low-altitude chop instead of white-noise fizz.
+    const turbI = (env.turbulence || 0) * clamp(V / 60, 0, 1);
+    if (turbI > 0.01 && !st.onGround) {
+      const tb = st._turb;
+      tb.timer -= dt;
+      if (tb.timer <= 0) {
+        tb.timer = 0.2 + Math.random() * 0.3;
+        tb.tp = (Math.random() - 0.5) * turbI * 0.55;
+        tb.tq = (Math.random() - 0.5) * turbI * 0.30;
+        tb.ty = (Math.random() - 0.5) * turbI * 2.6;
+      }
+      const k = 1 - Math.exp(-3.5 * dt);
+      tb.p += (tb.tp - tb.p) * k;
+      tb.q += (tb.tq - tb.q) * k;
+      tb.y += (tb.ty - tb.y) * k;
+      st.rates.p += tb.p * dt * 3.2;
+      st.rates.q += tb.q * dt * 3.2;
+      force.y += tb.y * st.mass; // vertical bump (shows up as g-jitter)
     }
 
     // --- Ground contact ---

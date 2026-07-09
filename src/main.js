@@ -12,6 +12,8 @@ import { createGrass } from './world/grass.js';
 import { AircraftEntity } from './aircraft/entity.js';
 import { airlineOperates } from './aircraft/liveries.js';
 import { DamageSystem } from './physics/damage.js';
+import { makeWindForFlight } from './physics/wind.js';
+import { hashString } from './core/math.js';
 import { Menu } from './ui/menu.js';
 import { HUD } from './ui/hud.js';
 import { ATC } from './ui/atc.js';
@@ -84,22 +86,29 @@ class Sim {
     shared.audio.setMuted(s.muted);
     shared.audio.start(config.family.sound);
 
-    // wind: fixed light crosswind, halved in arcade
-    const windFrom = 240 * DEG2RAD;
-    const windKts = this.arcade ? 4 : 7;
-    this.wind = new THREE.Vector3(-Math.sin(windFrom), 0, Math.cos(windFrom)).multiplyScalar(windKts * KTS2MS);
-    this.windInfo = { dir: 240, kts: windKts };
+    // Live wind field: steady wind + gusts + turbulence, seeded per flight.
+    // One field drives the flight model, grass, dust, windsocks, ATC and HUD.
+    this.simTime = 0;
+    this.windField = makeWindForFlight(hashString(config.airport.iata) ^ (Date.now() & 0x3fff), this.arcade);
+    this.wind = new THREE.Vector3();
+    this.windField.sample(new THREE.Vector3(0, 3, 0), 0, this.wind);
+    this.windInfo = this.windField.report(new THREE.Vector3(0, 3, 0), 0);
     this.effects.wind.copy(this.wind);
 
-    // instanced grass field (tens of thousands of blades, one draw call)
-    this.grass = createGrass(config.airport, this.tier, this.world, this.wind);
-    if (this.grass.mesh) this.scene.add(this.grass.mesh);
+    // chunked clipmap grass (up to 10M blades at Maximum)
+    this.grass = createGrass(config.airport, this.tier, this.world);
+    if (this.grass.group) this.scene.add(this.grass.group);
 
     // radio
     this.radioEl = $('radio');
     this.radioEl.innerHTML = '';
     this.radioEl.classList.remove('hidden');
-    this.atc = new ATC(config.airport, config.airline, config.runwayEnd, (m) => this.radioMsg(m));
+    this.windText = () => {
+      const r = this.windField.report(this.fm.pos, this.simTime);
+      return `wind ${String(r.dirDeg).padStart(3, '0')} at ${r.meanKts}` +
+        (r.gustKts > r.meanKts + 3 ? ` gusting ${r.gustKts}` : '');
+    };
+    this.atc = new ATC(config.airport, config.airline, config.runwayEnd, (m) => this.radioMsg(m), this.windText);
 
     this.spawn();
     this.atc.begin(config.spawn);
@@ -192,7 +201,7 @@ class Sim {
       this.crashed = false;
     }
     this.spawn();
-    this.atc = new ATC(this.config.airport, this.config.airline, this.config.runwayEnd, (m) => this.radioMsg(m));
+    this.atc = new ATC(this.config.airport, this.config.airline, this.config.runwayEnd, (m) => this.radioMsg(m), this.windText);
     this.atc.begin(this.config.spawn);
   }
 
@@ -233,11 +242,14 @@ class Sim {
     fm.controls.roll = input.axes.roll;
     fm.controls.yaw = input.axes.yaw;
 
+    this.simTime += dt;
+    this.windField.sample(fm.pos, this.simTime, this.wind);
     fm.step(dt, {
       groundY: 0,
       wind: this.wind,
       arcade: this.arcade,
-      fieldElevM: this.config.airport.elevFt * 0.3048
+      fieldElevM: this.config.airport.elevFt * 0.3048,
+      turbulence: this.windField.turbulenceAt(fm.aglM)
     });
 
     for (const ev of fm.events) {
@@ -318,7 +330,18 @@ class Sim {
     this.time += dt;
     this.entity.syncVisual(dt);
     const blast = this.computeBlast();
-    this.grass.update(dt, this.time, blast, this.camera.position);
+    // live wind for grass / dust / windsocks / HUD
+    const wf = this.windField;
+    const camWind = wf.sample(this.camera.position, this.simTime, this._camWind || (this._camWind = new THREE.Vector3()));
+    const speed = camWind.length();
+    const windNow = {
+      dir: speed > 0.01 ? camWind.clone().divideScalar(speed) : new THREE.Vector3(1, 0, 0),
+      sway: 0.12 + speed * 0.055,
+      gust: Math.min(Math.max((speed / 0.5144 - wf.baseKts) / Math.max(wf.gustKts, 1), 0), 1)
+    };
+    this.grass.update(dt, this.time, blast, this.camera.position, windNow);
+    this.effects.wind.copy(this.wind);
+    this.windInfo = wf.report(this.fm.pos, this.simTime);
     this.effects.fields.length = 0;
     if (blast) {
       this.effects.fields.push({
@@ -329,13 +352,14 @@ class Sim {
     }
     this.spawnGroundDust(dt, blast);
     this.effects.update(dt);
-    updateAirportDynamics(this.world, dt, this.time);
+    updateAirportDynamics(this.world, dt, this.time, this.wind);
     this.rig.update(dt, this.entity, this.shared.input, this.tower);
     this.sky.update(this.camera);
     updateSunTarget(this.lights.sun, this.fm.pos);
     this.shared.renderer.render(this.scene, this.camera);
     this.shared.hud.draw(dt, this.fm, this.entity, this.rig.mode, {
-      fps: this.shared.loop.fps, windKts: this.windInfo.kts, windDir: this.windInfo.dir
+      fps: this.shared.loop.fps,
+      windKts: this.windInfo.kts, windDir: this.windInfo.dirDeg, gustKts: this.windInfo.gustKts
     });
   }
 
@@ -348,7 +372,7 @@ class Sim {
     this.entity.dispose();
     this.effects.dispose();
     this.grass.dispose();
-    if (this.grass.mesh) this.scene.remove(this.grass.mesh);
+    if (this.grass.group) this.scene.remove(this.grass.group);
     this.sky.dispose();
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();

@@ -161,6 +161,10 @@ export class HUD {
     g.fillText(`FLAPS ${fm.flapDeg}°`, ex, ey + 34);
     g.fillText(fm.spoilers ? 'SPOILERS OUT' : '', ex, ey + 52);
     g.fillText(`TRIM ${(fm.trim >= 0 ? '+' : '')}${(fm.trim * 100).toFixed(0)}`, ex + 110, ey + 34);
+    const lowFuel = fm.fuelKg < fm.fuelCapacityKg * 0.08;
+    g.fillStyle = fm.flameout ? '#ff5050' : lowFuel ? '#ffce54' : g.fillStyle;
+    g.fillText(`FUEL ${Math.round(fm.fuelKg).toLocaleString()} kg${fm.burnKgS > 0 ? '  (' + Math.round(fm.burnKgS * 3600).toLocaleString() + ' kg/h)' : ''}`, ex, ey + 70);
+    g.fillStyle = 'rgba(140,255,160,0.92)';
     // gear lights
     const gearTxt = fm.collapsed ? 'GEAR FAIL' : fm.gearAnim > 0.97 ? 'GEAR DOWN' : fm.gearAnim < 0.03 ? 'GEAR UP' : 'GEAR ...';
     g.fillStyle = fm.collapsed ? '#ff5050' : fm.gearAnim > 0.97 ? green : '#ffce54';
@@ -172,7 +176,10 @@ export class HUD {
     g.fillText(`GS  ${Math.round(fm.tasKts)} KT`, fx, fy);
     g.fillText(`AOA ${(fm.iasKts > 40 ? fm.alphaDeg : 0).toFixed(1)}°`, fx, fy + 18);
     g.fillText(`G   ${fm.gForce.toFixed(1)}`, fx, fy + 36);
-    if (extra.windKts) g.fillText(`WIND ${extra.windDir}°/${extra.windKts}KT`, fx, fy + 54);
+    if (extra.windKts !== undefined) {
+      const gust = extra.gustKts && extra.gustKts > extra.windKts + 2 ? ` G${extra.gustKts}` : '';
+      g.fillText(`WIND ${String(extra.windDir).padStart(3, '0')}°/${extra.windKts}KT${gust}`, fx, fy + 54);
+    }
 
     this.drawWarnings(fm, W, H);
     this.drawFps(extra.fps);
@@ -202,6 +209,8 @@ export class HUD {
       y += 32;
     };
     if (fm.stallWarn && flash) warn('STALL', '#ff4040');
+    if (fm.flameout && flash) warn('FUEL EXHAUSTED — FLAMEOUT', '#ff4040');
+    else if (fm.fuelKg < fm.fuelCapacityKg * 0.08) warn('LOW FUEL', '#ffce54');
     if (fm.iasKts > fm.vmo && flash) warn('OVERSPEED', '#ff4040');
     if (fm.vsFpm < -1400 && fm.aglM < 500 && fm.aglM > 5) warn('SINK RATE', '#ffb030');
     if (!fm.onGround && fm.aglM < 250 && fm.gearAnim < 0.9 && fm.vsFpm < 0 && flash) warn('GEAR', '#ff7030');

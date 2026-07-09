@@ -356,6 +356,37 @@ export function buildAirport(airport, tier, fleetPool = []) {
     }
   }
 
+  // Windsocks: react live to the wind field (rotated/drooped per frame).
+  const windsocks = [];
+  const addWindsock = (x, z) => {
+    if (isPavement(x, z)) return;
+    const sock = new THREE.Group();
+    sock.position.set(x, 0, z);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 6, 6), lambertOrStandard(tier, { color: '#c9ccd1' }));
+    pole.position.y = 3;
+    sock.add(pole);
+    const yawGroup = new THREE.Group();
+    yawGroup.position.y = 6;
+    sock.add(yawGroup);
+    const tiltGroup = new THREE.Group();
+    yawGroup.add(tiltGroup);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.32, 2.2, 8, 1, true), lambertOrStandard(tier, { color: '#e8641e' }));
+    cone.geometry.rotateX(Math.PI / 2);       // point along +Z
+    cone.geometry.translate(0, 0, 1.1);       // base at the pivot
+    tiltGroup.add(cone);
+    group.add(sock);
+    windsocks.push({ yawGroup, tiltGroup });
+  };
+  {
+    const tw = airport.tower;
+    addWindsock(tw.x + 42, tw.z + 26);
+    const rw0 = runways[0];
+    if (rw0) {
+      const p = rw0.thresholdA.clone().addScaledVector(rw0.perp, rw0.widM / 2 + 46);
+      addWindsock(p.x, p.z);
+    }
+  }
+
   // Tower
   {
     const tw = airport.tower;
@@ -426,7 +457,7 @@ export function buildAirport(airport, tier, fleetPool = []) {
   // ---------------------------------------------------------------- scenery
   buildScenery(airport, tier, group, collidables, rng, has);
 
-  return { group, collidables, runways, gates, movers, apronCentroid, pavement, isPavement };
+  return { group, collidables, runways, gates, movers, windsocks, apronCentroid, pavement, isPavement };
 }
 
 // ---------------------------------------------------------------- scenery
@@ -608,11 +639,20 @@ function buildScenery(airport, tier, group, collidables, rng, has) {
   }
 }
 
-export function updateAirportDynamics(world, dt, time) {
+export function updateAirportDynamics(world, dt, time, wind) {
   for (const mv of world.movers) {
     const a = mv.phase + time * mv.speed;
     mv.mesh.position.x = mv.cx + Math.cos(a) * mv.r;
     mv.mesh.position.z = mv.cz + Math.sin(a) * mv.r;
     mv.mesh.rotation.y = -a - Math.PI / 2 * Math.sign(mv.speed);
+  }
+  if (wind && world.windsocks) {
+    const kts = wind.length() * 1.94384;
+    const yaw = Math.atan2(wind.x, wind.z); // sock streams downwind (+Z local -> wind dir)
+    const droop = (Math.PI / 2) * (1 - Math.min(kts / 15, 1));
+    for (const ws of world.windsocks) {
+      ws.yawGroup.rotation.y = yaw + Math.sin(time * 2.7) * 0.06; // slight flutter
+      ws.tiltGroup.rotation.x = droop + Math.sin(time * 5.1) * 0.04;
+    }
   }
 }

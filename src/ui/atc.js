@@ -3,12 +3,13 @@
 import { wrap360 } from '../core/math.js';
 
 export class ATC {
-  constructor(airport, airline, runwayEnd, onMessage) {
+  constructor(airport, airline, runwayEnd, onMessage, windText) {
     this.airport = airport;
     this.callsign = airline.callsign;
     this.flightNo = 100 + Math.floor(Math.random() * 899);
     this.runwayEnd = runwayEnd;
     this.onMessage = onMessage;
+    this.windText = windText || (() => 'wind calm');
     this.phase = 'ready';
     this.timer = 0;
     this.gpwsLast = 1000;
@@ -26,10 +27,10 @@ export class ATC {
   begin(spawnMode) {
     if (spawnMode === 'final') {
       this.phase = 'approach';
-      this.say('TWR', `${this.cs}, ${this.airport.iata} tower, continue approach runway ${this.runwayEnd}, wind 240 at 7, cleared to land.`);
+      this.say('TWR', `${this.cs}, ${this.airport.iata} tower, continue approach runway ${this.runwayEnd}, ${this.windText()}, cleared to land.`);
       this.say('YOU', `Cleared to land runway ${this.runwayEnd}, ${this.cs}.`);
     } else {
-      this.say('TWR', `${this.cs}, ${this.airport.iata} tower, wind 240 at 7, runway ${this.runwayEnd}, cleared for takeoff.`);
+      this.say('TWR', `${this.cs}, ${this.airport.iata} tower, ${this.windText()}, runway ${this.runwayEnd}, cleared for takeoff.`);
       this.say('YOU', `Cleared for takeoff runway ${this.runwayEnd}, ${this.cs}.`);
       this.phase = 'takeoff';
     }
@@ -57,7 +58,7 @@ export class ATC {
       const distM = Math.hypot(fm.pos.x, fm.pos.z);
       if (distM < 14000 && aglFt < 4500 && fm.vsFpm < -200) {
         this.phase = 'approach';
-        this.say('TWR', `${this.cs}, ${this.airport.iata} tower, wind 240 at 7, runway ${this.runwayEnd}, cleared to land.`);
+        this.say('TWR', `${this.cs}, ${this.airport.iata} tower, ${this.windText()}, runway ${this.runwayEnd}, cleared to land.`);
         this.say('YOU', `Cleared to land runway ${this.runwayEnd}, ${this.cs}.`);
       }
     } else if (this.phase === 'approach') {
