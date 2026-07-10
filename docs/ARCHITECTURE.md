@@ -191,16 +191,21 @@ reduces mass live; exhaustion causes a genuine flameout.
 
 ## Grass & dust physics (`world/grass.js`, `render/effects.js`)
 
-Grass is a single `InstancedBufferGeometry` draw call of 12k–100k five-vertex blades
-(per tier). Blades live in a **wrap-around tile that follows the camera** — a toroidal
-modulo in the vertex shader — so the full budget always forms a dense carpet around the
-player instead of thinning out over the 45 km world. The airport's **pavement registry**
+Grass (v2) is a **chunked clipmap**: an N×N grid of chunk meshes sharing one
+`InstancedBufferGeometry` tuft template and one material, snapping to the grid cells
+around the camera each frame — so a dense carpet follows the player across the 45 km
+world with zero buffer re-uploads. Each instance is a whole 8–25-blade tuft and each
+chunk carries a real bounding sphere, so three.js frustum-culls off-screen chunks
+(typically only ~35–45 % of blades are vertex-processed). The Maximum tier adds a
+**two-ring density LOD** — inner 3×3 chunks at full density, outer ring reduced —
+reaching **20 million blades** (302 k on Low). The airport's **pavement registry**
 (every runway shoulder, taxiway, connector, apron and terminal slab records its
-footprint) is rasterized once into a 1024² mask texture; each blade samples it and
+footprint) is rasterized once into a 1024² mask texture; each tuft samples it and
 zero-scales itself over pavement. The same registry backs a CPU `isPavement(x, z)`
 query used by gameplay. Blade animation is all vertex-shader: two-octave wind sway
-biased along the ambient wind, plus a jet-blast cone behind the player's engines that
-flattens blades outward/downstream with a flutter term.
+biased along the ambient wind, a travelling gust wave fed by the live `WindField`,
+plus a jet-blast cone behind the player's engines that flattens blades
+outward/downstream with a flutter term.
 
 Dust (and smoke) particles integrate real forces: gravity and drag, **advection toward
 the ambient wind vector**, and **jet-blast acceleration cones** fed from the same blast

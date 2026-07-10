@@ -1,5 +1,5 @@
-// Chunked instanced grass — up to TEN MILLION individual blades (Maximum
-// tier), 100x the first-generation system, at a handful of draw calls.
+// Chunked instanced grass — up to TWENTY MILLION individual blades (Maximum
+// tier), 200x the first-generation system, at a handful of draw calls.
 //
 // Architecture (v2):
 //  · The world around the camera is tiled by an N x N grid of grass CHUNKS.
@@ -10,8 +10,12 @@
 //    off-screen chunks — the trick that makes multi-million-blade counts
 //    affordable: typically only ~35-45% of blades are vertex-processed.
 //  · One INSTANCE is a whole TUFT of 8-25 blades (baked into the shared
-//    geometry with per-vertex flex/phase), not a single blade — so 10M blades
-//    need only 400k instances.
+//    geometry with per-vertex flex/phase), not a single blade — so 20M blades
+//    need only 800k instances.
+//  · Two-ring density LOD (Maximum tier): the inner 3x3 chunks around the
+//    camera use the full-density template, the outer ring a reduced one, so
+//    the field can double its total count without doubling the vertex load
+//    where it isn't visible blade-by-blade anyway.
 //  · A 1024² pavement mask (rasterized from the airport's pavement registry)
 //    zero-scales any tuft over runways/taxiways/aprons, sampled per instance
 //    in the vertex shader using true world coordinates.
@@ -185,25 +189,34 @@ export function createGrass(airport, tier, world, wind) {
   const tags = airport.scenery || [];
   const desert = tags.includes('desert');
   const tropical = tags.includes('tropical') || tags.includes('island');
-  const { chunk: S, grid: N, perChunk, tuft } = cfg;
+  const { chunk: S, grid: N, perChunk, tuft, farPerChunk } = cfg;
 
   // Shared geometry: one tuft template + per-instance tuft placements.
-  const template = buildTuftGeometry(tuft, rng, desert);
-  const offsets = new Float32Array(perChunk * 2);
-  const data = new Float32Array(perChunk * 4);
-  for (let i = 0; i < perChunk; i++) {
-    offsets[i * 2] = rng() * S;
-    offsets[i * 2 + 1] = rng() * S;
-    data[i * 4] = rng() * Math.PI * 2;
-    data[i * 4 + 1] = 0.7 + rng() * 0.65;    // tuft scale
-    data[i * 4 + 2] = rng();                  // tint
-    data[i * 4 + 3] = rng() * Math.PI * 2;    // phase
-  }
-  template.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offsets, 2));
-  template.setAttribute('aData', new THREE.InstancedBufferAttribute(data, 4));
-  template.instanceCount = perChunk;
-  // local bounds: chunk footprint + sway headroom -> proper per-chunk culling
-  template.boundingSphere = new THREE.Sphere(new THREE.Vector3(S / 2, 0.6, S / 2), S * 0.75);
+  // When farPerChunk is set (Maximum tier), a second reduced-density template
+  // shares the tuft mesh; outer-ring chunks are assigned to it per frame —
+  // a two-ring density LOD that lets the total blade count double without
+  // doubling the worst-case vertex load.
+  const makeTemplate = (count) => {
+    const t = buildTuftGeometry(tuft, mulberry32(hashString(airport.iata) ^ 0x51f15eed), desert);
+    const offsets = new Float32Array(count * 2);
+    const data = new Float32Array(count * 4);
+    for (let i = 0; i < count; i++) {
+      offsets[i * 2] = rng() * S;
+      offsets[i * 2 + 1] = rng() * S;
+      data[i * 4] = rng() * Math.PI * 2;
+      data[i * 4 + 1] = 0.7 + rng() * 0.65;   // tuft scale
+      data[i * 4 + 2] = rng();                 // tint
+      data[i * 4 + 3] = rng() * Math.PI * 2;   // phase
+    }
+    t.setAttribute('aOffset', new THREE.InstancedBufferAttribute(offsets, 2));
+    t.setAttribute('aData', new THREE.InstancedBufferAttribute(data, 4));
+    t.instanceCount = count;
+    // local bounds: chunk footprint + sway headroom -> proper per-chunk culling
+    t.boundingSphere = new THREE.Sphere(new THREE.Vector3(S / 2, 0.6, S / 2), S * 0.75);
+    return t;
+  };
+  const template = makeTemplate(perChunk);
+  const farTemplate = farPerChunk ? makeTemplate(farPerChunk) : null;
 
   const fieldHalf = (N * S) / 2;
   const uniforms = {
@@ -239,10 +252,26 @@ export function createGrass(airport, tier, world, wind) {
     meshes.push(mesh);
   }
 
+  // blade census: with two-ring LOD, inner ring (chebyshev <= 1) is full
+  // density and the outer ring uses the reduced template
+  let totalBlades;
+  if (farTemplate) {
+    const h = Math.floor(N / 2);
+    let inner = 0;
+    for (let a = -h; a < N - h; a++) {
+      for (let b = -h; b < N - h; b++) {
+        if (Math.max(Math.abs(a), Math.abs(b)) <= 1) inner++;
+      }
+    }
+    totalBlades = (inner * perChunk + (N * N - inner) * farPerChunk) * tuft;
+  } else {
+    totalBlades = N * N * perChunk * tuft;
+  }
+
   return {
     group,
     meshes,
-    count: N * N * perChunk * tuft,
+    count: totalBlades,
     update(dt, time, blast, cameraPos, windNow) {
       uniforms.uTime.value = time;
       if (windNow) {
@@ -258,20 +287,27 @@ export function createGrass(airport, tier, world, wind) {
       } else {
         uniforms.uBlastStr.value = 0;
       }
-      // clipmap: snap the N x N chunk grid around the camera
+      // clipmap: snap the N x N chunk grid around the camera; with two-ring
+      // LOD the inner 3x3 chunks carry full density, the rest the far template
       if (cameraPos) {
         const ci = Math.floor(cameraPos.x / S), cj = Math.floor(cameraPos.z / S);
         let m = 0;
         const h = Math.floor(N / 2);
         for (let a = -h; a < N - h; a++) {
           for (let b = -h; b < N - h; b++) {
-            meshes[m++].position.set((ci + a) * S, 0, (cj + b) * S);
+            const mesh = meshes[m++];
+            mesh.position.set((ci + a) * S, 0, (cj + b) * S);
+            if (farTemplate) {
+              const want = Math.max(Math.abs(a), Math.abs(b)) <= 1 ? template : farTemplate;
+              if (mesh.geometry !== want) mesh.geometry = want;
+            }
           }
         }
       }
     },
     dispose() {
       template.dispose();
+      if (farTemplate) farTemplate.dispose();
       uniforms.uMask.value.dispose();
       material.dispose();
     }

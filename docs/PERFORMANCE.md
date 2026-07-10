@@ -15,8 +15,8 @@ never the art direction.
 | Reflections | none | none | env-map on glass & water | + aircraft fuselage (metalness 0.3) |
 | Ambient occlusion | — | — | — | approximated via hemisphere/contact tuning (no SSAO pass — perf first) |
 | Ground clutter density | 0 | 0.4 | 0.7 | 1.0 |
-| Grass blades (chunked clipmap, v2) | 302 400 | 1 200 000 | 2 419 200 | **10 000 000** |
-| Grass chunks (frustum-culled) | 3×3 ×100 m | 4×4 ×110 m | 4×4 ×125 m | 5×5 ×130 m |
+| Grass blades (chunked clipmap, v2) | 302 400 | 1 200 000 | 2 419 200 | **20 025 000** |
+| Grass chunks (frustum-culled) | 3×3 ×100 m | 4×4 ×110 m | 4×4 ×125 m | 6×6 ×130 m, two-ring density LOD |
 | Parked aircraft at gates | 0 | ≤ ~8 (detail 0.4) | ≤ ~11 | ≤ 14 |
 | Moving ground vehicles | – | – | 6 | 6 |
 | Texture ceiling | liveries 1024×256, runways ≤1700px | 1536×384, ≤2550px | 2048×512, ≤3400px | 2048×512, ≤3400px, anisotropy 8 |
@@ -41,10 +41,13 @@ never the art direction.
   geometry + one shared material = one shader program) snaps around the camera each
   frame. Each *instance* is a whole 8–25-blade tuft, and each chunk carries a proper
   bounding sphere, so three.js frustum-culls off-screen chunks — typically only
-  ~35–45 % of the blade budget is vertex-processed. That is what makes 10M blades at
-  Maximum playable (verified: 10M blades hold ~54 fps even on a software rasterizer
-  at spawn; a discrete GPU is recommended for that tier in motion). The 1024² pavement
-  mask, live WindField sway/gusts and jet-blast bending all run in the vertex shader.
+  ~35–45 % of the blade budget is vertex-processed. Maximum adds a **two-ring density
+  LOD**: the inner 3×3 chunks around the camera carry the full 35 000-tuft template,
+  the outer 27 chunks a reduced 18 000-tuft one — that is what lets Maximum hold
+  **20 M blades** (verified: 60 fps at spawn and ~41-46 fps standing eye-level in
+  the grass even on a software rasterizer; a discrete GPU is recommended for that
+  tier in motion). The 1024² pavement mask, live WindField sway/gusts and jet-blast bending
+  all run in the vertex shader.
 - Runway/taxiway markings are baked into canvas textures — zero marking geometry.
 - Liveries are canvas textures generated once per (airline, tier) and cached for
   parked traffic.
