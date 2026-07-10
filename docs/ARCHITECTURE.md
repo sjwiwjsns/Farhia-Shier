@@ -189,23 +189,36 @@ advection, windsocks (yaw + droop + flutter), ATC wind calls ("wind 240 at 8
 gusting 14") and the HUD readout. Fuel burn (TSFC-flavoured, thrust-scaled)
 reduces mass live; exhaustion causes a genuine flameout.
 
-## Grass & dust physics (`world/grass.js`, `render/effects.js`)
+## Grass, dirt & dust physics (`world/grass.js`, `world/airportBuilder.js`, `render/effects.js`)
 
 Grass (v2) is a **chunked clipmap**: an N×N grid of chunk meshes sharing one
 `InstancedBufferGeometry` tuft template and one material, snapping to the grid cells
 around the camera each frame — so a dense carpet follows the player across the 45 km
 world with zero buffer re-uploads. Each instance is a whole 8–25-blade tuft and each
 chunk carries a real bounding sphere, so three.js frustum-culls off-screen chunks
-(typically only ~35–45 % of blades are vertex-processed). The Maximum tier adds a
-**two-ring density LOD** — inner 3×3 chunks at full density, outer ring reduced —
-reaching **20 million blades** (302 k on Low). The airport's **pavement registry**
-(every runway shoulder, taxiway, connector, apron and terminal slab records its
-footprint) is rasterized once into a 1024² mask texture; each tuft samples it and
-zero-scales itself over pavement. The same registry backs a CPU `isPavement(x, z)`
-query used by gameplay. Blade animation is all vertex-shader: two-octave wind sway
-biased along the ambient wind, a travelling gust wave fed by the live `WindField`,
-plus a jet-blast cone behind the player's engines that flattens blades
-outward/downstream with a flutter term.
+(typically only ~35–45 % of blades are vertex-processed); chunks whose nearest point
+lies beyond the distance-fade radius are skipped outright. Tiers may declare
+concentric **density rings** (by chebyshev chunk distance): Maximum runs three —
+full 3×3 core, mid ring, light outer ring — reaching **40.8 million blades**
+(302 k on Low). The airport's **pavement registry** (every runway shoulder, taxiway,
+connector, apron and terminal slab records its footprint) is rasterized once into
+the red channel of a 1024² field-mask texture; each tuft samples it and zero-scales
+itself over pavement. The same registry backs a CPU `isPavement(x, z)` query used by
+gameplay. Blade animation is all vertex-shader: two-octave wind sway biased along
+the ambient wind, a travelling gust wave fed by the live `WindField`, plus a
+jet-blast cone behind the player's engines that flattens blades outward/downstream
+with a flutter term.
+
+**Dirt** is one seeded dataset with three consumers. `airportBuilder` scatters
+bare-earth blobs across the infield and derives graded soil margins from the
+pavement registry, exposing `world.dirt = { blobs, at(x, z) }`. Consumers: (a) a
+single 7.2×7.2 km **infield ground quad** whose baked canvas shows turf mottling,
+dirt patches and packed-earth margins hugging every slab (rim-faded into the base
+terrain disc; sRGB-tagged — untagged canvas textures render washed-out under the
+sRGB output pipeline); (b) the field mask's **green channel** — tufts over dirt are
+die-rolled away, stunted and tinted toward soil in-shader, so the sward goes scruffy
+exactly where the ground shows earth; (c) **dust intensity** — wheels and jet blast
+kick up more dust over bare dirt (`dirt.at`).
 
 Dust (and smoke) particles integrate real forces: gravity and drag, **advection toward
 the ambient wind vector**, and **jet-blast acceleration cones** fed from the same blast

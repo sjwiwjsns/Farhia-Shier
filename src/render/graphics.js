@@ -32,9 +32,17 @@ export const TIERS = {
     px: 0, /* 0 = native devicePixelRatio */ lowMat: false, shadows: true, shadowMap: 4096,
     draw: 40000, clutter: 1, reflections: true, fuselageReflections: true,
     texScale: 1, anisotropy: 8,
-    // 20M blades (200x the v1 system): 6x6 clipmap with two-ring density LOD —
-    // inner 3x3 chunks at full density, outer 27 chunks reduced. Flagship-GPU tier.
-    grass: { chunk: 130, grid: 6, perChunk: 35000, farPerChunk: 18000, tuft: 25 }
+    // 40.8M blades (400x the v1 system): 8x8 clipmap with three density rings —
+    // full 3x3 core, mid ring, light outer ring (blades sub-pixel out there).
+    // Flagship-GPU tier.
+    grass: {
+      chunk: 130, grid: 8, tuft: 25,
+      rings: [
+        { cheb: 1, perChunk: 50000 },
+        { cheb: 2, perChunk: 30000 },
+        { perChunk: 18000 }
+      ]
+    }
   }
 };
 

@@ -100,6 +100,90 @@ function groundTexture(base, blotch) {
   const tex = new THREE.CanvasTexture(cv);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(60, 60);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const INFIELD_SPAN = 3600; // must match MASK_SPAN in world/grass.js
+
+// Paint the infield ground detail: turf mottling, bare-dirt patches and the
+// graded dirt margins that hug every paved edge (real airfields keep a strip
+// of cleared earth beside runways and taxiways — this is that strip).
+function infieldTexture(size, groundColors, pavement, blobs, desert) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  const k = size / (2 * INFIELD_SPAN);
+  // dirt has to sit well below the turf's brightness to survive the bright
+  // always-day lighting — subtle tones wash out to nothing
+  const dirtTones = desert ? ['158,132,88', '142,118,76'] : ['104,86,58', '92,76,50'];
+
+  g.fillStyle = groundColors[0];
+  g.fillRect(0, 0, size, size);
+
+  // turf mottling so the field doesn't read as a flat green sheet
+  for (let i = 0; i < 700; i++) {
+    g.fillStyle = `rgba(${groundColors[1]},${0.04 + Math.random() * 0.09})`;
+    g.beginPath();
+    g.ellipse(Math.random() * size, Math.random() * size,
+      3 + Math.random() * 26, 3 + Math.random() * 26, Math.random() * 3, 0, 7);
+    g.fill();
+  }
+
+  // graded dirt margins: two layered expansions of every registered pavement
+  // footprint (the slab meshes themselves cover the centre, so only the
+  // strip just beyond each slab edge stays visible as packed earth)
+  for (const [expand, alpha] of [[18, 0.30], [8, 0.5]]) {
+    g.fillStyle = `rgba(${dirtTones[0]},${alpha})`;
+    for (const r of pavement.rects) {
+      g.save();
+      g.translate((r.cx + INFIELD_SPAN) * k, (r.cz + INFIELD_SPAN) * k);
+      g.rotate(Math.atan2(r.dirZ, r.dirX));
+      g.fillRect(-(r.halfL + expand) * k, -(r.halfW + expand) * k,
+        2 * (r.halfL + expand) * k, 2 * (r.halfW + expand) * k);
+      g.restore();
+    }
+    for (const c of pavement.circles) {
+      g.beginPath();
+      g.arc((c.x + INFIELD_SPAN) * k, (c.z + INFIELD_SPAN) * k, (c.r + expand) * k, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  // bare-earth patches: soft radial gradient + harder core per blob
+  for (const b of blobs) {
+    const px = (b.x + INFIELD_SPAN) * k, pz = (b.z + INFIELD_SPAN) * k, pr = Math.max(b.r * k, 1.5);
+    const tone = dirtTones[(b.r * 7) & 1];
+    const grad = g.createRadialGradient(px, pz, 0, px, pz, pr);
+    grad.addColorStop(0, `rgba(${tone},${b.a})`);
+    grad.addColorStop(0.55, `rgba(${tone},${0.75 * b.a})`);
+    grad.addColorStop(1, `rgba(${tone},0)`);
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(px, pz, pr, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // fine grain so dirt and turf both have tooth up close
+  for (let i = 0; i < 2600; i++) {
+    g.fillStyle = `rgba(${i % 2 ? dirtTones[1] : '30,40,20'},${0.05 + Math.random() * 0.05})`;
+    g.fillRect(Math.random() * size, Math.random() * size, 1.5, 1.5);
+  }
+
+  // rim fade back to the plain ground colour so the quad blends into the
+  // base terrain disc with no visible seam (fade from transparent-BASE, not
+  // transparent black, or the ring darkens mid-gradient)
+  const br = parseInt(groundColors[0].slice(1, 3), 16),
+        bg = parseInt(groundColors[0].slice(3, 5), 16),
+        bb = parseInt(groundColors[0].slice(5, 7), 16);
+  const rim = g.createRadialGradient(size / 2, size / 2, size * 0.40, size / 2, size / 2, size * 0.52);
+  rim.addColorStop(0, `rgba(${br},${bg},${bb},0)`);
+  rim.addColorStop(1, `rgba(${br},${bg},${bb},1)`);
+  g.fillStyle = rim;
+  g.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
@@ -119,7 +203,12 @@ export function buildAirport(airport, tier, fleetPool = []) {
     has('plains') || has('prairie') ? ['#8d9468', '110,110,70'] :
     has('forest') ? ['#5e7350', '40,70,40'] : ['#78855e', '80,95,60'];
   const groundMat = lambertOrStandard(tier, { color: groundColors[0] });
-  if (tier.texScale >= 0.75) groundMat.map = groundTexture(groundColors[0], groundColors[1]);
+  if (tier.texScale >= 0.75) {
+    // the sRGB-tagged map already carries the base colour — a tinted
+    // material colour would multiply in and double-darken it
+    groundMat.map = groundTexture(groundColors[0], groundColors[1]);
+    groundMat.color.set('#ffffff');
+  }
   const groundR = has('island') ? 11000 : 45000;
   const ground = new THREE.Mesh(new THREE.CircleGeometry(groundR, 48), groundMat);
   ground.rotation.x = -Math.PI / 2;
@@ -454,10 +543,58 @@ export function buildAirport(airport, tier, fleetPool = []) {
     }
   }
 
+  // ------------------------------------------------------------------ dirt
+  // Bare-earth patches through the turf + graded dirt margins hugging every
+  // paved edge. One dataset drives three consumers: the infield ground
+  // texture (visible soil), the grass mask (thin/stunt/brown the blades over
+  // dirt) and wheel-dust intensity. Placed after ALL pavement registration.
+  const dirt = { blobs: [] };
+  {
+    const drng = mulberry32(hashString(airport.iata) ^ 0xd1127);
+    const nBlobs = has('desert') ? 140 : 95;
+    for (let i = 0; i < nBlobs; i++) {
+      const x = (drng() * 2 - 1) * 2600;
+      const z = (drng() * 2 - 1) * 2600;
+      const r = 14 + drng() * drng() * 85;   // mostly small scrapes, a few washes
+      const a = 0.55 + drng() * 0.45;        // peak bareness
+      if (isPavement(x, z)) continue;        // blob centres never under slabs
+      dirt.blobs.push({ x, z, r, a });
+    }
+  }
+  const dirtAt = (x, z) => {
+    let d = 0;
+    for (const b of dirt.blobs) {
+      const dx = x - b.x, dz = z - b.z;
+      const q = 1 - (dx * dx + dz * dz) / (b.r * b.r);
+      if (q > 0) d += b.a * q;
+    }
+    return d > 1 ? 1 : d;
+  };
+
+  // Infield detail plane: a single quad over the field (±3600 m, matching the
+  // grass mask span) whose canvas bakes turf mottling, the dirt patches and
+  // graded margins along the pavement, fading to the plain ground colour at
+  // its rim so it blends into the base disc. Sits between the ground (y=0)
+  // and the lowest slab (y=0.06).
+  const infield = new THREE.Mesh(
+    new THREE.PlaneGeometry(INFIELD_SPAN * 2, INFIELD_SPAN * 2),
+    lambertOrStandard(tier, {
+      map: infieldTexture(tier.texScale >= 0.75 ? 2048 : 1024, groundColors, pavement, dirt.blobs, has('desert'))
+    })
+  );
+  infield.material.map.anisotropy = tier.anisotropy;
+  infield.rotation.x = -Math.PI / 2;
+  infield.position.y = 0.03;
+  infield.receiveShadow = tier.shadows;
+  group.add(infield);
+
   // ---------------------------------------------------------------- scenery
   buildScenery(airport, tier, group, collidables, rng, has);
 
-  return { group, collidables, runways, gates, movers, windsocks, apronCentroid, pavement, isPavement };
+  return {
+    group, collidables, runways, gates, movers, windsocks, apronCentroid,
+    pavement, isPavement, dirt: { blobs: dirt.blobs, at: dirtAt }
+  };
 }
 
 // ---------------------------------------------------------------- scenery

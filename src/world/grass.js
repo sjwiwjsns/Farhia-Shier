@@ -1,5 +1,5 @@
-// Chunked instanced grass — up to TWENTY MILLION individual blades (Maximum
-// tier), 200x the first-generation system, at a handful of draw calls.
+// Chunked instanced grass — up to FORTY MILLION individual blades (Maximum
+// tier), 400x the first-generation system, at a handful of draw calls.
 //
 // Architecture (v2):
 //  · The world around the camera is tiled by an N x N grid of grass CHUNKS.
@@ -8,14 +8,19 @@
 //    coverage follows you across the entire 45 km world with zero re-uploads.
 //  · Each chunk gets a proper local bounding sphere, so three.js frustum-culls
 //    off-screen chunks — the trick that makes multi-million-blade counts
-//    affordable: typically only ~35-45% of blades are vertex-processed.
+//    affordable: typically only ~35-45% of blades are vertex-processed. On
+//    top of that, chunks whose nearest point lies beyond the distance-fade
+//    radius are skipped outright (the square grid's corners never render).
 //  · One INSTANCE is a whole TUFT of 8-25 blades (baked into the shared
-//    geometry with per-vertex flex/phase), not a single blade — so 20M blades
-//    need only 800k instances.
-//  · Two-ring density LOD (Maximum tier): the inner 3x3 chunks around the
-//    camera use the full-density template, the outer ring a reduced one, so
-//    the field can double its total count without doubling the vertex load
-//    where it isn't visible blade-by-blade anyway.
+//    geometry with per-vertex flex/phase), not a single blade — so 40M blades
+//    need only 1.6M instances.
+//  · Ring density LOD: tiers may declare concentric density RINGS (by
+//    chebyshev chunk distance) — Maximum runs three: a full-density 3x3 core,
+//    a mid ring, and a light outer ring where blades are sub-pixel anyway.
+//  · DIRT: the field mask's green channel carries bare-earth patches and the
+//    graded margins along pavement (from world.dirt); tufts over dirt are
+//    randomly culled, stunted and tinted toward soil, so the sward goes
+//    scruffy exactly where the ground texture shows earth.
 //  · A 1024² pavement mask (rasterized from the airport's pavement registry)
 //    zero-scales any tuft over runways/taxiways/aprons, sampled per instance
 //    in the vertex shader using true world coordinates.
@@ -47,6 +52,7 @@ uniform float uBlastLen;
 uniform float uBlastStr;
 varying float vTint;
 varying float vShade;
+varying float vDirt;
 #include <common>
 #include <fog_pars_vertex>
 #include <logdepthbuf_pars_vertex>
@@ -60,14 +66,21 @@ void main() {
   vec4 baseW4 = modelMatrix * vec4(chunkLocal, 1.0);
   vec3 baseW = baseW4.xyz;
 
-  // pavement mask: white = paved -> no grass
-  vec2 maskUV = (baseW.xz + uSpan) / (2.0 * uSpan);
-  float paved = texture2D(uMask, clamp(maskUV, 0.0, 1.0)).r;
-  float alive = 1.0 - step(0.5, paved);
+  // field mask: red = paved (no grass), green = dirt (scruffy grass)
+  vec4 m = texture2D(uMask, clamp((baseW.xz + uSpan) / (2.0 * uSpan), 0.0, 1.0));
+  float alive = 1.0 - smoothstep(0.35, 0.6, m.r);
+
+  // dirt thins the sward (per-tuft die-roll against local bareness) and
+  // stunts the survivors; vDirt browns them in the fragment stage
+  float dirt = m.g;
+  vDirt = dirt;
+  alive *= step(dirt * 0.9, fract(aData.w * 0.15915494));
+  float stunt = 1.0 - dirt * 0.55;
 
   // whole-field distance fade (chunks beyond the grid edge don't exist)
   float dist = distance(baseW.xz, cameraPosition.xz);
   alive *= 1.0 - smoothstep(uFadeStart, uFadeEnd, dist);
+  alive *= stunt;
 
   // live wind: two-octave sway + a travelling gust wave sweeping the field
   float wgt = aFlex;
@@ -105,20 +118,26 @@ void main() {
 const FRAG = /* glsl */`
 uniform vec3 uColorA;
 uniform vec3 uColorB;
+uniform vec3 uDirtTint;
 varying float vTint;
 varying float vShade;
+varying float vDirt;
 #include <common>
 #include <fog_pars_fragment>
 #include <logdepthbuf_pars_fragment>
 void main() {
   #include <logdepthbuf_fragment>
-  vec3 col = mix(uColorA, uColorB, vTint) * vShade;
+  vec3 col = mix(mix(uColorA, uColorB, vTint), uDirtTint, vDirt * 0.75) * vShade;
   gl_FragColor = vec4(col, 1.0);
   #include <fog_fragment>
 }`;
 
-// Rasterize the pavement registry into a mask texture (white = paved).
-function buildPavementMask(pavement) {
+// Rasterize the field mask: RED = pavement (from the registry), GREEN = dirt
+// (bare-earth blobs + graded margins hugging the pavement). Linear filtering
+// gives soft dirt falloff and sub-texel pavement edges (thresholded in the
+// shader).
+function buildFieldMask(world) {
+  const { pavement, dirt } = world;
   const N = 1024;
   const cv = document.createElement('canvas');
   cv.width = cv.height = N;
@@ -126,23 +145,50 @@ function buildPavementMask(pavement) {
   const k = N / (2 * MASK_SPAN);
   g.fillStyle = '#000';
   g.fillRect(0, 0, N, N);
-  g.fillStyle = '#fff';
-  for (const c of pavement.circles) {
-    g.beginPath();
-    g.arc((c.x + MASK_SPAN) * k, (c.z + MASK_SPAN) * k, c.r * k, 0, Math.PI * 2);
-    g.fill();
+
+  const eachShape = (expand) => {
+    for (const c of pavement.circles) {
+      g.beginPath();
+      g.arc((c.x + MASK_SPAN) * k, (c.z + MASK_SPAN) * k, (c.r + expand) * k, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (const r of pavement.rects) {
+      g.save();
+      g.translate((r.cx + MASK_SPAN) * k, (r.cz + MASK_SPAN) * k);
+      g.rotate(Math.atan2(r.dirZ, r.dirX));
+      g.fillRect(-(r.halfL + expand) * k, -(r.halfW + expand) * k,
+        2 * (r.halfL + expand) * k, 2 * (r.halfW + expand) * k);
+      g.restore();
+    }
+  };
+
+  // dirt margins first (green), widest and weakest outward
+  g.fillStyle = 'rgba(0,255,0,0.45)'; eachShape(16);
+  g.fillStyle = 'rgba(0,255,0,0.6)'; eachShape(7);
+
+  // bare-earth blobs (green, soft radial falloff)
+  if (dirt) {
+    for (const b of dirt.blobs) {
+      const px = (b.x + MASK_SPAN) * k, pz = (b.z + MASK_SPAN) * k, pr = Math.max(b.r * k, 1);
+      const grad = g.createRadialGradient(px, pz, 0, px, pz, pr);
+      grad.addColorStop(0, `rgba(0,255,0,${b.a})`);
+      grad.addColorStop(0.55, `rgba(0,255,0,${0.75 * b.a})`);
+      grad.addColorStop(1, 'rgba(0,255,0,0)');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(px, pz, pr, 0, Math.PI * 2);
+      g.fill();
+    }
   }
-  for (const r of pavement.rects) {
-    g.save();
-    g.translate((r.cx + MASK_SPAN) * k, (r.cz + MASK_SPAN) * k);
-    g.rotate(Math.atan2(r.dirZ, r.dirX));
-    g.fillRect(-r.halfL * k, -r.halfW * k, 2 * r.halfL * k, 2 * r.halfW * k);
-    g.restore();
-  }
+
+  // pavement last (red) — wipes dirt where slabs actually sit
+  g.fillStyle = '#f00';
+  eachShape(0);
+
   const tex = new THREE.CanvasTexture(cv);
   tex.flipY = false;
-  tex.minFilter = THREE.NearestFilter;
-  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = false;
   return tex;
 }
@@ -183,19 +229,28 @@ function buildTuftGeometry(blades, rng, desert) {
 
 export function createGrass(airport, tier, world, wind) {
   const cfg = tier.grass;
-  if (!cfg || !cfg.perChunk) return { meshes: [], group: new THREE.Group(), count: 0, update() {}, dispose() {} };
+  if (!cfg || (!cfg.perChunk && !cfg.rings)) return { meshes: [], group: new THREE.Group(), count: 0, update() {}, dispose() {} };
 
   const rng = mulberry32(hashString(airport.iata) ^ 0x51f15eed);
   const tags = airport.scenery || [];
   const desert = tags.includes('desert');
   const tropical = tags.includes('tropical') || tags.includes('island');
-  const { chunk: S, grid: N, perChunk, tuft, farPerChunk } = cfg;
+  const { chunk: S, grid: N, tuft } = cfg;
 
-  // Shared geometry: one tuft template + per-instance tuft placements.
-  // When farPerChunk is set (Maximum tier), a second reduced-density template
-  // shares the tuft mesh; outer-ring chunks are assigned to it per frame —
-  // a two-ring density LOD that lets the total blade count double without
-  // doubling the worst-case vertex load.
+  // Density rings: [{ cheb, perChunk }, ...] by chebyshev chunk distance from
+  // the camera's chunk; a bare perChunk is a single infinite ring. Each ring
+  // gets its own template (same tuft mesh, different instance count) and
+  // chunks are re-assigned per frame as the clipmap moves — density LOD that
+  // multiplies the total count without multiplying the worst-case vertex load.
+  const rings = cfg.rings
+    ? cfg.rings.map((r) => ({ cheb: r.cheb ?? Infinity, perChunk: r.perChunk }))
+    : [{ cheb: Infinity, perChunk: cfg.perChunk }];
+  const ringOf = (a, b) => {
+    const c = Math.max(Math.abs(a), Math.abs(b));
+    for (let i = 0; i < rings.length; i++) if (c <= rings[i].cheb) return i;
+    return rings.length - 1;
+  };
+
   const makeTemplate = (count) => {
     const t = buildTuftGeometry(tuft, mulberry32(hashString(airport.iata) ^ 0x51f15eed), desert);
     const offsets = new Float32Array(count * 2);
@@ -215,8 +270,7 @@ export function createGrass(airport, tier, world, wind) {
     t.boundingSphere = new THREE.Sphere(new THREE.Vector3(S / 2, 0.6, S / 2), S * 0.75);
     return t;
   };
-  const template = makeTemplate(perChunk);
-  const farTemplate = farPerChunk ? makeTemplate(farPerChunk) : null;
+  const templates = rings.map((r) => makeTemplate(r.perChunk));
 
   const fieldHalf = (N * S) / 2;
   const uniforms = {
@@ -225,7 +279,8 @@ export function createGrass(airport, tier, world, wind) {
     uFadeStart: { value: fieldHalf * 0.62 },
     uFadeEnd: { value: fieldHalf * 0.94 },
     uSpan: { value: MASK_SPAN },
-    uMask: { value: buildPavementMask(world.pavement) },
+    uMask: { value: buildFieldMask(world) },
+    uDirtTint: { value: new THREE.Color(desert ? '#9e8458' : tropical ? '#5c4c34' : '#68563a') },
     uWindDir: { value: new THREE.Vector3(0.7, 0, -0.7) },
     uWindStr: { value: 0.3 },
     uGust: { value: 0 },
@@ -244,29 +299,26 @@ export function createGrass(airport, tier, world, wind) {
     side: THREE.DoubleSide, fog: true
   });
 
+  // one mesh per grid cell, pre-assigned to its ring's template; blade census
+  // walks the same grid the clipmap uses
   const group = new THREE.Group();
   const meshes = [];
-  for (let i = 0; i < N * N; i++) {
-    const mesh = new THREE.Mesh(template, material);
-    group.add(mesh);
-    meshes.push(mesh);
+  let totalBlades = 0;
+  const h = Math.floor(N / 2);
+  for (let a = -h; a < N - h; a++) {
+    for (let b = -h; b < N - h; b++) {
+      const ring = rings[ringOf(a, b)];
+      const mesh = new THREE.Mesh(templates[ringOf(a, b)], material);
+      group.add(mesh);
+      meshes.push(mesh);
+      totalBlades += ring.perChunk * tuft;
+    }
   }
 
-  // blade census: with two-ring LOD, inner ring (chebyshev <= 1) is full
-  // density and the outer ring uses the reduced template
-  let totalBlades;
-  if (farTemplate) {
-    const h = Math.floor(N / 2);
-    let inner = 0;
-    for (let a = -h; a < N - h; a++) {
-      for (let b = -h; b < N - h; b++) {
-        if (Math.max(Math.abs(a), Math.abs(b)) <= 1) inner++;
-      }
-    }
-    totalBlades = (inner * perChunk + (N * N - inner) * farPerChunk) * tuft;
-  } else {
-    totalBlades = N * N * perChunk * tuft;
-  }
+  // chunks whose nearest point lies beyond the fade radius render nothing —
+  // skip them entirely (kills the square grid's corners)
+  const cullR = uniforms.uFadeEnd.value + 3;
+  const cullSq = cullR * cullR;
 
   return {
     group,
@@ -287,27 +339,27 @@ export function createGrass(airport, tier, world, wind) {
       } else {
         uniforms.uBlastStr.value = 0;
       }
-      // clipmap: snap the N x N chunk grid around the camera; with two-ring
-      // LOD the inner 3x3 chunks carry full density, the rest the far template
+      // clipmap: snap the N x N chunk grid around the camera and drop chunks
+      // fully past the fade radius. Each mesh keeps a fixed offset (a, b)
+      // from the camera's chunk, so its density ring — assigned at build
+      // time — never changes.
       if (cameraPos) {
         const ci = Math.floor(cameraPos.x / S), cj = Math.floor(cameraPos.z / S);
         let m = 0;
-        const h = Math.floor(N / 2);
         for (let a = -h; a < N - h; a++) {
           for (let b = -h; b < N - h; b++) {
             const mesh = meshes[m++];
-            mesh.position.set((ci + a) * S, 0, (cj + b) * S);
-            if (farTemplate) {
-              const want = Math.max(Math.abs(a), Math.abs(b)) <= 1 ? template : farTemplate;
-              if (mesh.geometry !== want) mesh.geometry = want;
-            }
+            const px = (ci + a) * S, pz = (cj + b) * S;
+            mesh.position.set(px, 0, pz);
+            const dx = Math.max(0, Math.abs(cameraPos.x - px - S / 2) - S / 2);
+            const dz = Math.max(0, Math.abs(cameraPos.z - pz - S / 2) - S / 2);
+            mesh.visible = dx * dx + dz * dz < cullSq;
           }
         }
       }
     },
     dispose() {
-      template.dispose();
-      if (farTemplate) farTemplate.dispose();
+      for (const t of templates) t.dispose();
       uniforms.uMask.value.dispose();
       material.dispose();
     }

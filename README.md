@@ -6,14 +6,16 @@ with stall/ground-effect/crosswind, toggleable crash-breakup physics, four graph
 and a fixed always-day VFR world — targeting GTA IV-era stylized-realistic fidelity at a
 smooth frame rate. Built on Three.js with **no build step**.
 
-The airfield itself is alive: **up to 20 MILLION individual grass blades** (chunked,
-frustum-culled clipmap with density LOD — 200x the v1 system) sway with a **live wind
-field** whose
+The airfield itself is alive: **up to 40 MILLION individual grass blades** (chunked,
+frustum-culled clipmap with three-ring density LOD — 400x the v1 system) sway with a
+**live wind field** whose
 gusts you can watch sweep across the grass, rock your wings, swing the windsocks and
 show up in ATC's wind calls; **dust physics** drifts with that same wind, gets blasted
 downstream by engine exhaust, sprays from the wheels on turf, and erupts on off-runway
-touchdowns. Fuel burns in flight — the jet gets lighter and livelier, and running dry
-means a real flameout.
+touchdowns. **Realistic dirt** runs through it all: bare-earth patches and graded soil
+margins along every runway and taxiway show through scruffy, stunted, browned grass —
+and kick up extra dust when you roll over them. Fuel burns in flight — the jet gets
+lighter and livelier, and running dry means a real flameout.
 
 ## Quick start
 
@@ -24,6 +26,18 @@ node tools/server.js          # or: python3 -m http.server 8080
 
 Any static file server works — there is no bundler, no framework, no install.
 (ES modules can't load from `file://`, so a server is required.)
+
+### Deploy (Netlify)
+
+The repo ships a `netlify.toml`, so deploying is zero-config: connect the repo in
+the Netlify UI (build command *empty*, publish directory `.`) — or from the CLI:
+
+```bash
+netlify deploy --prod --dir=.
+```
+
+Everything is static files with relative paths; any similar host (GitHub Pages,
+Cloudflare Pages, S3) works the same way.
 
 ## What's in the hangar
 

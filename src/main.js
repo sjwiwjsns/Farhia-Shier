@@ -95,7 +95,7 @@ class Sim {
     this.windInfo = this.windField.report(new THREE.Vector3(0, 3, 0), 0);
     this.effects.wind.copy(this.wind);
 
-    // chunked clipmap grass (up to 10M blades at Maximum)
+    // chunked clipmap grass (up to 40M blades at Maximum) + dirt-aware mask
     this.grass = createGrass(config.airport, this.tier, this.world);
     if (this.grass.group) this.scene.add(this.grass.group);
 
@@ -293,11 +293,13 @@ class Sim {
 
   spawnGroundDust(dt, blast) {
     const fm = this.fm;
-    // wheels rolling on turf spray dirt behind the mains
+    // wheels rolling on turf spray dirt behind the mains; bare-earth patches
+    // throw noticeably more of it than healthy sward
     if (fm.onGround && !this.crashed) {
       const speed = Math.hypot(fm.vel.x, fm.vel.z);
       if (speed > 4 && !this.world.isPavement(fm.pos.x, fm.pos.z)) {
-        this._wheelDustAcc = (this._wheelDustAcc || 0) + dt * Math.min(speed, 60) * 0.9;
+        const dirt = this.world.dirt ? this.world.dirt.at(fm.pos.x, fm.pos.z) : 0;
+        this._wheelDustAcc = (this._wheelDustAcc || 0) + dt * Math.min(speed, 60) * 0.9 * (1 + 1.6 * dirt);
         while (this._wheelDustAcc >= 1) {
           this._wheelDustAcc -= 1;
           for (const g of ['left', 'right']) {
@@ -305,7 +307,7 @@ class Sim {
             p.y = Math.max(p.y, 0.4);
             this.effects.dustKick(p,
               new THREE.Vector3(-fm.vel.x * 0.22, 1.6 + Math.random() * 2.2, -fm.vel.z * 0.22),
-              2, 2.6, 1.5, 0.5);
+              2, 2.6 + 1.4 * dirt, 1.5, 0.5);
           }
         }
       }
@@ -319,9 +321,10 @@ class Sim {
         const bp = blast.pos.clone().addScaledVector(blast.dir, along);
         bp.y = 0.4;
         if (this.world.isPavement(bp.x, bp.z)) continue;
+        const dirt = this.world.dirt ? this.world.dirt.at(bp.x, bp.z) : 0;
         this.effects.dustKick(bp,
           blast.dir.clone().multiplyScalar(12 + 32 * blast.n1).setY(1.2 + Math.random() * 3),
-          3, 3.8, 2.0, 0.55);
+          3, 3.8 + 1.8 * dirt, 2.0, 0.55);
       }
     }
   }
