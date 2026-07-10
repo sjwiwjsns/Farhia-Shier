@@ -13,6 +13,88 @@ function lambertOrStandard(tier, params) {
     : new THREE.MeshStandardMaterial({ metalness: 0.05, roughness: 0.85, ...params });
 }
 
+// ---------------------------------------------------------- building facades
+// Procedural windows computed in the fragment shader from WORLD position:
+// windows keep a fixed real-world size (one floor = floorH metres), so the
+// same material puts correct facades on instanced boxes of ANY scale — the
+// whole skyline stays a single draw call. Two looks:
+//   'office' — punched-window grid, taller glass lobby, the odd lit interior,
+//              subtle grime gradient, darker speckled roof with AC clutter
+//   'ribbon' — the continuous glass bands + mullions of terminal buildings
+// Works on Lambert and Standard materials (shared chunks), instanced or not.
+function patchFacadeShader(mat, opts = {}) {
+  const mode = opts.mode || 'office';
+  const winW = (opts.winW ?? 3.2).toFixed(3);
+  const floorH = (opts.floorH ?? 3.6).toFixed(3);
+  const mullW = (opts.mullW ?? 2.8).toFixed(3);
+  // three's program cache keys on onBeforeCompile SOURCE TEXT, which is
+  // identical for every facade variant — key on the actual params instead,
+  // or office and ribbon materials would silently share one program
+  mat.customProgramCacheKey = () => `facade|${mode}|${winW}|${floorH}|${mullW}`;
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFacPos;\nvarying vec3 vFacNrm;')
+      .replace('#include <fog_vertex>', `#include <fog_vertex>
+  #ifdef USE_INSTANCING
+    vec4 facW = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    vFacNrm = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+  #else
+    vec4 facW = modelMatrix * vec4(position, 1.0);
+    vFacNrm = normalize(mat3(modelMatrix) * normal);
+  #endif
+  vFacPos = facW.xyz;`);
+    const office = /* glsl */`
+    float u = nA.x > nA.z ? vFacPos.z : vFacPos.x;
+    vec2 grid = vec2(u / ${winW}, vFacPos.y / ${floorH});
+    vec2 cell = floor(grid);
+    vec2 f = fract(grid);
+    // punched windows; the ground floor gets a taller glass lobby
+    float win = step(0.17, f.x) * step(f.x, 0.83) * step(0.28, f.y) * step(f.y, 0.84);
+    float lobby = step(vFacPos.y, ${floorH}) * step(0.6, vFacPos.y) * step(0.08, f.x) * step(f.x, 0.92);
+    win = max(win * step(${floorH}, vFacPos.y), lobby);
+    float h = facHash(cell);
+    vec3 glass = mix(vec3(0.10, 0.13, 0.18), vec3(0.30, 0.38, 0.47), h);
+    if (h > 0.965) glass = vec3(0.55, 0.47, 0.28);  // the odd lit interior
+    diffuseColor.rgb = mix(diffuseColor.rgb, glass, win * 0.92);
+    diffuseColor.rgb *= 0.80 + 0.20 * clamp(vFacPos.y * 0.025, 0.0, 1.0); // street grime`;
+    const ribbon = /* glsl */`
+    float u = nA.x > nA.z ? vFacPos.z : vFacPos.x;
+    float fy = fract(vFacPos.y / ${floorH});
+    float band = step(0.32, fy) * step(fy, 0.86) * step(1.1, vFacPos.y);
+    float mull = step(0.06, fract(u / ${mullW}));
+    float h = facHash(vec2(floor(u / ${mullW}), floor(vFacPos.y / ${floorH})));
+    vec3 glass = mix(vec3(0.13, 0.18, 0.23), vec3(0.28, 0.36, 0.44), h);
+    diffuseColor.rgb = mix(diffuseColor.rgb, glass, band * mull * 0.94);`;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying vec3 vFacPos;
+varying vec3 vFacNrm;
+// sin-free hash, inputs wrapped small: fp32 sin(BIG) correlates neighbouring
+// cells into giant blotches at world-scale coordinates
+float facHash(vec2 c) {
+  c = mod(c, 128.0);
+  c = fract(c * vec2(0.1031, 0.1030));
+  c += dot(c, c.yx + 33.33);
+  return fract((c.x + c.y) * c.x);
+}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+{
+  vec3 nA = abs(vFacNrm);
+  if (nA.y < 0.55) {
+${mode === 'office' ? office : ribbon}
+  } else if (vFacNrm.y > 0.55) {
+${mode === 'office' ? `    // roof: darker deck with mechanical-unit speckle
+    float rh = facHash(floor(vFacPos.xz / 5.0));
+    diffuseColor.rgb *= 0.52 + 0.20 * step(0.82, rh);`
+    : `    // terminal roofs read close-up: plain membrane deck (the instanced
+    // AC units supply the physical detail — speckle here looks like grime)
+    diffuseColor.rgb *= 0.62;`}
+  }
+}`);
+  };
+  return mat;
+}
+
 // ------------------------------------------------------------ runway texture
 function runwayTexture(idPair, lenM, widM, texScale) {
   const [endA, endB] = idPair.split('/');
@@ -335,7 +417,9 @@ export function buildAirport(airport, tier, fleetPool = []) {
     const slabR = Math.max(t.lenM, t.widM) / 2 + t.widM + 55;
     const slab = new THREE.Mesh(new THREE.CircleGeometry(slabR, 24), slabMat);
     slab.rotation.x = -Math.PI / 2;
-    slab.position.set(t.x, 0.09, t.z);
+    // 0.17: clearly above the apron disc (0.10) — a 1 cm gap z-fights at
+    // ~300 m even with the log depth buffer
+    slab.position.set(t.x, 0.17, t.z);
     slab.receiveShadow = tier.shadows;
     group.add(slab);
     paveCircle(t.x, t.z, slabR + 10);
@@ -345,17 +429,24 @@ export function buildAirport(airport, tier, fleetPool = []) {
   // ---------------------------------------------------------------- terminals
   const wallMat = lambertOrStandard(tier, { color: '#c9c6bd' });
   const roofMat = lambertOrStandard(tier, { color: '#83878c' });
+  // terminal walls carry continuous ribbon-glass window bands (procedural,
+  // world-space — see patchFacadeShader); plain wallMat stays on curved
+  // roofs/domes where a window grid would smear
+  const terminalMat = patchFacadeShader(
+    lambertOrStandard(tier, { color: '#c9c6bd' }), { mode: 'ribbon', floorH: 3.4, mullW: 2.8 });
   const glassMat = tier.reflections
     ? new THREE.MeshStandardMaterial({ color: '#5f7f99', metalness: 0.9, roughness: 0.15, envMapIntensity: 1.0 })
     : lambertOrStandard(tier, { color: '#54718a' });
 
-  const addBox = (x, z, rotY, w, hgt, d, matl = wallMat, collide = true) => {
+  const roofSpots = []; // terminal roof rectangles -> AC/mechanical clutter
+  const addBox = (x, z, rotY, w, hgt, d, matl = terminalMat, collide = true) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), matl);
     m.position.set(x, hgt / 2, z);
     m.rotation.y = rotY;
     m.castShadow = m.receiveShadow = tier.shadows;
     group.add(m);
     if (collide) collidables.push(new THREE.Box3().setFromObject(m));
+    if (matl === terminalMat) roofSpots.push({ x, z, rotY, w: w * 0.8, d: d * 0.7, topY: hgt });
     return m;
   };
 
@@ -409,7 +500,7 @@ export function buildAirport(airport, tier, fleetPool = []) {
       addGatesAlong(t.x, t.z, rot - Math.PI / 2, t.lenM, t.widM / 2 + 30, (t.gates || 4) - n);
     } else if (t.kind === 'satellite' || t.kind === 'round') {
       const r = t.lenM / 2;
-      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 13, 20), wallMat);
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 13, 20), terminalMat);
       cyl.position.set(t.x, 6.5, t.z);
       cyl.castShadow = tier.shadows;
       group.add(cyl);
@@ -443,6 +534,37 @@ export function buildAirport(airport, tier, fleetPool = []) {
         });
       }
     }
+  }
+
+  // Rooftop mechanical clutter: AC units, vents and plant rooms scattered on
+  // every terminal roof — one InstancedMesh for all of them.
+  if (tier.clutter >= 0.4 && roofSpots.length) {
+    let total = 0;
+    const per = roofSpots.map((s) => {
+      const n = clamp(Math.round((s.w * s.d) / 2600), 2, 9);
+      total += n;
+      return n;
+    });
+    const acInst = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1, 1, 1), lambertOrStandard(tier, { color: '#8e949b' }), total);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion(), sc = new THREE.Vector3(), pos = new THREE.Vector3();
+    let idx = 0;
+    roofSpots.forEach((s, si) => {
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.rotY);
+      for (let i = 0; i < per[si]; i++) {
+        const lu = (rng() - 0.5) * s.w, lv = (rng() - 0.5) * s.d;
+        const bw = 2 + rng() * 3.5, bh = 1.2 + rng() * 2.2, bd = 2 + rng() * 3.5;
+        const cy = Math.cos(s.rotY), sy = Math.sin(s.rotY);
+        pos.set(s.x + lu * cy + lv * sy, s.topY + bh / 2, s.z - lu * sy + lv * cy);
+        sc.set(bw, bh, bd);
+        m4.compose(pos, q, sc);
+        acInst.setMatrixAt(idx++, m4);
+      }
+    });
+    acInst.instanceMatrix.needsUpdate = true;
+    acInst.castShadow = tier.shadows;
+    group.add(acInst);
   }
 
   // Windsocks: react live to the wind field (rotated/drooped per frame).
@@ -607,18 +729,26 @@ function buildScenery(airport, tier, group, collidables, rng, has) {
     const cx = Math.sin(dir) * skl.distM, cz = -Math.cos(dir) * skl.distM;
     const conf = { m: [12, 120, 1000], l: [22, 210, 1600], xl: [38, 300, 2200], strip: [14, 160, 1400] }[skl.size] || [14, 130, 1100];
     const [count, maxH, radius] = conf;
-    const mat = lowMat('#8a97a5');
+    // white base + per-instance facade tint; the office window grid, lobby,
+    // grime gradient and roof speckle come from the facade shader
+    const mat = patchFacadeShader(lowMat('#ffffff'), { mode: 'office', winW: 3.4, floorH: 3.7 });
+    const palette = ['#8fa0b4', '#a89f92', '#7c8894', '#9aa8b8', '#6f7a88', '#b5aca0']
+      .map((c) => new THREE.Color(c));
     const geom = new THREE.BoxGeometry(1, 1, 1);
     const inst = new THREE.InstancedMesh(geom, mat, count);
     const m4 = new THREE.Matrix4();
+    const towers = [];
     for (let i = 0; i < count; i++) {
       const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * radius;
       const bx = cx + Math.cos(a) * rr, bz = cz + Math.sin(a) * rr * 0.6;
       const h = 30 + Math.pow(rng(), 2.2) * maxH;
       const w = 35 + rng() * 55;
-      m4.makeScale(w, h, w * (0.7 + rng() * 0.6));
+      const d = w * (0.7 + rng() * 0.6);
+      m4.makeScale(w, h, d);
       m4.setPosition(bx, h / 2, bz);
       inst.setMatrixAt(i, m4);
+      inst.setColorAt(i, palette[Math.floor(rng() * palette.length)]);
+      towers.push({ bx, bz, h, w, d, r: rng() });
       if (skl.distM < 6500) {
         collidables.push(new THREE.Box3(
           new THREE.Vector3(bx - w / 2, 0, bz - w / 2),
@@ -626,7 +756,37 @@ function buildScenery(airport, tier, group, collidables, rng, has) {
       }
     }
     inst.instanceMatrix.needsUpdate = true;
+    inst.instanceColor.needsUpdate = true;
     group.add(inst);
+
+    // silhouette detail: stepped crowns on ~1/3 of towers, antenna spires on
+    // the tallest — two more instanced draws for the whole skyline
+    const crowns = towers.filter((t) => t.r < 0.35);
+    if (crowns.length) {
+      const cInst = new THREE.InstancedMesh(geom, mat, crowns.length);
+      crowns.forEach((t, i) => {
+        m4.makeScale(t.w * 0.58, t.h * 0.14, t.d * 0.58);
+        m4.setPosition(t.bx, t.h + t.h * 0.07, t.bz);
+        cInst.setMatrixAt(i, m4);
+        cInst.setColorAt(i, palette[Math.floor(t.r * 17) % palette.length]);
+      });
+      cInst.instanceMatrix.needsUpdate = true;
+      cInst.instanceColor.needsUpdate = true;
+      group.add(cInst);
+    }
+    const tall = towers.filter((t) => t.h > maxH * 0.55).slice(0, 8);
+    if (tall.length) {
+      const sInst = new THREE.InstancedMesh(
+        new THREE.CylinderGeometry(0.6, 1.8, 1, 6), lowMat('#5d646c'), tall.length);
+      tall.forEach((t, i) => {
+        const sh = 18 + t.r * 30;
+        m4.makeScale(1, sh, 1);
+        m4.setPosition(t.bx + (t.r - 0.5) * t.w * 0.4, t.h + sh / 2, t.bz);
+        sInst.setMatrixAt(i, m4);
+      });
+      sInst.instanceMatrix.needsUpdate = true;
+      group.add(sInst);
+    }
     if (skl.size === 'strip') {
       const pyr = new THREE.Mesh(new THREE.ConeGeometry(120, 110, 4), lowMat('#2f2f33'));
       pyr.position.set(cx, 55, cz + 500);
@@ -753,7 +913,8 @@ function buildScenery(airport, tier, group, collidables, rng, has) {
       const urban = has('urban');
       const count = Math.round((urban ? 1000 : 550) * clutter);
       const geom = new THREE.BoxGeometry(1, 1, 1);
-      const mats = ['#9b9489', '#8b8e94', '#a3937f'].map(lowMat);
+      const mats = ['#9b9489', '#8b8e94', '#a3937f'].map((c) =>
+        patchFacadeShader(lowMat(c), { mode: 'office', winW: 2.5, floorH: 3.1 }));
       for (let k = 0; k < 3; k++) {
         const inst = new THREE.InstancedMesh(geom, mats[k], Math.ceil(count / 3));
         const m4 = new THREE.Matrix4();

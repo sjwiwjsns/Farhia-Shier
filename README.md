@@ -65,7 +65,12 @@ MIA · FLL · MCO · TPA · CLT · PHL · DCA · IAD · BWI · DTW · PHX · LAS
 STL · HNL — each with close-approximation runway numbers/orientation, terminal
 arrangement (piers, satellites, horseshoes, DEN's tent roof, IAD's swoop, TPA's
 round airsides), field elevation, and region scenery: skylines, mountains, coasts,
-desert, the Vegas Strip, the Gateway Arch, DC monuments, Diamond Head…
+desert, the Vegas Strip, the Gateway Arch, DC monuments, Diamond Head… Buildings
+are **detailed and windowed**: terminals wear continuous ribbon-glass bands with
+mullions and rooftop AC clutter, and skyline towers get procedural window grids,
+per-tower facade tints, glass lobbies, stepped crowns and antenna spires — all
+computed in-shader at fixed real-world scale, so the whole skyline stays one
+draw call.
 
 ## Controls
 

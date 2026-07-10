@@ -229,6 +229,24 @@ logarithmic depth buffer, so every `ShaderMaterial` must include the `logdepthbu
 chunks or it will lose the depth test (and reversed-argument `smoothstep()` is
 undefined behavior in GLSL — both bit us during development).
 
+## Building facades (`world/airportBuilder.js` — `patchFacadeShader`)
+
+Every rectangular building gets **procedural windows in the fragment shader**,
+computed from *world position* with a fixed real-world floor height — so one
+material puts correct facades on instanced boxes of any scale and the whole
+skyline stays a single draw call. Two looks: **office** (punched-window grid with
+per-cell tint variation, taller glass lobby, the odd lit interior, street-grime
+gradient, speckled roof deck) for city skylines and urban clutter; **ribbon**
+(continuous glass bands + mullions, clean membrane roof) for terminals — including
+the round satellites, where the Y-driven bands wrap cylinders cleanly. Skyline
+towers add per-instance facade tints (`instanceColor`), stepped crowns on ~1/3 of
+towers and antenna spires on the tallest; terminal roofs carry instanced AC/vent
+clutter. Two hard-won notes: three.js keys its program cache on
+`onBeforeCompile` *source text*, so facade variants must set
+`customProgramCacheKey` or they silently share one shader; and fp32 `sin()`
+hashes break down at world-scale inputs (neighbouring cells correlate into giant
+blotches) — wrap cells with `mod()` and use a sin-free hash.
+
 ## Graphics tiers (`render/graphics.js`)
 
 One `TIERS` table drives everything; see `docs/PERFORMANCE.md`. The GTA IV-ish look
