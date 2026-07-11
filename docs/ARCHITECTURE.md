@@ -247,6 +247,17 @@ clutter. Two hard-won notes: three.js keys its program cache on
 hashes break down at world-scale inputs (neighbouring cells correlate into giant
 blotches) — wrap cells with `mod()` and use a sin-free hash.
 
+## Touch controls (`ui/touch.js`)
+
+On coarse-pointer devices a DOM overlay (virtual stick, rudder bar, absolute
+throttle slider, action buttons, canvas drag-look + pinch zoom) registers itself
+with `Input` and is applied after keyboard/gamepad each update — a finger on a
+control wins, the throttle slider stays authoritative once touched
+(`input.touchThrottle`, checked before `gamepadThrottle`), and the sim itself
+never knows which device is flying. First run on mobile defaults to Low +
+minimal HUD; starting a flight requests fullscreen/landscape inside the tap
+gesture. Nothing is created on non-touch devices.
+
 ## Graphics tiers (`render/graphics.js`)
 
 One `TIERS` table drives everything; see `docs/PERFORMANCE.md`. The GTA IV-ish look

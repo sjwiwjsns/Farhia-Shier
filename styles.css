@@ -1,7 +1,11 @@
 /* OpenSkies UI — dark, desaturated, orange accent (GTA IV-era menu vibes) */
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #14161a; font-family: "Segoe UI", Arial, sans-serif; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden; background: #14161a; font-family: "Segoe UI", Arial, sans-serif;
+  overscroll-behavior: none; /* no pull-to-refresh mid-flare */
+}
 #scene, #hud { position: fixed; inset: 0; width: 100%; height: 100%; }
+#scene { touch-action: none; } /* finger drags are camera look, never scroll */
 #hud { pointer-events: none; z-index: 5; }
 
 .hidden { display: none !important; }
@@ -75,3 +79,69 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #14161a; fon
 }
 .overlay button:hover { background: #313947; }
 #crash-reason { color: #c6cdd6; font-size: 14px; }
+
+/* ---------------- touch controls (created only on touch devices) -------- */
+#touch-ui {
+  position: fixed; inset: 0; z-index: 20; pointer-events: none;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+#touch-ui > * { pointer-events: auto; touch-action: none; }
+.tc-stick {
+  position: fixed; left: calc(20px + env(safe-area-inset-left)); bottom: calc(20px + env(safe-area-inset-bottom));
+  width: 132px; height: 132px; border-radius: 50%;
+  background: rgba(18, 22, 28, 0.35); border: 1px solid rgba(242, 185, 80, 0.3);
+}
+.tc-nub {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+  border-radius: 50%; background: rgba(242, 185, 80, 0.35); border: 1px solid rgba(242, 185, 80, 0.65);
+}
+.tc-rudder {
+  position: fixed; left: calc(172px + env(safe-area-inset-left)); bottom: calc(26px + env(safe-area-inset-bottom));
+  width: 144px; height: 34px; border-radius: 17px;
+  background: rgba(18, 22, 28, 0.35); border: 1px solid #39404c;
+}
+.tc-rudder .tc-handle {
+  position: absolute; top: 2px; left: 50%; width: 40px; height: 28px; margin-left: -20px;
+  border-radius: 14px; background: rgba(180, 200, 220, 0.3); border: 1px solid #5a6470;
+}
+.tc-thr {
+  position: fixed; right: calc(14px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
+  width: 54px; height: min(44vh, 300px); border-radius: 8px;
+  background: rgba(18, 22, 28, 0.4); border: 1px solid #39404c;
+}
+.tc-thr .tc-fill {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 0%;
+  background: rgba(242, 185, 80, 0.35); border-top: 2px solid #f2b950; border-radius: 0 0 8px 8px;
+}
+.tc-thr .tc-pct {
+  position: absolute; top: -22px; width: 100%; text-align: center;
+  color: #f2b950; font-size: 12px; letter-spacing: 1px;
+}
+.tc-btns {
+  position: fixed; right: calc(82px + env(safe-area-inset-right)); bottom: calc(20px + env(safe-area-inset-bottom));
+  display: grid; grid-template-columns: repeat(2, 64px); gap: 8px;
+}
+.tc-top {
+  position: fixed; top: calc(10px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+  display: flex; gap: 8px;
+}
+.tc-btn {
+  height: 44px; min-width: 52px; padding: 0 10px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(18, 22, 28, 0.55); color: #d7dce2; border: 1px solid #3a4250;
+  font-size: 12px; letter-spacing: 1px; font-weight: 600;
+}
+.tc-btn.on { background: rgba(242, 185, 80, 0.45); color: #191307; border-color: #f2b950; }
+
+/* ---------------- small screens -------------------------------------- */
+@media (max-width: 760px) {
+  #menu { padding: 14px 4vw 22px; }
+  #menu h1 { font-size: 30px; letter-spacing: 6px; }
+  .menu-grid { grid-template-columns: 1fr; gap: 12px; }
+  #menu select[size] { min-height: 112px; }
+  /* 16px stops iOS Safari from zooming the page when a select gets focus */
+  #menu select, #pause select { font-size: 16px; }
+  #btn-fly { padding: 16px; font-size: 17px; }
+  #radio { max-width: 60vw; font-size: 11px; }
+  .overlay .panel { width: min(340px, 92vw); padding: 20px 22px; }
+}

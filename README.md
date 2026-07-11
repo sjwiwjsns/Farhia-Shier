@@ -83,6 +83,12 @@ draw call.
 | `C` `H` `T` `M` `P` | camera (incl. walkable A380 cabin), HUD mode, radio log, mute, pause |
 | Mouse drag / wheel | look / zoom · Free cam: `I J K L U O` |
 | Gamepad/joystick | sticks = pitch/roll, pedals or right stick = rudder, lever/triggers = throttle |
+| **Touch (phone/tablet)** | virtual stick = pitch/roll, rudder bar, throttle slider, GEAR/FLAP/SPLR/REV/BRK buttons, drag = look, pinch = zoom, double-tap = recenter |
+
+**Mobile:** the game detects touch devices and shows on-screen controls
+automatically — first run defaults to the Low tier and the lean HUD, flights
+open fullscreen in landscape, and the menu reflows for small screens. Runs in
+mobile Safari and Chrome from the same URL; no app install.
 
 Difficulty: **Arcade** (auto-trim, auto-coordination, forgiving stall/gear limits) or
 **Realistic** (full manual, wing drop at the stall, real sink-rate limits).

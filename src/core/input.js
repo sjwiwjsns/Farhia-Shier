@@ -37,8 +37,10 @@ export class Input {
     this.keys = new Set();
     this.actions = [];
     this.axes = { pitch: 0, roll: 0, yaw: 0, throttleDelta: 0, brakes: 0, trim: 0 };
-    // Absolute overrides from gamepad (null = keyboard in control)
+    // Absolute overrides (null = keyboard in control)
     this.gamepadThrottle = null;
+    this.touchThrottle = null;
+    this.touch = null; // TouchControls registers itself here on touch devices
     this.look = { x: 0, y: 0, zoom: 0, dragging: false };
     this.hasGamepad = false;
 
@@ -98,6 +100,9 @@ export class Input {
     ax.trim = (this.down('trimUp') ? 1 : 0) - (this.down('trimDown') ? 1 : 0);
 
     this.pollGamepad(ax);
+    // touch overlay last: a finger on a control wins over everything
+    if (this.touch) this.touch.apply(ax, this);
+    else this.touchThrottle = null;
   }
 
   pollGamepad(ax) {

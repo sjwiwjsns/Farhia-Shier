@@ -15,6 +15,7 @@ import { DamageSystem } from './physics/damage.js';
 import { makeWindForFlight } from './physics/wind.js';
 import { hashString } from './core/math.js';
 import { Menu } from './ui/menu.js';
+import { TouchControls, isTouchDevice } from './ui/touch.js';
 import { HUD } from './ui/hud.js';
 import { ATC } from './ui/atc.js';
 import { AudioSystem } from './audio/engineSound.js';
@@ -233,8 +234,9 @@ class Sim {
       }
     }
 
-    // throttle
-    if (input.gamepadThrottle !== null) fm.throttle = input.gamepadThrottle;
+    // throttle: touch slider > gamepad lever > keyboard ramp
+    const absThrottle = input.touchThrottle !== null ? input.touchThrottle : input.gamepadThrottle;
+    if (absThrottle !== null) fm.throttle = absThrottle;
     else fm.throttle = clamp01(fm.throttle + input.axes.throttleDelta * dt * 0.35);
     fm.brakes = input.axes.brakes;
     fm.trim = clamp(fm.trim + input.axes.trim * dt * 0.12, -0.5, 0.5);
@@ -419,6 +421,7 @@ async function boot() {
   };
   shared.renderer.setSize(innerWidth, innerHeight);
   shared.hud.resize();
+  if (isTouchDevice()) shared.touch = new TouchControls(shared.input, canvas);
 
   window.addEventListener('resize', () => {
     shared.renderer.setSize(innerWidth, innerHeight);
@@ -430,6 +433,10 @@ async function boot() {
     if (sim) { sim.dispose(); sim = null; }
     sim = new Sim(config, data, shared);
     window.__sim = sim; // debug/testing hook
+    if (shared.touch) {
+      shared.touch.resetForFlight();
+      shared.touch.show();
+    }
   });
 
   // pause overlay buttons
@@ -439,6 +446,7 @@ async function boot() {
     sim?.setPaused(false);
     if (sim) { sim.dispose(); sim = null; }
     shared.audio.stopEngine();
+    shared.touch?.hide();
     menu.show();
   });
   $('btn-crash-restart').addEventListener('click', () => sim?.restart());
@@ -446,6 +454,7 @@ async function boot() {
     $('crash').classList.add('hidden');
     if (sim) { sim.dispose(); sim = null; }
     shared.audio.stopEngine();
+    shared.touch?.hide();
     menu.show();
   });
   // in-pause quick settings

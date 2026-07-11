@@ -2,6 +2,7 @@
 // Airline choice filters the aircraft list through airlineOperates() so a
 // carrier only offers aircraft it historically/currently operates.
 import { airlineOperates } from '../aircraft/liveries.js';
+import { isTouchDevice } from './touch.js';
 
 const SETTINGS_KEY = 'openskies-settings-v1';
 
@@ -14,10 +15,12 @@ export const DEFAULT_SETTINGS = {
 };
 
 export function loadSettings() {
+  // first run on a phone: start at Low with the lean HUD (changeable in-menu)
+  const mobileDefaults = isTouchDevice() ? { graphics: 'low', hud: 'minimal' } : {};
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
+    return { ...DEFAULT_SETTINGS, ...mobileDefaults, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...mobileDefaults };
   }
 }
 
@@ -171,6 +174,15 @@ export class Menu {
       spawn: this.$('sel-spawn').value, // 'runway' | 'final'
       settings: this.readSettings()
     };
+    // phones: go fullscreen landscape while we still hold the user gesture
+    if (isTouchDevice()) {
+      try {
+        const fs = document.documentElement.requestFullscreen?.();
+        if (fs && fs.then) {
+          fs.then(() => screen.orientation?.lock?.('landscape')).catch(() => {});
+        }
+      } catch { /* not supported (iOS Safari) — fine */ }
+    }
     this.hide();
     this.onStart(config);
   }
