@@ -1,0 +1,22 @@
+# OpenSkies is a pure static site — no build step, no bundler, no functions.
+# Connect the repo (or `netlify deploy --dir=.`) and it just serves.
+[build]
+  publish = "."
+  command = ""
+
+# Long-cache the vendored three.js (it only changes when the file is replaced)
+# and the game data; HTML/JS stay revalidated so deploys show up immediately.
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/data/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"

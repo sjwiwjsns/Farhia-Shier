@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#14161a">
+<title>OpenSkies — Civil Aviation Flight Simulator</title>
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<canvas id="hud"></canvas>
+
+<div id="radio" class="hidden"></div>
+<div id="toast"></div>
+
+<!-- ============================ MAIN MENU ============================ -->
+<div id="menu">
+  <header>
+    <h1>OPENSKIES</h1>
+    <p class="tagline">Civil aviation flight simulator — 68 airliners &middot; 30 U.S. airports &middot; always-day VFR</p>
+  </header>
+  <div class="menu-grid">
+    <section>
+      <h2>Airline</h2>
+      <select id="sel-airline" size="10"></select>
+      <p class="fine">Aircraft list filters to types this carrier historically or currently operates. All liveries are simplified colour tributes, not exact airline artwork.</p>
+    </section>
+    <section>
+      <h2>Aircraft</h2>
+      <select id="sel-aircraft" size="10"></select>
+      <div id="aircraft-notes" class="notes"></div>
+    </section>
+    <section>
+      <h2>Airport &amp; Runway</h2>
+      <select id="sel-airport" size="6"></select>
+      <select id="sel-runway"></select>
+      <select id="sel-spawn">
+        <option value="runway">Spawn on runway (takeoff)</option>
+        <option value="final">Spawn on short final (~4 km out, landing)</option>
+      </select>
+    </section>
+    <section>
+      <h2>Settings</h2>
+      <label>Graphics
+        <select id="sel-graphics">
+          <option value="low">Low — no shadows, short draw</option>
+          <option value="medium">Medium — simple shadows</option>
+          <option value="high">High — reflections, long draw</option>
+          <option value="max">Maximum — everything on</option>
+        </select>
+      </label>
+      <label>Difficulty
+        <select id="sel-difficulty">
+          <option value="arcade">Arcade — assists, forgiving</option>
+          <option value="realistic">Realistic — full manual, real stall risk</option>
+        </select>
+      </label>
+      <label>HUD
+        <select id="sel-hud">
+          <option value="full">Full glass instruments</option>
+          <option value="minimal">Minimal strip</option>
+          <option value="off">Off (chase-cam arcade)</option>
+        </select>
+      </label>
+      <label class="row"><input type="checkbox" id="chk-crash" checked> Crash physics (breakup on impact)</label>
+      <label class="row"><input type="checkbox" id="chk-mute"> Mute sound</label>
+      <button id="btn-fly">START FLIGHT</button>
+    </section>
+  </div>
+  <details class="controls-help">
+    <summary>Controls (keyboard / mouse / gamepad)</summary>
+    <div class="ctl-grid">
+      <div><b>W / S</b> pitch down / up</div><div><b>A / D</b> roll</div>
+      <div><b>Q / E</b> rudder</div><div><b>Shift / Ctrl</b> throttle</div>
+      <div><b>G</b> gear</div><div><b>F / V</b> flaps down / up</div>
+      <div><b>Space</b> spoilers</div><div><b>Z</b> reverse thrust (on ground)</div>
+      <div><b>B</b> wheel brakes</div><div><b>[ / ]</b> pitch trim</div>
+      <div><b>C</b> camera (chase / cockpit / cabin* / tower / free)</div><div><b>H</b> HUD modes</div>
+      <div><b>T</b> radio log</div><div><b>M</b> mute &nbsp; <b>P / Esc</b> pause</div>
+      <div><b>Mouse drag</b> look &nbsp; <b>wheel</b> zoom</div><div><b>Free/cabin cam</b> I/J/K/L walk + U/O (decks) &nbsp;*A380</div>
+      <div><b>Gamepad</b> sticks = pitch/roll, pedals/right-stick = rudder, lever/triggers = throttle</div><div><b>A</b>=gear <b>X/Y</b>=flaps <b>B</b>=spoilers</div>
+    </div>
+  </details>
+  <footer class="fine">Fan-made simulator. Aircraft performance figures are public approximations; liveries are placeholder tributes. MD-12 is a concept aircraft that was never built.</footer>
+</div>
+
+<!-- ============================ PAUSE ============================ -->
+<div id="pause" class="overlay hidden">
+  <div class="panel">
+    <h2>PAUSED</h2>
+    <label>Graphics
+      <select id="pause-graphics">
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="max">Maximum</option>
+      </select>
+    </label>
+    <label>Difficulty
+      <select id="pause-difficulty">
+        <option value="arcade">Arcade</option>
+        <option value="realistic">Realistic</option>
+      </select>
+    </label>
+    <label class="row"><input type="checkbox" id="pause-crash"> Crash physics</label>
+    <div class="btn-row">
+      <button id="btn-resume">Resume</button>
+      <button id="btn-restart">Restart flight</button>
+      <button id="btn-quit">Main menu</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ CRASH ============================ -->
+<div id="crash" class="overlay hidden">
+  <div class="panel crash-panel">
+    <h2>AIRCRAFT DESTROYED</h2>
+    <p id="crash-reason"></p>
+    <div class="btn-row">
+      <button id="btn-crash-restart">Respawn</button>
+      <button id="btn-crash-quit">Main menu</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

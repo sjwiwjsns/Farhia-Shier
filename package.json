@@ -1,0 +1,11 @@
+{
+  "name": "openskies-sim",
+  "version": "0.1.0",
+  "description": "OpenSkies — a browser-playable civil aviation flight simulator (Three.js, no build step)",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node tools/server.js",
+    "test": "node tools/validate-data.js && node tools/check-syntax.js && node --import ./tools/three-register.mjs tools/test-flight.js"
+  }
+}
