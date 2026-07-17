@@ -167,7 +167,12 @@ body::before{ /* vignette + faint grid */
 .stat{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:9px 10px;text-align:center}
 .stat b{display:block;font-size:17px;font-weight:800}
 .stat span{font-size:9px;font-family:var(--mono);color:var(--txt-faint);letter-spacing:.06em}
-.feedcard{flex:1;display:flex;flex-direction:column;min-height:0}
+.feedcard{flex:1;display:flex;flex-direction:column;min-height:0;position:relative}
+.feedcard::after{ /* soft fade where the list scrolls out */
+  content:"";position:absolute;left:1px;right:1px;bottom:1px;height:26px;
+  border-radius:0 0 var(--radius) var(--radius);
+  background:linear-gradient(transparent,rgba(7,7,11,.9));pointer-events:none;
+}
 .feedhead{
   display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid var(--line);flex-shrink:0;
 }
@@ -200,6 +205,12 @@ body::before{ /* vignette + faint grid */
 }
 .msgs::-webkit-scrollbar{width:5px}
 .msgs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+/* opening state: center the welcome + wire strip instead of leaving a void */
+.msgs.solo{display:flex;flex-direction:column;justify-content:center}
+#wireStrip{display:none;gap:9px;justify-content:center;flex-wrap:wrap;margin-top:6px;animation:fadein .6s ease .3s both}
+.msgs.solo #wireStrip{display:flex}
+#wireStrip .ws{font-family:var(--mono);font-size:10px;color:var(--txt-dim);border:1px solid var(--line);border-radius:999px;padding:6px 13px;background:var(--panel)}
+#wireStrip .ws b{color:var(--txt);font-weight:600}
 .msg{display:flex;gap:12px;margin:0 auto 22px;max-width:780px;animation:fadein .35s ease both}
 @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .avatar{
@@ -250,7 +261,7 @@ body::before{ /* vignette + faint grid */
 .inputwrap:focus-within{border-color:rgba(138,180,255,.5);box-shadow:0 0 0 3px rgba(138,180,255,.09),0 10px 40px rgba(0,0,0,.45)}
 textarea#input{
   flex:1;background:none;border:none;outline:none;resize:none;color:var(--txt);
-  font-family:var(--sans);font-size:14.5px;line-height:1.5;max-height:130px;min-height:22px;
+  font-family:var(--sans);font-size:14.5px;line-height:1.5;max-height:min(130px,40dvh);min-height:22px;
 }
 textarea#input::placeholder{color:var(--txt-faint)}
 #send{
@@ -291,6 +302,14 @@ textarea#input::placeholder{color:var(--txt-faint)}
 .modal select{cursor:pointer}
 .modal select option, .modal select optgroup{background:#12121a;color:var(--txt)}
 .modal input:focus,.modal select:focus{border-color:rgba(138,180,255,.5)}
+.modal select{
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%239a9aa6' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat:no-repeat;background-position:right 13px center;padding-right:36px;
+}
+.iconbtn:focus-visible,.qchip:focus-visible,.btn:focus-visible,#send:focus-visible,.feedtoggle:focus-visible,
+.fitem:focus-visible,.titem a:focus-visible,.modal input:focus-visible,.modal select:focus-visible,textarea#input:focus-visible{
+  outline:2px solid rgba(138,180,255,.65);outline-offset:2px;
+}
 .modal .note{font-size:11px;color:var(--txt-faint);line-height:1.6;margin-top:10px}
 .modal .note b{color:var(--amber)}
 .mbtns{display:flex;gap:10px;margin-top:22px;justify-content:flex-end}
@@ -332,6 +351,22 @@ textarea#input::placeholder{color:var(--txt-faint)}
   .iconbtn{padding:6px 9px;font-size:10px}
   .breaking .demo{display:none}
   .logo .ver{display:none}
+  .layout:has(.rail.open)::after{ /* dim the page behind the open drawer */
+    content:"";position:fixed;inset:0;z-index:35;
+    background:rgba(3,3,6,.55);backdrop-filter:blur(2px);
+  }
+}
+@media (max-width:480px){
+  .topbar{gap:6px}
+  .iconbtn{padding:5px 7px;font-size:9px}
+  .logo h1{font-size:16px}
+  .disclaim{font-size:9px}
+}
+@media (prefers-reduced-motion: reduce){
+  .ticker{animation-duration:300s !important}
+  .logo h1{animation:none}
+  .livedot::after{animation:none}
+  .msg,.fitem{animation:none}
 }
 </style>
 </head>
@@ -413,7 +448,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
           <button type="submit" id="send" title="Send" aria-label="Send message">➤</button>
         </div>
       </form>
-      <div class="disclaim" id="disclaim">MusaGPT is sarcastic by design · headlines come from public news feeds (GDELT / Reddit) · if those are unreachable it falls back to a clearly-labeled simulated demo feed</div>
+      <div class="disclaim" id="disclaim">sarcastic by design · live headlines via GDELT / Reddit · simulated fallback (labeled) when offline</div>
     </main>
   </div>
 </div>
@@ -501,17 +536,18 @@ function safeUrl(u){
       p:Math.random()*Math.PI*2
     }));
   }
-  addEventListener("resize",size); size();
+  let rsz; addEventListener("resize", ()=>{ clearTimeout(rsz); rsz = setTimeout(size, 150); }); size();
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   (function tick(t){
     cx.clearRect(0,0,W,H);
     for(const s of stars){
-      s.y += s.v; if(s.y > H) { s.y = -4; s.x = Math.random()*W; }
-      const tw = .35 + .65*Math.abs(Math.sin(t/1400 + s.p));
+      if(!still){ s.y += s.v; if(s.y > H) { s.y = -4; s.x = Math.random()*W; } }
+      const tw = still ? .6 : .35 + .65*Math.abs(Math.sin(t/1400 + s.p));
       cx.globalAlpha = tw*.7;
       cx.fillStyle = "#aebcff";
       cx.beginPath(); cx.arc(s.x,s.y,s.r,0,7); cx.fill();
     }
-    requestAnimationFrame(tick);
+    if(!still) requestAnimationFrame(tick);
   })(0);
 })();
 
@@ -676,6 +712,8 @@ function setSrcMode(mode){
     tag.textContent = "CONNECTING…";
     tag.classList.remove("live");
   }
+  const ws = $("#wsSrc");
+  if(ws) ws.textContent = mode==="gdelt" ? "GDELT · live" : mode==="reddit" ? "Reddit · live" : mode==="sim" ? "simulated (offline)" : "connecting…";
 }
 async function refreshNews(initial){
   let fresh = null, used = null;
@@ -706,6 +744,7 @@ async function refreshNews(initial){
 function onFeedChanged(newId){
   refreshSevs(); pruneFeed();
   renderTicker(); renderFeed(newId);
+  const wc = $("#wsCount"); if(wc) wc.textContent = FEED.length;
   updateStats();
 }
 function tickerLabel(it){ return it.sev === "JUST IN" ? "JUST IN" : it.cat; }
@@ -820,6 +859,7 @@ function addMsg(role, html, flash){
   const box = $("#msgs");
   box.appendChild(wrap);
   while(box.children.length > 60) box.removeChild(box.firstChild);
+  if(box.children.length > 2) box.classList.remove("solo"); /* welcome + wire strip */
   scrollBottom(true);
   return wrap.querySelector(".bubble");
 }
@@ -987,19 +1027,19 @@ function localReply(raw){
   }
 
   /* --- sass / attitude --- */
-  if(/\b(rude|jerk|attitude|sassy|sarcasm|sarcastic)\b/.test(l) || /\bso mean\b|being mean|why (are|r) (you|u) (so|like)/.test(l)){
+  if(/\b(rude|jerk|attitude|sassy|sarcasm|sarcastic)\b/.test(l) || /\bso mean\b|being mean|why (are|r) (you|u) (so|like)\b/.test(l)){
     return "I run at about 60% sass — enough to keep things interesting, not enough to hurt feelings. See the meter in the panel; it's calibrated. Underneath it all I *will* actually get you what you need.";
   }
 
   /* --- news queries --- */
   if(/\b(market|stock|shares|finance|econom|rate|bank|crypto)\b/.test(l)) return opener()+newsRundown("MARKETS");
   if(/\b(tech|technology|software|outage|chip|ai news|cyber)\b/.test(l)) return opener()+newsRundown("TECH");
-  if(/\b(sport|match|game|club|coach|football|league)\b/.test(l)) return opener()+newsRundown("SPORTS");
+  if(/\b(sports?|football|soccer|league|championship|playoffs?|tennis|olympics?|nba|nfl|fifa)\b/.test(l) || /\bthe (match|game)\b/.test(l)) return opener()+newsRundown("SPORTS");
   if(/\b(weather|storm|forecast|hurricane|flood)\b/.test(l)) return opener()+newsRundown("WEATHER");
-  if(/\b(science|space|research|quake|astro)\b/.test(l)) return opener()+newsRundown("SCIENCE");
-  if(/\b(world|global|international)\b/.test(l)) return opener()+newsRundown("WORLD");
+  if(/\b(science|space|nasa|astronom\w*|quantum|physics)\b/.test(l)) return opener()+newsRundown("SCIENCE");
+  if(/\b(world (news|events)|around the world|in the world|global|international)\b/.test(l)) return opener()+newsRundown("WORLD");
   if(/\b(politic|parliament|election|government)\b/.test(l)) return opener()+newsRundown("POLITICS");
-  if(/\b(news|breaking|headline|latest|happening|update|wire|feed|summar|recap|last hour|past hour)\b/.test(l)){
+  if(/\b(news|breaking|headlines?|wire|feed|recap|rundown|summar\w*|last hour|past hour)\b/.test(l) || /\b(what'?s|whats|any|the) (new|latest|happening)\b/.test(l) || /\bwhat'?s (up|going on)\b/.test(l)){
     const items = pickHeadlines(null,5);
     if(!items.length) return "The wire is quiet — no stories in the last hour yet. Give it a minute; the world rarely stays this polite.";
     const lead = rnd([
@@ -1083,7 +1123,7 @@ function localReply(raw){
 
   /* --- help / capabilities --- */
   if(/\b(help|what can (you|u) do|commands|how (do|to) use)\b/.test(l)){
-    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **⚙ Settings** — add an Anthropic or OpenAI key to upgrade my brain (Claude Haiku 4.5, Claude Fable 5, GPT-4o-mini, GPT-5 through GPT-5.6)\n\nThe banner and panel refresh themselves every couple of minutes. Click any story to read the source.";
+    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **⚙ Settings** — add an Anthropic or OpenAI key to upgrade my brain (Claude Haiku 4.5, Claude Fable 5, GPT-4o-mini, and the GPT-5 family: 5, 5.2, 5.5, 5.6)\n\nThe banner and panel refresh themselves every couple of minutes. Click any story to read the source.";
   }
 
   /* --- api key / settings / models --- */
@@ -1394,8 +1434,20 @@ $("#settingsBtn").addEventListener("click", ()=>{
   $("#apiKey").value = getKey();
   fillModelSelect();
   modal.classList.add("open");
+  setTimeout(()=>$("#apiKey").focus(), 60);
 });
-$("#apiKey").addEventListener("input", e=>fillModelSelect(e.target.value));
+$("#apiKey").addEventListener("input", e=>{
+  fillModelSelect(e.target.value);
+  const p = providerOf(e.target.value.trim());
+  $("#pillLocal").classList.toggle("on", !p);
+  $("#pillLive").classList.toggle("on", !!p);
+});
+document.addEventListener("keydown", e=>{
+  if(e.key === "Escape" && modal.classList.contains("open")){
+    modal.classList.remove("open");
+    $("#settingsBtn").focus();
+  }
+});
 $("#closeSettings").addEventListener("click", ()=>modal.classList.remove("open"));
 modal.addEventListener("click", e=>{ if(e.target === modal) modal.classList.remove("open"); });
 $("#saveKey").addEventListener("click", ()=>{
@@ -1407,7 +1459,7 @@ $("#saveKey").addEventListener("click", ()=>{
   if(v) addMsg("ai", fmt("**Live mode engaged** on **"+effectiveModel()+"** — same personality, fancier neurons. Ask away."));
 });
 $("#clearKey").addEventListener("click", ()=>{
-  setKey(""); $("#apiKey").value = ""; fillModelSelect(""); syncModePills();
+  setKey(""); setModel(""); $("#apiKey").value = ""; fillModelSelect(""); syncModePills();
   addMsg("ai", fmt("Key cleared — back to the **local core**. Cozy, dependable, slightly less omniscient."));
 });
 
@@ -1434,10 +1486,20 @@ updateStats();
 syncModePills();
 refreshNews(true);
 
+$("#msgs").classList.add("solo");
 (function welcome(){
   const bubble = addMsg("ai", "");
   const hello = "Well, look who wandered in. I'm MusaGPT — I read the breaking-news wire at machine speed so you don't have to. Real headlines from the last hour scroll up top (pulled live from public feeds; the tag next to the banner always tells you the source), summaries are on demand, and light teasing is included free of charge. Pick a chip below or just ask.";
   streamText(bubble, hello);
+})();
+/* wire-status strip: fills the opening state, hides after the first exchange */
+(function wireStrip(){
+  const strip = document.createElement("div");
+  strip.id = "wireStrip";
+  strip.innerHTML = '<span class="ws">⚡ wire: <b id="wsSrc">connecting…</b></span>'
+                  + '<span class="ws">📰 <b id="wsCount">0</b> stories this hour</span>'
+                  + '<span class="ws">↻ refreshes every 2 min</span>';
+  $("#msgs").appendChild(strip);
 })();
 </script>
 </body>
