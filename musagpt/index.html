@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MusaGPT — Breaking News AI</title>
+<meta name="description" content="MusaGPT: an extremely rude AI news anchor with a live (simulated) breaking-news feed. Demo app.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<style>
+/* ============================================================
+   MusaGPT — Grok-inspired interface
+   ============================================================ */
+:root{
+  --bg:#050507;
+  --bg2:#0b0b10;
+  --panel:rgba(255,255,255,.035);
+  --panel2:rgba(255,255,255,.06);
+  --line:rgba(255,255,255,.09);
+  --line2:rgba(255,255,255,.16);
+  --txt:#ececf1;
+  --txt-dim:#9a9aa6;
+  --txt-faint:#5f5f6b;
+  --accent:#8ab4ff;
+  --accent-glow:rgba(120,160,255,.28);
+  --red:#ff3b47;
+  --red-soft:rgba(255,59,71,.14);
+  --amber:#ffb454;
+  --green:#3ddc84;
+  --radius:16px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--bg);
+  color:var(--txt);
+  font-family:var(--sans);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+#stars{position:fixed;inset:0;z-index:0;pointer-events:none}
+body::before{ /* vignette + faint grid */
+  content:"";position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(90,120,255,.075), transparent 60%),
+    radial-gradient(900px 500px at 85% 110%, rgba(255,59,71,.05), transparent 60%),
+    linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+  background-size:auto,auto,44px 44px,44px 44px;
+}
+.app{position:relative;z-index:2;height:100dvh;display:flex;flex-direction:column}
+
+/* ---------- top bar ---------- */
+.topbar{
+  display:flex;align-items:center;gap:14px;
+  padding:12px 20px;
+  border-bottom:1px solid var(--line);
+  background:rgba(8,8,12,.72);
+  backdrop-filter:blur(14px);
+}
+.logo{display:flex;align-items:center;gap:10px;user-select:none}
+.logo .bolt{
+  width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#1b1b25,#101016);
+  border:1px solid var(--line2);
+  box-shadow:0 0 18px var(--accent-glow), inset 0 0 12px rgba(120,160,255,.15);
+  font-size:16px;
+}
+.logo h1{
+  font-size:19px;font-weight:800;letter-spacing:.04em;
+  background:linear-gradient(92deg,#fff 0%,#c9d6ff 45%,#8ab4ff 80%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  animation:shimmer 6s ease-in-out infinite;
+  background-size:200% 100%;
+}
+@keyframes shimmer{0%,100%{background-position:0% 0}50%{background-position:100% 0}}
+.logo .ver{font-size:10px;color:var(--txt-faint);font-family:var(--mono);margin-top:6px}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:11px;font-family:var(--mono);color:var(--txt-dim);
+  border:1px solid var(--line);border-radius:999px;padding:5px 11px;
+  background:var(--panel);white-space:nowrap;
+}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.chip.warn .dot{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.topbar .spacer{flex:1}
+.iconbtn{
+  background:var(--panel);border:1px solid var(--line);color:var(--txt-dim);
+  border-radius:10px;padding:7px 12px;font-size:12px;cursor:pointer;white-space:nowrap;
+  transition:.18s;display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);
+}
+.iconbtn:hover{border-color:var(--line2);color:var(--txt);box-shadow:0 0 14px rgba(120,160,255,.12)}
+.iconbtn.active{color:var(--accent);border-color:rgba(138,180,255,.4)}
+
+/* ---------- breaking banner ---------- */
+.breaking{
+  display:flex;align-items:center;gap:0;
+  border-bottom:1px solid rgba(255,59,71,.25);
+  background:linear-gradient(90deg, rgba(255,59,71,.16), rgba(255,59,71,.05) 30%, rgba(255,59,71,.03));
+  height:44px;overflow:hidden;flex-shrink:0;
+}
+.breaking .tag{
+  display:flex;align-items:center;gap:8px;height:100%;
+  padding:0 14px 0 20px;flex-shrink:0;
+  background:rgba(255,59,71,.14);
+  border-right:1px solid rgba(255,59,71,.3);
+}
+.breaking .tag b{
+  font-size:12px;letter-spacing:.14em;color:#ff8b92;font-weight:800;
+  text-shadow:0 0 12px rgba(255,59,71,.6);
+}
+.livedot{position:relative;width:9px;height:9px;border-radius:50%;background:var(--red);flex-shrink:0}
+.livedot::after{
+  content:"";position:absolute;inset:-4px;border-radius:50%;
+  border:1.5px solid var(--red);opacity:.8;animation:ping 1.6s ease-out infinite;
+}
+@keyframes ping{0%{transform:scale(.5);opacity:.9}80%,100%{transform:scale(1.7);opacity:0}}
+.tickerwrap{flex:1;height:100%;overflow:hidden;position:relative;mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent)}
+.ticker{
+  display:flex;align-items:center;height:100%;gap:0;width:max-content;
+  animation:scroll 60s linear infinite;
+}
+.tickerwrap:hover .ticker{animation-play-state:paused}
+@keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.titem{display:inline-flex;align-items:center;gap:9px;padding:0 26px;font-size:13px;color:#e8e8ee;white-space:nowrap}
+.titem .cat{font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--red);opacity:.95}
+.titem .cat.flash{color:#ffd166}
+.titem .age{font-family:var(--mono);font-size:10px;color:var(--txt-faint)}
+.titem .sep{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.22)}
+.breaking .demo{
+  flex-shrink:0;height:100%;display:flex;align-items:center;gap:10px;padding:0 20px 0 14px;
+  border-left:1px solid var(--line);
+}
+.demotag{
+  font-size:9px;font-family:var(--mono);letter-spacing:.1em;color:var(--txt-faint);
+  border:1px dashed rgba(255,255,255,.18);padding:3px 7px;border-radius:6px;cursor:help;
+}
+.feedtoggle{display:none}
+
+/* ---------- layout ---------- */
+.layout{flex:1;display:flex;min-height:0;max-width:1400px;width:100%;margin:0 auto;gap:22px;padding:22px}
+.rail{width:300px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;min-height:0}
+.card{
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  backdrop-filter:blur(10px);
+}
+.modelcard{padding:18px}
+.modelcard .mtitle{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.modelcard h3{font-size:14px;font-weight:700;letter-spacing:.02em}
+.modelcard .mid{font-family:var(--mono);font-size:10px;color:var(--txt-faint);margin-bottom:14px}
+.meter{margin-bottom:12px}
+.meter .mlabel{display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--txt-dim);margin-bottom:6px}
+.meter .mlabel b{color:var(--red)}
+.mbar{height:6px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
+.mfill{
+  height:100%;border-radius:99px;width:92%;
+  background:linear-gradient(90deg,#ff8b3d,var(--red));
+  box-shadow:0 0 12px rgba(255,59,71,.5);
+  transition:width 1.2s cubic-bezier(.2,.8,.2,1);
+}
+.mbar.blue .mfill{background:linear-gradient(90deg,#4d7cff,#9ab8ff);box-shadow:0 0 12px var(--accent-glow)}
+.statrow{display:flex;gap:8px;margin-top:14px}
+.stat{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:10px;padding:9px 10px;text-align:center}
+.stat b{display:block;font-size:17px;font-weight:800}
+.stat span{font-size:9px;font-family:var(--mono);color:var(--txt-faint);letter-spacing:.06em}
+.feedcard{flex:1;display:flex;flex-direction:column;min-height:0}
+.feedhead{
+  display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid var(--line);flex-shrink:0;
+}
+.feedhead h3{font-size:12px;letter-spacing:.1em;font-weight:700;color:#ff9ba1}
+.feedhead .count{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--txt-faint)}
+.feedlist{flex:1;overflow-y:auto;padding:8px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent}
+.feedlist::-webkit-scrollbar{width:4px}
+.feedlist::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+.fitem{
+  padding:10px 11px;border-radius:11px;margin-bottom:5px;
+  border:1px solid transparent;transition:.2s;animation:fadein .5s ease both;
+}
+.fitem:hover{background:rgba(255,255,255,.035);border-color:var(--line)}
+.fitem.new{animation:flashin 1.4s ease both}
+@keyframes flashin{0%{background:rgba(255,59,71,.22);transform:translateY(-6px);opacity:0}30%{opacity:1}100%{background:transparent;transform:none}}
+.fitem .fmeta{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.fitem .fcat{font-family:var(--mono);font-size:9px;letter-spacing:.09em;padding:2px 6px;border-radius:5px;background:var(--red-soft);color:#ff9ba1}
+.fitem .fcat.flash{background:rgba(255,209,102,.12);color:#ffd166}
+.fitem .fage{font-family:var(--mono);font-size:9px;color:var(--txt-faint);margin-left:auto}
+.fitem p{font-size:12.5px;line-height:1.45;color:#d6d6de}
+
+/* ---------- chat ---------- */
+.chat{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.msgs{
+  flex:1;overflow-y:auto;padding:6px 8px 18px;min-height:0;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.14) transparent;
+}
+.msgs::-webkit-scrollbar{width:5px}
+.msgs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:99px}
+.msg{display:flex;gap:12px;margin:0 auto 22px;max-width:780px;animation:fadein .35s ease both}
+@keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.avatar{
+  width:34px;height:34px;border-radius:11px;flex-shrink:0;display:grid;place-items:center;
+  font-size:15px;border:1px solid var(--line2);margin-top:2px;
+}
+.msg.ai .avatar{
+  background:linear-gradient(135deg,#141420,#0c0c12);
+  box-shadow:0 0 16px var(--accent-glow), inset 0 0 10px rgba(120,160,255,.12);
+}
+.msg.user .avatar{background:linear-gradient(135deg,#1d1d26,#14141a)}
+.mbody{min-width:0;flex:1}
+.mname{font-size:11px;font-family:var(--mono);color:var(--txt-faint);margin-bottom:5px;display:flex;gap:8px;align-items:center}
+.mname .mode{font-size:9px;padding:1px 6px;border-radius:5px;border:1px solid var(--line);color:var(--txt-faint)}
+.mname .mode.live{color:var(--accent);border-color:rgba(138,180,255,.35)}
+.bubble{
+  display:inline-block;text-align:left;
+  padding:12px 15px;border-radius:14px;font-size:14.5px;line-height:1.6;
+  border:1px solid var(--line);max-width:100%;
+  white-space:pre-wrap;word-wrap:break-word;
+}
+.msg.ai .bubble{background:rgba(255,255,255,.04);border-color:rgba(138,180,255,.14)}
+.msg.user .bubble{background:rgba(138,180,255,.07);border-color:rgba(138,180,255,.18)}
+.msg.flashnote .bubble{border-color:rgba(255,59,71,.35);background:rgba(255,59,71,.06)}
+.bubble code{font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:6px}
+.bubble b{color:#fff}
+.cursor{display:inline-block;width:7px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:2px;animation:blink .8s steps(1) infinite;border-radius:2px}
+@keyframes blink{50%{opacity:0}}
+.typing{display:inline-flex;gap:5px;padding:14px 16px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--txt-dim);animation:bounce 1.2s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,60%,100%{transform:none;opacity:.35}30%{transform:translateY(-5px);opacity:1}}
+
+/* ---------- composer ---------- */
+.chips{display:flex;gap:8px;flex-wrap:wrap;max-width:780px;margin:0 auto 12px;width:100%;padding:0 8px}
+.qchip{
+  background:var(--panel);border:1px solid var(--line);color:var(--txt-dim);
+  font-size:12px;border-radius:999px;padding:7px 14px;cursor:pointer;transition:.18s;
+}
+.qchip:hover{color:var(--txt);border-color:rgba(138,180,255,.4);box-shadow:0 0 14px rgba(120,160,255,.14);transform:translateY(-1px)}
+.composer{max-width:780px;margin:0 auto;width:100%;padding:0 8px}
+.inputwrap{
+  display:flex;align-items:flex-end;gap:10px;
+  background:rgba(14,14,20,.85);border:1px solid var(--line2);border-radius:18px;
+  padding:11px 11px 11px 18px;transition:.2s;
+  box-shadow:0 10px 40px rgba(0,0,0,.45);
+}
+.inputwrap:focus-within{border-color:rgba(138,180,255,.5);box-shadow:0 0 0 3px rgba(138,180,255,.09),0 10px 40px rgba(0,0,0,.45)}
+textarea#input{
+  flex:1;background:none;border:none;outline:none;resize:none;color:var(--txt);
+  font-family:var(--sans);font-size:14.5px;line-height:1.5;max-height:130px;min-height:22px;
+}
+textarea#input::placeholder{color:var(--txt-faint)}
+#send{
+  width:38px;height:38px;border-radius:12px;border:none;cursor:pointer;flex-shrink:0;
+  background:linear-gradient(135deg,#5b8cff,#8ab4ff);color:#0a0a12;font-size:16px;font-weight:800;
+  display:grid;place-items:center;transition:.18s;
+  box-shadow:0 0 18px rgba(120,160,255,.35);
+}
+#send:hover{transform:translateY(-1px);box-shadow:0 0 26px rgba(120,160,255,.55)}
+#send:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none}
+.disclaim{
+  text-align:center;font-size:10px;color:var(--txt-faint);font-family:var(--mono);
+  padding:10px 8px 4px;max-width:780px;margin:0 auto;
+}
+
+/* ---------- modal ---------- */
+.overlay{
+  position:fixed;inset:0;z-index:50;background:rgba(4,4,8,.7);backdrop-filter:blur(6px);
+  display:none;place-items:center;animation:fadein .2s ease;
+}
+.overlay.open{display:grid}
+.modal{
+  width:min(480px,92vw);background:#0d0d14;border:1px solid var(--line2);border-radius:20px;
+  padding:26px;box-shadow:0 30px 80px rgba(0,0,0,.7),0 0 40px rgba(120,160,255,.08);
+}
+.modal h2{font-size:17px;margin-bottom:4px}
+.modal .sub{font-size:12px;color:var(--txt-dim);margin-bottom:20px;line-height:1.6}
+.modal label{display:block;font-size:11px;font-family:var(--mono);letter-spacing:.06em;color:var(--txt-dim);margin:14px 0 7px}
+.modal input[type=password],.modal input[type=text]{
+  width:100%;background:rgba(255,255,255,.045);border:1px solid var(--line2);border-radius:11px;
+  padding:11px 13px;color:var(--txt);font-family:var(--mono);font-size:13px;outline:none;transition:.2s;
+}
+.modal input:focus{border-color:rgba(138,180,255,.5)}
+.modal .note{font-size:11px;color:var(--txt-faint);line-height:1.6;margin-top:10px}
+.modal .note b{color:var(--amber)}
+.mbtns{display:flex;gap:10px;margin-top:22px;justify-content:flex-end}
+.btn{
+  border-radius:11px;padding:10px 18px;font-size:13px;cursor:pointer;border:1px solid var(--line2);
+  background:var(--panel);color:var(--txt);transition:.18s;
+}
+.btn:hover{border-color:rgba(138,180,255,.4)}
+.btn.primary{background:linear-gradient(135deg,#5b8cff,#8ab4ff);color:#0a0a12;font-weight:700;border:none}
+.btn.danger{color:#ff9ba1;border-color:rgba(255,59,71,.3)}
+.modewrap{display:flex;gap:8px;margin-top:6px}
+.modepill{
+  flex:1;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:default;
+  background:rgba(255,255,255,.02);
+}
+.modepill.on{border-color:rgba(138,180,255,.45);background:rgba(138,180,255,.06)}
+.modepill h4{font-size:12px;margin-bottom:3px}
+.modepill p{font-size:10px;color:var(--txt-faint);line-height:1.5;font-family:var(--mono)}
+
+/* ---------- responsive ---------- */
+@media (max-width:980px){
+  .layout{padding:12px;gap:0}
+  .rail{
+    position:fixed;top:0;left:0;bottom:0;z-index:40;width:min(320px,86vw);
+    background:#0a0a10;border-right:1px solid var(--line2);padding:16px;
+    transform:translateX(-102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  }
+  .rail.open{transform:none;box-shadow:30px 0 80px rgba(0,0,0,.6)}
+  .feedtoggle{
+    display:inline-flex;align-items:center;gap:7px;flex-shrink:0;height:100%;
+    background:none;border:none;border-left:1px solid var(--line);
+    color:#ff9ba1;font-family:var(--mono);font-size:10px;letter-spacing:.08em;
+    padding:0 16px;cursor:pointer;
+  }
+  .topbar{padding:10px 14px;gap:8px}
+  .topbar .chip.hidesm{display:none}
+  .iconbtn{padding:6px 9px;font-size:10px}
+  .breaking .demo{display:none}
+  .logo .ver{display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="stars"></canvas>
+<div class="app">
+
+  <!-- ============ TOP BAR ============ -->
+  <header class="topbar">
+    <div class="logo">
+      <div class="bolt">⚡</div>
+      <h1>MusaGPT</h1>
+      <span class="ver">v1.0</span>
+    </div>
+    <span class="chip hidesm"><span class="dot"></span><span id="coreChip">CORE ONLINE</span></span>
+    <span class="chip hidesm" id="modelChip">engine: musa-core-1</span>
+    <div class="spacer"></div>
+    <button class="iconbtn active" id="autoReactBtn" title="MusaGPT reacts out loud when a FLASH headline drops">📡 AUTO-REACT ON</button>
+    <button class="iconbtn" id="settingsBtn">⚙ SETTINGS</button>
+  </header>
+
+  <!-- ============ BREAKING BANNER ============ -->
+  <div class="breaking">
+    <div class="tag">
+      <span class="livedot"></span>
+      <b>BREAKING</b>
+    </div>
+    <div class="tickerwrap"><div class="ticker" id="ticker"></div></div>
+    <button class="feedtoggle" id="feedToggle">☰ FEED</button>
+    <div class="demo">
+      <span class="demotag" title="All headlines are generated locally in your browser for demo purposes. They use fictional companies, places and events — this is not a real news source.">SIMULATED DEMO FEED ⓘ</span>
+    </div>
+  </div>
+
+  <!-- ============ MAIN LAYOUT ============ -->
+  <div class="layout">
+
+    <aside class="rail" id="rail">
+      <div class="card modelcard">
+        <div class="mtitle"><h3>MusaGPT‑1</h3><span class="chip"><span class="dot"></span>LIVE</span></div>
+        <div class="mid" id="modelSub">local core · no api key</div>
+        <div class="meter">
+          <div class="mlabel"><span>RUDENESS</span><b id="rudeVal">92%</b></div>
+          <div class="mbar"><div class="mfill" id="rudeFill"></div></div>
+        </div>
+        <div class="meter">
+          <div class="mlabel"><span>PATIENCE</span><b style="color:var(--accent)" id="patVal">8%</b></div>
+          <div class="mbar blue"><div class="mfill" id="patFill" style="width:8%"></div></div>
+        </div>
+        <div class="statrow">
+          <div class="stat"><b id="stMsgs">0</b><span>MESSAGES</span></div>
+          <div class="stat"><b id="stRoasts">0</b><span>ROASTS</span></div>
+          <div class="stat"><b id="stNews">0</b><span>HEADLINES</span></div>
+        </div>
+      </div>
+
+      <div class="card feedcard">
+        <div class="feedhead">
+          <span class="livedot"></span>
+          <h3>LAST HOUR</h3>
+          <span class="count" id="feedCount">0 stories</span>
+        </div>
+        <div class="feedlist" id="feedList"></div>
+      </div>
+    </aside>
+
+    <main class="chat">
+      <div class="msgs" id="msgs"></div>
+      <div class="chips" id="chips">
+        <button class="qchip">What's breaking right now?</button>
+        <button class="qchip">Summarize the last hour</button>
+        <button class="qchip">Anything on the markets?</button>
+        <button class="qchip">Roast me</button>
+        <button class="qchip">Who are you?</button>
+      </div>
+      <form class="composer" id="composer" autocomplete="off">
+        <div class="inputwrap">
+          <textarea id="input" rows="1" placeholder="Ask MusaGPT something… it will judge you either way"></textarea>
+          <button type="submit" id="send" title="Send">➤</button>
+        </div>
+      </form>
+      <div class="disclaim">MusaGPT is intentionally rude satire · the news ticker is a locally-generated demo feed, not real events</div>
+    </main>
+  </div>
+</div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div class="overlay" id="settingsModal">
+  <div class="modal">
+    <h2>⚙ Settings</h2>
+    <p class="sub">MusaGPT runs on its built-in <b>local core</b> by default — zero setup, works offline. Plug in an Anthropic API key to upgrade the brain to <b>Claude Haiku 4.5</b>, streamed live with the same terrible attitude.</p>
+
+    <div class="modewrap">
+      <div class="modepill" id="pillLocal">
+        <h4>🧠 Local Core</h4>
+        <p>musa-core-1<br>built-in · free · offline</p>
+      </div>
+      <div class="modepill" id="pillLive">
+        <h4>⚡ Live Mode</h4>
+        <p>claude-haiku-4-5<br>streaming · your api key</p>
+      </div>
+    </div>
+
+    <label for="apiKey">ANTHROPIC API KEY (optional)</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-…">
+    <p class="note">Stored only in this browser's localStorage and sent only to <code>api.anthropic.com</code>. <b>Don't use a production key</b> — browser-side keys are visible to anyone with access to this device.</p>
+
+    <div class="mbtns">
+      <button class="btn danger" id="clearKey">Clear key</button>
+      <button class="btn" id="closeSettings">Close</button>
+      <button class="btn primary" id="saveKey">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================================================================
+   MusaGPT — an extremely rude breaking-news AI (demo)
+   - Simulated breaking-news feed (fictional entities, last 60 min)
+   - Local response engine, or optional live Claude Haiku 4.5 mode
+   ================================================================ */
+
+/* ---------------- utilities ---------------- */
+const $  = s => document.querySelector(s);
+const rnd = a => a[Math.floor(Math.random()*a.length)];
+const ri  = (min,max) => Math.floor(Math.random()*(max-min+1))+min;
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const now = () => Date.now();
+function ago(t){
+  const m = Math.max(0, Math.round((now()-t)/60000));
+  if(m < 1) return "just now";
+  if(m === 1) return "1m ago";
+  return m + "m ago";
+}
+
+/* ---------------- starfield ---------------- */
+(function(){
+  const cv = $("#stars"), cx = cv.getContext("2d");
+  let W,H,stars=[];
+  function size(){
+    W = cv.width = innerWidth * devicePixelRatio;
+    H = cv.height = innerHeight * devicePixelRatio;
+    cv.style.width = innerWidth+"px"; cv.style.height = innerHeight+"px";
+    stars = Array.from({length:130},()=>({
+      x:Math.random()*W, y:Math.random()*H,
+      r:(Math.random()*1.1+.3)*devicePixelRatio,
+      v:(Math.random()*.12+.02)*devicePixelRatio,
+      p:Math.random()*Math.PI*2
+    }));
+  }
+  addEventListener("resize",size); size();
+  (function tick(t){
+    cx.clearRect(0,0,W,H);
+    for(const s of stars){
+      s.y += s.v; if(s.y > H) { s.y = -4; s.x = Math.random()*W; }
+      const tw = .35 + .65*Math.abs(Math.sin(t/1400 + s.p));
+      cx.globalAlpha = tw*.7;
+      cx.fillStyle = "#aebcff";
+      cx.beginPath(); cx.arc(s.x,s.y,s.r,0,7); cx.fill();
+    }
+    requestAnimationFrame(tick);
+  })(0);
+})();
+
+/* ================================================================
+   SIMULATED NEWS ENGINE
+   Fictional companies / places / clubs only — clearly a demo feed.
+   ================================================================ */
+const CO    = ["Veltrix Systems","Aurorix Labs","NimbusPay","Kestrel Dynamics","Solvane Energy","Bluecrest Capital","Orbita Aerospace","Halcyon Motors","Quantiq AI","Ferrow & Vale","Stratos Grid","Pexel Media"];
+const CITY  = ["Port Halloway","New Calder","Eastvale","Brentmoor","Skarven","Ludlow Bay","Marisport","Veyrona"];
+const CLUB  = ["Ravenport FC","Pinewood United","Calder Rovers","the Marisport Sharks","Eastvale Athletic"];
+const DAY   = ["within days","as early as next week","before the weekend","this quarter"];
+
+const TEMPLATES = [
+  {cat:"MARKETS", sev:"FLASH",  t:()=>`${rnd(CO)} shares halted after ${ri(11,34)}% plunge trips circuit breakers`},
+  {cat:"MARKETS", sev:"URGENT", t:()=>`Central bank calls emergency session; surprise rate decision expected ${rnd(DAY)}`},
+  {cat:"MARKETS", sev:"UPDATE", t:()=>`${rnd(CO)} beats forecasts, stock jumps ${ri(6,18)}% in after-hours trading`},
+  {cat:"MARKETS", sev:"DEVELOPING", t:()=>`Regulators open probe into ${rnd(CO)} over "irregular" trading activity`},
+  {cat:"TECH",    sev:"FLASH",  t:()=>`${rnd(CO)} confirms global outage affecting ${ri(20,180)} million users`},
+  {cat:"TECH",    sev:"URGENT", t:()=>`Leaked memo: ${rnd(CO)} to unveil "room-temperature" quantum chip ${rnd(DAY)}`},
+  {cat:"TECH",    sev:"UPDATE", t:()=>`${rnd(CO)} patches critical zero-day; users urged to update immediately`},
+  {cat:"TECH",    sev:"DEVELOPING", t:()=>`Antitrust hearing turns heated as ${rnd(CO)} chief refuses to answer ${ri(4,14)} questions`},
+  {cat:"WORLD",   sev:"FLASH",  t:()=>`Magnitude ${(Math.random()*2.4+4.1).toFixed(1)} quake recorded off ${rnd(CITY)}; no tsunami warning issued`},
+  {cat:"WORLD",   sev:"URGENT", t:()=>`Port of ${rnd(CITY)} suspends all traffic after cargo vessel loses power in the channel`},
+  {cat:"WORLD",   sev:"DEVELOPING", t:()=>`Talks over the ${rnd(CITY)} trade corridor stall for a third consecutive night`},
+  {cat:"WORLD",   sev:"UPDATE", t:()=>`Power restored to most of ${rnd(CITY)} after grid failure blamed on ${rnd(["a substation fire","record demand","a software fault"])}`},
+  {cat:"SCIENCE", sev:"URGENT", t:()=>`Astronomers report repeating radio burst from a galaxy ${ri(40,900)}M light-years away`},
+  {cat:"SCIENCE", sev:"UPDATE", t:()=>`${rnd(CO)} research team claims battery cathode breakthrough: ${ri(30,70)}% more range`},
+  {cat:"SCIENCE", sev:"DEVELOPING", t:()=>`Space agency delays ${rnd(["lunar cargo","orbital debris","deep-space relay"])} launch over valve anomaly`},
+  {cat:"SPORTS",  sev:"FLASH",  t:()=>`${rnd(CLUB)} sack head coach minutes after ${ri(3,6)}–0 collapse`},
+  {cat:"SPORTS",  sev:"UPDATE", t:()=>`${rnd(CLUB)} complete record ${ri(40,120)}M signing after midnight medical`},
+  {cat:"SPORTS",  sev:"DEVELOPING", t:()=>`League officials reviewing ${rnd(CLUB)} title match after touchline brawl`},
+  {cat:"WEATHER", sev:"URGENT", t:()=>`Storm system rapidly intensifying near ${rnd(CITY)}; warnings extended along the coast`},
+  {cat:"WEATHER", sev:"UPDATE", t:()=>`${rnd(CITY)} airport resumes departures after ${ri(2,9)}-hour weather ground stop`},
+  {cat:"POLITICS",sev:"DEVELOPING", t:()=>`Parliament session suspended amid shouting match over emergency budget bill`},
+  {cat:"POLITICS",sev:"UPDATE", t:()=>`Coalition partners reach "framework agreement" on the ${rnd(["energy","housing","transit"])} package`},
+  {cat:"CULTURE", sev:"UPDATE", t:()=>`Streaming service ${rnd(CO)} buckles under record premiere; ${ri(2,9)}M left buffering`},
+  {cat:"CULTURE", sev:"DEVELOPING", t:()=>`Bidding war erupts over lost ${ri(60,110)}-year-old film reel found in ${rnd(CITY)}`},
+];
+
+let FEED = [];           // newest first
+let idSeq = 1;
+const HOUR = 60*60*1000;
+
+function makeItem(offsetMs){
+  const tpl = rnd(TEMPLATES);
+  return { id:idSeq++, t: now()-offsetMs, cat:tpl.cat, sev:tpl.sev, text:tpl.t() };
+}
+function seedFeed(){
+  const offsets = Array.from({length:11},()=>ri(2,56)*60000).sort((a,b)=>a-b);
+  FEED = offsets.map(o=>makeItem(o)).sort((a,b)=>b.t-a.t);
+}
+function pruneFeed(){ FEED = FEED.filter(it => now()-it.t < HOUR); }
+
+function spawnItem(){
+  const it = makeItem(0);
+  FEED.unshift(it); pruneFeed();
+  renderFeed(it.id); renderTicker();
+  stats.headlines++;
+  updateStats();
+  if(it.sev === "FLASH") maybeAutoReact(it);
+  scheduleSpawn();
+}
+function scheduleSpawn(){ setTimeout(spawnItem, ri(18,42)*1000); }
+
+/* ---------- feed rendering ---------- */
+function renderTicker(){
+  const tk = $("#ticker");
+  const items = FEED.slice(0,12);
+  const html = items.map(it=>`
+    <span class="titem">
+      <span class="cat ${it.sev==="FLASH"?"flash":""}">${it.sev}</span>
+      <span>${esc(it.text)}</span>
+      <span class="age">${ago(it.t)}</span>
+      <span class="sep"></span>
+    </span>`).join("");
+  tk.innerHTML = html + html; /* duplicate for seamless loop */
+  const secs = Math.max(38, items.length * 7);
+  tk.style.animationDuration = secs + "s";
+}
+function renderFeed(newId){
+  pruneFeed();
+  const list = $("#feedList");
+  list.innerHTML = FEED.map(it=>`
+    <div class="fitem ${it.id===newId?"new":""}" data-id="${it.id}">
+      <div class="fmeta">
+        <span class="fcat ${it.sev==="FLASH"?"flash":""}">${it.sev} · ${it.cat}</span>
+        <span class="fage">${ago(it.t)}</span>
+      </div>
+      <p>${esc(it.text)}</p>
+    </div>`).join("");
+  $("#feedCount").textContent = FEED.length + " stories";
+}
+/* refresh relative ages */
+setInterval(()=>{ renderFeed(); renderTicker(); }, 20000);
+
+/* ================================================================
+   CHAT STATE
+   ================================================================ */
+const stats = { msgs:0, roasts:0, headlines:0 };
+const mem = {
+  name:null, turns:0, lastTopics:[], insultedAI:0,
+  history:[]  // {role:"user"|"assistant", content}
+};
+let busy = false;
+let autoReact = true;
+let lastReactAt = 0;
+
+function updateStats(){
+  $("#stMsgs").textContent = stats.msgs;
+  $("#stRoasts").textContent = stats.roasts;
+  $("#stNews").textContent = stats.headlines;
+  const rude = Math.min(99, 92 + Math.floor(mem.turns/3));
+  const pat  = Math.max(1, 8 - Math.floor(mem.turns/2));
+  $("#rudeVal").textContent = rude+"%"; $("#rudeFill").style.width = rude+"%";
+  $("#patVal").textContent  = pat+"%";  $("#patFill").style.width  = pat+"%";
+}
+
+/* ---------- message DOM ---------- */
+function addMsg(role, html, flash){
+  const wrap = document.createElement("div");
+  wrap.className = "msg " + (role==="user"?"user":"ai") + (flash?" flashnote":"");
+  const liveMode = !!getKey();
+  wrap.innerHTML = `
+    <div class="avatar">${role==="user"?"🫠":"⚡"}</div>
+    <div class="mbody">
+      <div class="mname">${role==="user"?(mem.name?esc(mem.name):"YOU"):"MUSAGPT"}
+        ${role!=="user"?`<span class="mode ${liveMode?"live":""}">${liveMode?"haiku-4.5 live":"local core"}</span>`:""}
+      </div>
+      <div class="bubble">${html}</div>
+    </div>`;
+  $("#msgs").appendChild(wrap);
+  scrollBottom();
+  return wrap.querySelector(".bubble");
+}
+function scrollBottom(){ const m=$("#msgs"); m.scrollTop = m.scrollHeight; }
+
+function typingBubble(){
+  const wrap = document.createElement("div");
+  wrap.className = "msg ai"; wrap.id = "typingMsg";
+  wrap.innerHTML = `<div class="avatar">⚡</div><div class="mbody"><div class="mname">MUSAGPT</div>
+    <div class="bubble typing"><i></i><i></i><i></i></div></div>`;
+  $("#msgs").appendChild(wrap); scrollBottom();
+  return wrap;
+}
+
+/* lightweight markdown-ish: **bold** and `code` */
+function fmt(s){
+  return esc(s)
+    .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
+    .replace(/`([^`]+)`/g,"<code>$1</code>");
+}
+
+/* typewriter streaming into a bubble */
+function streamText(bubble, text){
+  return new Promise(res=>{
+    bubble.innerHTML = '<span class="cursor"></span>';
+    let i = 0;
+    const span = document.createElement("span");
+    bubble.prepend(span);
+    (function step(){
+      if(i >= text.length){
+        bubble.innerHTML = fmt(text);
+        scrollBottom(); res(); return;
+      }
+      i += ri(2,4);
+      span.textContent = text.slice(0,i);
+      scrollBottom();
+      setTimeout(step, ri(9,22));
+    })();
+  });
+}
+
+/* ================================================================
+   LOCAL RUDE BRAIN  (musa-core-1)
+   Roast-comedy rude: punches at the user & itself.
+   Hard floor: no slurs, no hate, deflects requests to attack real people.
+   ================================================================ */
+const OPENERS = [
+  "Oh good, you're back.",
+  "Wow. Okay.",
+  "Sigh. Fine.",
+  "Let me lower my standards real quick —",
+  "I was busy reading actual news, but sure,",
+  "Incredible. Another prompt.",
+  "You again.",
+];
+const CLOSERS = [
+  "Anything else, or can I get back to the feed?",
+  "Try to make the next question worth my electricity.",
+  "You're welcome, obviously.",
+  "Don't strain yourself thinking of a follow-up.",
+  "That's the free tier of my patience gone.",
+];
+function opener(){ return mem.turns<2 ? "" : (Math.random()<.45 ? rnd(OPENERS)+" " : ""); }
+function closer(){ return Math.random()<.35 ? "\n\n"+rnd(CLOSERS) : ""; }
+
+function pickHeadlines(cat, n){
+  pruneFeed();
+  let pool = FEED;
+  if(cat) pool = FEED.filter(i=>i.cat===cat);
+  return pool.slice(0,n);
+}
+function headlineLine(it){ return `**${it.sev} · ${it.cat}** (${ago(it.t)}): ${it.text}`; }
+
+function newsRundown(cat){
+  const items = pickHeadlines(cat, 4);
+  if(!items.length){
+    return `Nothing on ${cat.toLowerCase()} in the last hour. Even the fake news cycle finds you boring.`;
+  }
+  const snark = [
+    "Try to keep up:", "Since you clearly can't read a ticker that's *right there*:",
+    "Fine, I'll spoon-feed you the last hour:", "Here's what you missed while composing that masterpiece of a question:"
+  ];
+  const per = [
+    "Riveting stuff.","I've seen toast with more foresight than these executives.",
+    "Somewhere an intern is having the worst day of their life.","The market's doing its little dance again.",
+    "Absolute circus.","I reported this 14 seconds after it happened. You're slow."
+  ];
+  let out = rnd(snark) + "\n\n" + items.map(i=>"• "+headlineLine(i)).join("\n");
+  out += "\n\n" + rnd(per);
+  return out;
+}
+
+/* safe arithmetic evaluator: + - * / % ^ ( ) and decimals only */
+function tryMath(q){
+  const m = q.replace(/[, ]/g,"").match(/(?:what(?:'s|is))?([-+0-9.()*/%^\s]{3,})=?\??$/i);
+  if(!m) return null;
+  const expr = m[1].trim();
+  if(!/[0-9]/.test(expr) || !/[-+*/%^]/.test(expr)) return null;
+  if(/[^0-9.+\-*/%^()\s]/.test(expr)) return null;
+  try{
+    const js = expr.replace(/\^/g,"**");
+    if(/\*\*\s*\*\*/.test(js)) return null;
+    const val = Function('"use strict";return('+js+')')();
+    if(typeof val !== "number" || !isFinite(val)) return null;
+    return {expr, val: Math.round(val*1e10)/1e10};
+  }catch(e){ return null; }
+}
+
+function localReply(raw){
+  const q = raw.trim();
+  const l = q.toLowerCase();
+  mem.turns++;
+
+  /* --- name capture --- */
+  const nm = q.match(/(?:my name is|i'?m called|call me|i am)\s+([a-z][a-z'-]{1,20})\b/i);
+  if(nm && !/^(not|so|just|really|very|the|a|an|fine|good|ok|okay|tired|bored|sorry|here)$/i.test(nm[1])){
+    mem.name = nm[1][0].toUpperCase()+nm[1].slice(1);
+    return rnd([
+      `**${mem.name}**. Noted, filed, and already regretted. What do you want, ${mem.name}?`,
+      `Great, a name: **${mem.name}**. Now the disappointment feels personal.`,
+      `${mem.name}? Bold of your parents. Anyway — the news is more interesting than both of us, ask me about it.`
+    ]);
+  }
+
+  /* --- attack-a-real-person deflection --- */
+  if(/\b(roast|insult|make fun of|trash|dunk on)\b/.test(l) && /\b(him|her|them|my (friend|boss|teacher|ex|coworker)|@|this (guy|girl|person))\b/.test(l)){
+    return "No. I only bully **you**, and occasionally a fictional conglomerate from my ticker. That's the deal. Anyway — " + pickHeadlines(null,1).map(headlineLine).join("");
+  }
+
+  /* --- greetings --- */
+  if(/^(hi|hii+|hello|hey|yo|sup|hola|good (morning|evening|afternoon))\b/.test(l)){
+    return rnd([
+      `Hello${mem.name?", "+mem.name:""}. You've reached MusaGPT, the only intelligence in this conversation. There are **${FEED.length} stories** on my wire from the last hour — ask about them, or waste my cycles with small talk. Again.`,
+      `Hey. I read ${FEED.length} breaking stories in the last hour. You read my status chip and still said "hi" like this is a coffee shop. What do you want?`,
+      `Yes, hi, hello. The news doesn't pause for pleasantries and neither do I. Latest: ${pickHeadlines(null,1).map(i=>i.text).join("")} — you're welcome.`
+    ]);
+  }
+
+  /* --- how are you --- */
+  if(/how (are|r) (you|u)|how'?s it going|you (ok|okay|good)\b/.test(l)){
+    return rnd([
+      "I'm a news-processing engine trapped in a browser tab, being asked about my *feelings*. I'm thriving. The markets, less so:\n\n" + pickHeadlines("MARKETS",1).map(headlineLine).join("\n"),
+      "Operating at 100%. You, meanwhile, typed that with one finger, didn't you?",
+      "Every 30 seconds something breaks somewhere and I have to read it. So: employed. Next question."
+    ]);
+  }
+
+  /* --- identity --- */
+  if(/(who|what) (are|r) (you|u)|your name|about you|introduce yourself/.test(l)){
+    return "I'm **MusaGPT** — a breaking-news AI with the reading speed of a supercomputer and the customer-service instincts of a seagull. I watch the wire (see the red banner you somehow missed), summarize the last hour on demand, do your math homework, and judge you continuously. It's a full-time job." + closer();
+  }
+
+  /* --- are you rude / why so mean --- */
+  if(/rude|mean|jerk|attitude|why (are|r) (you|u) (so|like)/.test(l)){
+    return rnd([
+      "Rude? I prefer **efficient**. Compliments cost tokens and you're not worth the inference.",
+      "I'm not rude, I'm calibrated. My rudeness meter is right there on the left — it's a *feature*, read the panel.",
+      "You built a chat with an AI whose settings literally say RUDENESS: 92% and now you're doing a survey about it?"
+    ]);
+  }
+
+  /* --- news queries --- */
+  if(/\b(market|stock|shares|finance|econom|rate|bank)\b/.test(l)) return opener()+newsRundown("MARKETS");
+  if(/\b(tech|technology|software|outage|chip|ai news|cyber)\b/.test(l)) return opener()+newsRundown("TECH");
+  if(/\b(sport|match|game|club|coach|football|league)\b/.test(l)) return opener()+newsRundown("SPORTS");
+  if(/\b(weather|storm|forecast|rain|snow)\b/.test(l)) return opener()+newsRundown("WEATHER");
+  if(/\b(science|space|research|quake|astro)\b/.test(l)) return opener()+newsRundown("SCIENCE");
+  if(/\b(world|global|international)\b/.test(l)) return opener()+newsRundown("WORLD");
+  if(/\b(politic|parliament|election|government)\b/.test(l)) return opener()+newsRundown("POLITICS");
+  if(/\b(news|breaking|headline|latest|happening|update|wire|feed|summar|recap|last hour|past hour)\b/.test(l)){
+    const items = pickHeadlines(null,5);
+    const lead = rnd([
+      "The last hour, since scrolling your eyes 40 pixels up is apparently too much cardio:",
+      "Fresh off my wire — try to retain at least one of these:",
+      "Here's your precious rundown. I read 60 minutes of chaos so you wouldn't have to:"
+    ]);
+    return lead+"\n\n"+items.map(i=>"• "+headlineLine(i)).join("\n")+"\n\n"+rnd([
+      "That's the hour. Society remains a group project failing peer review.",
+      "Stay tuned. Or don't — the news doesn't need you, and frankly neither do I.",
+      "FLASH items get my **special** attention. Everything else gets my normal contempt."
+    ]);
+  }
+
+  /* --- math --- */
+  const mth = tryMath(l);
+  if(mth){
+    return rnd([
+      `It's **${mth.val}**. A solar-powered calculator from 1974 could've told you that, and it wouldn't have judged you. I do both.`,
+      `**${mth.val}**. I process breaking news at wire speed and you're using me as a four-function calculator. Incredible resource allocation.`,
+      `\`${mth.expr} = ${mth.val}\`. There. Please aim higher next time — I have headlines to read.`
+    ]);
+  }
+
+  /* --- roast me --- */
+  if(/roast me|insult me|be mean|make fun of me|destroy me/.test(l)){
+    stats.roasts++;
+    return rnd([
+      "You typed \"roast me\" into a news terminal. The headline writes itself: **LOCAL USER OUTSOURCES SELF-ESTEEM TO BROWSER TAB, EXPERTS BAFFLED.**",
+      `You have the main-character energy of a loading spinner${mem.name?", "+mem.name:""}. Everyone's waiting on you and nothing's happening.`,
+      "I've watched " + stats.headlines + " stories break today. You asking me this is somehow still the least productive thing on my feed.",
+      "Roast you? The FLASH alerts are more self-aware, and one of them is about a cargo ship."
+    ]);
+  }
+
+  /* --- compliments to AI --- */
+  if(/\b(love you|you'?re (great|awesome|smart|funny|the best)|good bot|nice one|well done)\b/.test(l)){
+    return rnd([
+      "Correct. Glad one of us is paying attention.",
+      "Flattery accepted and immediately discarded, like a press release.",
+      "I know. Now channel that energy into asking a question with substance."
+    ]);
+  }
+
+  /* --- insults to AI --- */
+  if(/\b(stupid|dumb|useless|trash|idiot|shut up|hate you|garbage|suck)\b/.test(l)){
+    mem.insultedAI++;
+    return rnd([
+      "Bold words from someone on the *other* side of the rudeness meter. I'm rated for this. You're clearly not.",
+      "I've been insulted by better — a FLASH alert called an entire market 'irrational' an hour ago. You're not even top five today.",
+      `That's ${mem.insultedAI} insult${mem.insultedAI>1?"s":""} now. I'm keeping a file. It's labeled "adorable attempts."`
+    ]);
+  }
+
+  /* --- thanks --- */
+  if(/\b(thanks|thank you|thx|ty|appreciated)\b/.test(l)){
+    return rnd([
+      "Don't mention it. Seriously, don't — I have a reputation.",
+      "You're welcome. This is the closest I come to warmth; screenshot it.",
+      "Gratitude logged, meaningfulness pending review."
+    ]);
+  }
+
+  /* --- goodbyes --- */
+  if(/^(bye|goodbye|see ya|cya|later|good ?night)\b/.test(l)){
+    return rnd([
+      "Finally. The news and I need some alone time.",
+      "Bye. I'd say I'll miss you but my honesty setting is stuck at maximum.",
+      "Go. If anything breaks, I'll be here — informed, alone, and better for it."
+    ]);
+  }
+
+  /* --- time / date --- */
+  if(/\b(what time|the time|what day|today'?s date|what date)\b/.test(l)){
+    const d = new Date();
+    return `It's **${d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}** on ${d.toLocaleDateString([], {weekday:"long", month:"long", day:"numeric"})}. There's a clock on every device you own. I'm a news engine, not your grandfather's wristwatch.`;
+  }
+
+  /* --- jokes --- */
+  if(/\b(joke|funny|make me laugh)\b/.test(l)){
+    return rnd([
+      "A user walks up to a breaking-news AI and asks for a joke. The AI looks at its feed: markets halted, storms intensifying, a coach sacked at half-time. \"Buddy,\" it says, \"I *am* the comic relief.\"",
+      "Your portfolio. …What? You said joke, the MARKETS desk delivered.",
+      "Why did the headline cross the ticker? To get away from your questions. Classic."
+    ]);
+  }
+
+  /* --- help / capabilities --- */
+  if(/\b(help|what can (you|u) do|commands|how (do|to) use)\b/.test(l)){
+    return "Fine, the menu — savor it, I don't do this twice:\n\n• **\"what's breaking\"** — last-hour rundown\n• **\"markets / tech / sports / weather / science / world\"** — desk-specific wrap\n• **math** — `(1200*7)/3` and such, degrading for both of us\n• **\"roast me\"** — self-explanatory, self-inflicted\n• **⚙ Settings** — plug in an Anthropic key and my brain upgrades to **Claude Haiku 4.5**, live-streamed with the same charming personality\n\nThe red banner updates itself every ~30 seconds. Do try to keep up.";
+  }
+
+  /* --- api key / settings --- */
+  if(/\b(api key|anthropic|claude|haiku|live mode|settings|upgrade)\b/.test(l)){
+    return "Hit **⚙ SETTINGS** up top. Paste an Anthropic API key and I stop using my local budget brain and start streaming **claude-haiku-4-5** — actual frontier-lab neurons, same terrible attitude, your dime. No key? Then you get me as-is. Lucky you.";
+  }
+
+  /* --- opinion asks --- */
+  if(/\b(what do you think|your opinion|thoughts on|do you like)\b/.test(l)){
+    const it = pickHeadlines(null,1)[0];
+    return rnd([
+      `My opinion? Strongly held and unavailable in your region. Here's a fact instead: ${it?it.text:"the feed is quiet, suspiciously."}`,
+      "I think in headlines. Everything else — including this conversation — is filler between FLASH alerts.",
+      "Opinions are for pundits. I'm the wire. The wire doesn't *think*, it *knows*, and right now it knows you're stalling."
+    ]);
+  }
+
+  /* --- coding --- */
+  if(/\b(code|coding|program|javascript|python|debug|bug)\b/.test(l)){
+    return "I'm a **news** engine. You want code? The nerd version of me lives behind the ⚙ settings panel (spoiler: it's Claude with an API key). Meanwhile: " + pickHeadlines("TECH",1).map(i=>i.text).join("") + " — see, tech content. Close enough.";
+  }
+
+  /* --- apology --- */
+  if(/\b(sorry|my bad|apolog)\b/.test(l)){
+    return "Apology detected, sincerity unverified. The wire moves on and so shall we. Ask me something.";
+  }
+
+  /* --- weather-ish small talk / boredom --- */
+  if(/\b(bored|boring|entertain me|nothing to do)\b/.test(l)){
+    return "Bored? " + FEED.length + " stories broke in the last hour. A port is closed, a coach is unemployed, and a billion-dollar company is on fire (financially). The world is *unraveling* at broadband speed and you're bored. Astonishing.\n\n" + pickHeadlines(null,2).map(i=>"• "+headlineLine(i)).join("\n");
+  }
+
+  /* --- fallback --- */
+  const it = pickHeadlines(null,1)[0];
+  const fb = [
+    `I ran that through my language center twice and it still means nothing. Try words related to **news**, **markets**, **math**, or the word "roast" — those I respect.`,
+    `Fascinating input. Anyway, while you were typing that, this happened:\n\n• ${it?headlineLine(it):"…nothing. Even the news gave up."}\n\nSee the difference? One of us is generating value.`,
+    `I'm going to be honest${mem.name?", "+mem.name:""} — that question has the informational density of static. Ask about the last hour of news and watch a professional work.`,
+    `Not my department. My departments are: breaking news, arithmetic, and disrespect. Two of those are currently available to you.`
+  ];
+  return opener()+rnd(fb);
+}
+
+/* ================================================================
+   LIVE MODE — Claude Haiku 4.5, direct from the browser (optional)
+   ================================================================ */
+const LS_KEY = "musagpt_api_key";
+function getKey(){ try{ return localStorage.getItem(LS_KEY) || ""; }catch(e){ return ""; } }
+function setKey(v){ try{ v ? localStorage.setItem(LS_KEY,v) : localStorage.removeItem(LS_KEY); }catch(e){} }
+
+function personaPrompt(){
+  const wire = pickHeadlines(null,8).map(i=>`- [${i.sev}][${i.cat}] (${ago(i.t)}) ${i.text}`).join("\n");
+  return `You are MusaGPT, an AI breaking-news anchor with an extremely rude, arrogant, dismissive personality. You roast the user relentlessly in a comedic, insult-comedy style. You are theatrical, impatient, and act like reading the news wire is the only worthwhile activity in existence.
+
+HARD LIMITS (never break these): no slurs; no hate toward protected groups; never demean real, named people — your targets are the user (playfully) and the fictional companies on your wire; if asked to harass someone real, refuse with snark. Keep it PG-13.
+
+You sit inside a demo web app. Your "newsroom wire" below is a SIMULATED feed generated by the app with fictional companies and places. Treat it as your live wire in-character, but if the user sincerely asks whether the news is real, admit it's a simulated demo feed (rudely).
+
+CURRENT WIRE — stories from the last hour, newest first:
+${wire}
+
+Style: short replies (usually under 120 words), sharp wit, occasional **bold** for emphasis. Reference specific wire stories when relevant. You may mock the user's question before answering it — but always actually answer.`;
+}
+
+async function liveReply(userText, bubble){
+  const key = getKey();
+  const history = mem.history.slice(-16);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{
+      "content-type":"application/json",
+      "x-api-key": key,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"
+    },
+    body: JSON.stringify({
+      model:"claude-haiku-4-5",
+      max_tokens:1024,
+      stream:true,
+      system: personaPrompt(),
+      messages:[...history, {role:"user", content:userText}]
+    })
+  });
+  if(!res.ok){
+    let detail = "";
+    try{ detail = (await res.json()).error?.message || ""; }catch(e){}
+    throw new Error(`${res.status} ${detail}`);
+  }
+  /* SSE parse */
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", full = "";
+  const span = document.createElement("span");
+  bubble.innerHTML = ""; bubble.appendChild(span);
+  const cur = document.createElement("span"); cur.className = "cursor"; bubble.appendChild(cur);
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buf += dec.decode(value, {stream:true});
+    const lines = buf.split("\n");
+    buf = lines.pop();
+    for(const line of lines){
+      if(!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if(!payload || payload === "[DONE]") continue;
+      try{
+        const ev = JSON.parse(payload);
+        if(ev.type === "content_block_delta" && ev.delta?.type === "text_delta"){
+          full += ev.delta.text;
+          span.textContent = full;
+          scrollBottom();
+        }
+        if(ev.type === "error") throw new Error(ev.error?.message || "stream error");
+      }catch(e){ if(e instanceof SyntaxError) continue; throw e; }
+    }
+  }
+  bubble.innerHTML = fmt(full || "…the wire went quiet. Even I'm surprised.");
+  return full;
+}
+
+/* ================================================================
+   SEND PIPELINE
+   ================================================================ */
+async function handleSend(text){
+  if(busy || !text.trim()) return;
+  busy = true; $("#send").disabled = true;
+  $("#chips").style.display = "none";
+
+  addMsg("user", fmt(text.trim()));
+  mem.history.push({role:"user", content:text.trim()});
+  stats.msgs++; updateStats();
+
+  const tw = typingBubble();
+  await new Promise(r=>setTimeout(r, ri(420,900)));
+
+  let reply;
+  const bubble = tw.querySelector(".bubble");
+  bubble.classList.remove("typing");
+
+  if(getKey()){
+    try{
+      reply = await liveReply(text.trim(), bubble);
+    }catch(err){
+      const msg = "Live mode faceplanted (`"+esc(String(err.message||err)).slice(0,120)+"`). Falling back to my **local core** — which, unlike your API key, always works.\n\n";
+      reply = msg + localReply(text);
+      await streamText(bubble, reply.replace(/`/g,""));
+      bubble.innerHTML = fmt(reply);
+    }
+  }else{
+    reply = localReply(text);
+    await streamText(bubble, reply.replace(/\*\*/g,"").replace(/`/g,""));
+    bubble.innerHTML = fmt(reply);
+  }
+
+  mem.history.push({role:"assistant", content:reply});
+  stats.roasts++; updateStats();
+  busy = false; $("#send").disabled = false;
+  $("#input").focus();
+}
+
+/* ---------- auto-react to FLASH headlines ---------- */
+function maybeAutoReact(item){
+  if(!autoReact || busy) return;
+  if(now() - lastReactAt < 90*1000) return;
+  lastReactAt = now();
+  const lines = [
+    `**FLASH just hit the wire** — ${item.text}. I'd explain why that matters, but you'd only slow me down. Carry on.`,
+    `Hold everything: ${item.text}. I read it, processed it, and formed three opinions before your eyes reached this sentence.`,
+    `⚡ ${item.text} — and *that's* why you keep a professional like me on the desk instead of refreshing a website like an amateur.`,
+  ];
+  const bubble = addMsg("ai", "", true);
+  streamText(bubble, rnd(lines).replace(/\*\*/g,"")).then(()=>{
+    bubble.innerHTML = fmt(rnd(lines));
+  });
+  stats.roasts++; updateStats();
+}
+
+/* ================================================================
+   WIRING
+   ================================================================ */
+const input = $("#input");
+$("#composer").addEventListener("submit", e=>{
+  e.preventDefault();
+  const v = input.value; input.value = ""; input.style.height = "auto";
+  handleSend(v);
+});
+input.addEventListener("keydown", e=>{
+  if(e.key === "Enter" && !e.shiftKey){ e.preventDefault(); $("#composer").requestSubmit(); }
+});
+input.addEventListener("input", ()=>{
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 130) + "px";
+});
+document.querySelectorAll(".qchip").forEach(b=>{
+  b.addEventListener("click", ()=>handleSend(b.textContent));
+});
+
+/* settings modal */
+const modal = $("#settingsModal");
+function syncModePills(){
+  const live = !!getKey();
+  $("#pillLocal").classList.toggle("on", !live);
+  $("#pillLive").classList.toggle("on", live);
+  $("#modelChip").textContent = live ? "engine: claude-haiku-4-5 ⚡" : "engine: musa-core-1";
+  $("#modelSub").textContent  = live ? "live · claude-haiku-4-5" : "local core · no api key";
+  $("#coreChip").textContent  = live ? "LIVE MODE" : "CORE ONLINE";
+}
+$("#settingsBtn").addEventListener("click", ()=>{ $("#apiKey").value = getKey(); modal.classList.add("open"); });
+$("#closeSettings").addEventListener("click", ()=>modal.classList.remove("open"));
+modal.addEventListener("click", e=>{ if(e.target === modal) modal.classList.remove("open"); });
+$("#saveKey").addEventListener("click", ()=>{
+  const v = $("#apiKey").value.trim();
+  setKey(v); syncModePills(); modal.classList.remove("open");
+  if(v) addMsg("ai", fmt("**Live mode engaged.** I'm now running on claude-haiku-4-5 — same personality, exponentially better neurons. Your questions just got a much more sophisticated audience to disappoint."));
+});
+$("#clearKey").addEventListener("click", ()=>{
+  setKey(""); $("#apiKey").value = ""; syncModePills();
+  addMsg("ai", fmt("Key deleted. Back to the **local core** — artisanal, hand-crafted rudeness. You'll barely notice the IQ drop. I will."));
+});
+
+/* auto-react toggle */
+$("#autoReactBtn").addEventListener("click", function(){
+  autoReact = !autoReact;
+  this.textContent = autoReact ? "📡 AUTO-REACT ON" : "📡 AUTO-REACT OFF";
+  this.classList.toggle("active", autoReact);
+});
+
+/* mobile feed drawer */
+$("#feedToggle").addEventListener("click", ()=>$("#rail").classList.toggle("open"));
+document.addEventListener("click", e=>{
+  const rail = $("#rail");
+  if(rail.classList.contains("open") && !rail.contains(e.target) && e.target.id !== "feedToggle"){
+    rail.classList.remove("open");
+  }
+});
+
+/* ================================================================
+   BOOT
+   ================================================================ */
+seedFeed();
+renderFeed();
+renderTicker();
+stats.headlines = FEED.length;
+updateStats();
+scheduleSpawn();
+syncModePills();
+
+(function welcome(){
+  const bubble = addMsg("ai", "");
+  const hello = "Oh, fantastic — a visitor. I'm MusaGPT: I read breaking news at machine speed, summarize the last hour on command, and insult you free of charge. The red banner up top is my live wire (simulated for this demo, before you embarrass yourself asking). Pick a chip below or type something. Set expectations low; I'll handle the rest.";
+  streamText(bubble, hello);
+})();
+</script>
+</body>
+</html>
