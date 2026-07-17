@@ -407,7 +407,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 <div class="overlay" id="settingsModal">
   <div class="modal">
     <h2>⚙ Settings</h2>
-    <p class="sub">MusaGPT runs on its built-in <b>local core</b> by default — zero setup, works offline. Plug in an Anthropic API key to upgrade the brain to <b>Claude Haiku 4.5</b>, streamed live with the same terrible attitude.</p>
+    <p class="sub">MusaGPT runs on its built-in <b>local core</b> by default — zero setup, works offline. Plug in an <b>Anthropic</b> or <b>OpenAI</b> API key to upgrade the brain to a real model (Claude Haiku 4.5 or GPT‑4o‑mini), streamed live with the same terrible attitude. Provider is auto-detected from the key.</p>
 
     <div class="modewrap">
       <div class="modepill" id="pillLocal">
@@ -416,13 +416,13 @@ textarea#input::placeholder{color:var(--txt-faint)}
       </div>
       <div class="modepill" id="pillLive">
         <h4>⚡ Live Mode</h4>
-        <p>claude-haiku-4-5<br>streaming · your api key</p>
+        <p id="pillLiveDesc">claude-haiku-4-5 / gpt-4o-mini<br>streaming · your api key</p>
       </div>
     </div>
 
-    <label for="apiKey">ANTHROPIC API KEY (optional)</label>
-    <input type="password" id="apiKey" placeholder="sk-ant-…">
-    <p class="note">Stored only in this browser's localStorage and sent only to <code>api.anthropic.com</code>. <b>Don't use a production key</b> — browser-side keys are visible to anyone with access to this device.</p>
+    <label for="apiKey">ANTHROPIC OR OPENAI API KEY (optional)</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-… (Claude)  or  sk-… (OpenAI)">
+    <p class="note">Stored only in this browser's localStorage and sent only to <code>api.anthropic.com</code> or <code>api.openai.com</code>. <b>Don't use a production key</b> — browser-side keys are visible to anyone with access to this device.</p>
 
     <div class="mbtns">
       <button class="btn danger" id="clearKey">Clear key</button>
@@ -605,7 +605,7 @@ function addMsg(role, html, flash){
     <div class="avatar">${role==="user"?"🫠":"⚡"}</div>
     <div class="mbody">
       <div class="mname">${role==="user"?(mem.name?esc(mem.name):"YOU"):"MUSAGPT"}
-        ${role!=="user"?`<span class="mode ${liveMode?"live":""}">${liveMode?"haiku-4.5 live":"local core"}</span>`:""}
+        ${role!=="user"?`<span class="mode ${liveMode?"live":""}">${liveMode?liveModelName()+" live":"local core"}</span>`:""}
       </div>
       <div class="bubble">${html}</div>
     </div>`;
@@ -868,12 +868,12 @@ function localReply(raw){
 
   /* --- help / capabilities --- */
   if(/\b(help|what can (you|u) do|commands|how (do|to) use)\b/.test(l)){
-    return "Fine, the menu — savor it, I don't do this twice:\n\n• **\"what's breaking\"** — last-hour rundown\n• **\"markets / tech / sports / weather / science / world\"** — desk-specific wrap\n• **math** — `(1200*7)/3` and such, degrading for both of us\n• **\"roast me\"** — self-explanatory, self-inflicted\n• **⚙ Settings** — plug in an Anthropic key and my brain upgrades to **Claude Haiku 4.5**, live-streamed with the same charming personality\n\nThe red banner updates itself every ~30 seconds. Do try to keep up.";
+    return "Fine, the menu — savor it, I don't do this twice:\n\n• **\"what's breaking\"** — last-hour rundown\n• **\"markets / tech / sports / weather / science / world\"** — desk-specific wrap\n• **math** — `(1200*7)/3` and such, degrading for both of us\n• **\"roast me\"** — self-explanatory, self-inflicted\n• **⚙ Settings** — plug in an Anthropic or OpenAI key and my brain upgrades to **Claude Haiku 4.5** or **GPT-4o-mini**, live-streamed with the same charming personality\n\nThe red banner updates itself every ~30 seconds. Do try to keep up.";
   }
 
   /* --- api key / settings --- */
-  if(/\b(api key|anthropic|claude|haiku|live mode|settings|upgrade)\b/.test(l)){
-    return "Hit **⚙ SETTINGS** up top. Paste an Anthropic API key and I stop using my local budget brain and start streaming **claude-haiku-4-5** — actual frontier-lab neurons, same terrible attitude, your dime. No key? Then you get me as-is. Lucky you.";
+  if(/\b(api key|anthropic|openai|claude|haiku|gpt|live mode|settings|upgrade)\b/.test(l)){
+    return "Hit **⚙ SETTINGS** up top. Paste an **Anthropic** key (`sk-ant-…`) and I stream **claude-haiku-4-5**, or an **OpenAI** key and I stream **gpt-4o-mini** — auto-detected, actual frontier-lab neurons, same terrible attitude, your dime. No key? Then you get me as-is. Lucky you.";
   }
 
   /* --- opinion asks --- */
@@ -918,6 +918,9 @@ function localReply(raw){
 const LS_KEY = "musagpt_api_key";
 function getKey(){ try{ return localStorage.getItem(LS_KEY) || ""; }catch(e){ return ""; } }
 function setKey(v){ try{ v ? localStorage.setItem(LS_KEY,v) : localStorage.removeItem(LS_KEY); }catch(e){} }
+/* auto-detect provider from key shape */
+function provider(){ const k = getKey(); return !k ? null : (k.startsWith("sk-ant-") ? "anthropic" : "openai"); }
+function liveModelName(){ return provider() === "openai" ? "gpt-4o-mini" : "claude-haiku-4-5"; }
 
 function personaPrompt(){
   const wire = pickHeadlines(null,8).map(i=>`- [${i.sev}][${i.cat}] (${ago(i.t)}) ${i.text}`).join("\n");
@@ -936,28 +939,46 @@ Style: short replies (usually under 120 words), sharp wit, occasional **bold** f
 async function liveReply(userText, bubble){
   const key = getKey();
   const history = mem.history.slice(-16);
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{
+  let url, headers, body, extract;
+
+  if(provider() === "openai"){
+    url = "https://api.openai.com/v1/chat/completions";
+    headers = { "content-type":"application/json", "authorization":"Bearer "+key };
+    body = {
+      model:"gpt-4o-mini",
+      max_tokens:1024,
+      stream:true,
+      messages:[{role:"system", content:personaPrompt()}, ...history, {role:"user", content:userText}]
+    };
+    extract = ev => ev.choices?.[0]?.delta?.content || "";
+  }else{
+    url = "https://api.anthropic.com/v1/messages";
+    headers = {
       "content-type":"application/json",
       "x-api-key": key,
       "anthropic-version":"2023-06-01",
       "anthropic-dangerous-direct-browser-access":"true"
-    },
-    body: JSON.stringify({
+    };
+    body = {
       model:"claude-haiku-4-5",
       max_tokens:1024,
       stream:true,
       system: personaPrompt(),
       messages:[...history, {role:"user", content:userText}]
-    })
-  });
+    };
+    extract = ev => {
+      if(ev.type === "error") throw new Error(ev.error?.message || "stream error");
+      return (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") ? ev.delta.text : "";
+    };
+  }
+
+  const res = await fetch(url, { method:"POST", headers, body: JSON.stringify(body) });
   if(!res.ok){
     let detail = "";
     try{ detail = (await res.json()).error?.message || ""; }catch(e){}
     throw new Error(`${res.status} ${detail}`);
   }
-  /* SSE parse */
+  /* SSE parse (both providers stream "data: {json}" lines) */
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = "", full = "";
@@ -976,12 +997,8 @@ async function liveReply(userText, bubble){
       if(!payload || payload === "[DONE]") continue;
       try{
         const ev = JSON.parse(payload);
-        if(ev.type === "content_block_delta" && ev.delta?.type === "text_delta"){
-          full += ev.delta.text;
-          span.textContent = full;
-          scrollBottom();
-        }
-        if(ev.type === "error") throw new Error(ev.error?.message || "stream error");
+        const piece = extract(ev);
+        if(piece){ full += piece; span.textContent = full; scrollBottom(); }
       }catch(e){ if(e instanceof SyntaxError) continue; throw e; }
     }
   }
@@ -1072,9 +1089,10 @@ function syncModePills(){
   const live = !!getKey();
   $("#pillLocal").classList.toggle("on", !live);
   $("#pillLive").classList.toggle("on", live);
-  $("#modelChip").textContent = live ? "engine: claude-haiku-4-5 ⚡" : "engine: musa-core-1";
-  $("#modelSub").textContent  = live ? "live · claude-haiku-4-5" : "local core · no api key";
+  $("#modelChip").textContent = live ? "engine: "+liveModelName()+" ⚡" : "engine: musa-core-1";
+  $("#modelSub").textContent  = live ? "live · "+liveModelName() : "local core · no api key";
   $("#coreChip").textContent  = live ? "LIVE MODE" : "CORE ONLINE";
+  if(live) $("#pillLiveDesc").innerHTML = liveModelName()+"<br>streaming · your api key";
 }
 $("#settingsBtn").addEventListener("click", ()=>{ $("#apiKey").value = getKey(); modal.classList.add("open"); });
 $("#closeSettings").addEventListener("click", ()=>modal.classList.remove("open"));
@@ -1082,7 +1100,7 @@ modal.addEventListener("click", e=>{ if(e.target === modal) modal.classList.remo
 $("#saveKey").addEventListener("click", ()=>{
   const v = $("#apiKey").value.trim();
   setKey(v); syncModePills(); modal.classList.remove("open");
-  if(v) addMsg("ai", fmt("**Live mode engaged.** I'm now running on claude-haiku-4-5 — same personality, exponentially better neurons. Your questions just got a much more sophisticated audience to disappoint."));
+  if(v) addMsg("ai", fmt("**Live mode engaged.** I'm now running on **"+liveModelName()+"** — same personality, exponentially better neurons. Your questions just got a much more sophisticated audience to disappoint."));
 });
 $("#clearKey").addEventListener("click", ()=>{
   setKey(""); $("#apiKey").value = ""; syncModePills();
