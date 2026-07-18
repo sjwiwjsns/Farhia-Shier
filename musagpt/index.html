@@ -475,7 +475,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 
     <label for="modelSel">LIVE MODEL</label>
     <select id="modelSel"></select>
-    <p class="note" id="modelNote">Model list follows the key you paste: Anthropic keys unlock Claude models, OpenAI keys unlock GPT models.</p>
+    <p class="note" id="modelNote">Model list follows the key you paste: Anthropic keys unlock Claude models, OpenAI keys unlock GPT models. On deployments with a server-side key (e.g. Netlify with env vars set), "site key" models appear here automatically — nothing to paste.</p>
 
     <p class="note">Key is stored only in this browser's localStorage and sent only to <code>api.anthropic.com</code> or <code>api.openai.com</code>. <b>Don't use a production key</b> — browser-side keys are visible to anyone with access to this device.</p>
 
@@ -847,12 +847,12 @@ function updateStats(){
 function addMsg(role, html, flash){
   const wrap = document.createElement("div");
   wrap.className = "msg " + (role==="user"?"user":"ai") + (flash?" flashnote":"");
-  const liveMode = !!getKey();
+  const lm = liveMode();
   wrap.innerHTML = `
     <div class="avatar">${role==="user"?"🙂":"⚡"}</div>
     <div class="mbody">
       <div class="mname">${role==="user"?(mem.name?esc(mem.name):"YOU"):"MUSAGPT"}
-        ${role!=="user"?`<span class="mode ${liveMode?"live":""}">${liveMode?esc(effectiveModel())+" live":"local core"}</span>`:""}
+        ${role!=="user"?`<span class="mode ${lm?"live":""}">${lm?esc(effectiveModel())+(lm==="proxy"?" · site":"")+" live":"local core"}</span>`:""}
       </div>
       <div class="bubble">${html}</div>
     </div>`;
@@ -1191,10 +1191,35 @@ const MODELS = {
 };
 function providerOf(key){ return !key ? null : (key.startsWith("sk-ant-") ? "anthropic" : "openai"); }
 function provider(){ return providerOf(getKey()); }
+
+/* Optional deploy-side proxy (Netlify function at /api/chat). When the site
+   owner configured server-side keys, visitors get live models with no key. */
+let proxyProviders = null; // {anthropic:bool, openai:bool} once detected
+function proxyModels(){
+  if(!proxyProviders) return [];
+  let out = [];
+  if(proxyProviders.anthropic) out = out.concat(MODELS.anthropic);
+  if(proxyProviders.openai) out = out.concat(MODELS.openai);
+  return out;
+}
+async function probeProxy(){
+  try{
+    const r = await fetch("/api/chat", {signal: timeoutSignal(5000)});
+    if(!r.ok) return;
+    const d = await r.json();
+    if(d && d.ok && d.providers && (d.providers.anthropic || d.providers.openai)){
+      proxyProviders = d.providers;
+      syncModePills();
+    }
+  }catch(e){ /* no proxy on this host — bring-your-own-key mode */ }
+}
+
+/* which live brain applies: user's own key beats the site proxy */
+function liveMode(){ return getKey() ? "key" : (proxyProviders ? "proxy" : null); }
 function effectiveModel(){
-  const p = provider();
-  if(!p) return "musa-core-1";
-  const list = MODELS[p];
+  const mode = liveMode();
+  if(!mode) return "musa-core-1";
+  const list = mode === "key" ? MODELS[provider()] : proxyModels();
   const stored = getModel();
   return list.some(m=>m.id===stored) ? stored : list[0].id;
 }
@@ -1223,6 +1248,24 @@ async function liveReply(userText, bubble){
   const history = mem.history.slice(-16);
   let url, headers, body, extract;
   const state = { refusal:false };
+
+  /* deploy-side proxy: server holds the key; response arrives whole, we
+     typewriter it so the feel matches the streamed paths */
+  if(liveMode() === "proxy"){
+    const res = await fetch("/api/chat", {
+      method:"POST",
+      headers:{ "content-type":"application/json" },
+      body: JSON.stringify({ model, system: personaPrompt(), messages:[...history, {role:"user", content:userText}] })
+    });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok) throw new Error((data && data.error) || ("proxy "+res.status));
+    const text = data.refusal
+      ? "Fable 5's safety layer waved that one off (its classifiers are strict). Try rephrasing, or pick another model in settings."
+      : (data.text || "…the wire went quiet on me. Try that again?");
+    await streamText(bubble, text.replace(/\*\*/g,"").replace(/`/g,""));
+    bubble.innerHTML = fmt(text);
+    return text;
+  }
 
   if(provider() === "openai"){
     url = "https://api.openai.com/v1/chat/completions";
@@ -1335,7 +1378,7 @@ async function handleSend(text){
   bubble.classList.remove("typing");
 
   try{
-    if(getKey()){
+    if(liveMode()){
       try{
         reply = histReply = await liveReply(text.trim(), bubble);
       }catch(err){
@@ -1405,30 +1448,31 @@ const modal = $("#settingsModal");
 function fillModelSelect(keyValue){
   const sel = $("#modelSel");
   const p = providerOf((keyValue !== undefined ? keyValue : getKey()).trim());
+  const list = p ? MODELS[p] : (proxyProviders ? proxyModels() : null);
   sel.innerHTML = "";
-  if(!p){
+  if(!list){
     sel.innerHTML = '<option value="">— paste a key first —</option>';
     sel.disabled = true;
     return;
   }
   sel.disabled = false;
   const stored = getModel();
-  for(const m of MODELS[p]){
+  for(const m of list){
     const o = document.createElement("option");
-    o.value = m.id; o.textContent = m.label;
+    o.value = m.id; o.textContent = m.label + (p ? "" : " · site key");
     if(m.id === stored) o.selected = true;
     sel.appendChild(o);
   }
 }
 function syncModePills(){
-  const live = !!getKey();
+  const lm = liveMode();
   const eff = effectiveModel();
-  $("#pillLocal").classList.toggle("on", !live);
-  $("#pillLive").classList.toggle("on", live);
-  $("#modelChip").textContent = live ? "engine: "+eff+" ⚡" : "engine: musa-core-1";
-  $("#modelSub").textContent  = live ? "live · "+eff : "local core · no api key";
-  $("#coreChip").textContent  = live ? "LIVE MODE" : "CORE ONLINE";
-  if(live) $("#pillLiveDesc").innerHTML = esc(eff)+"<br>streaming · your api key";
+  $("#pillLocal").classList.toggle("on", !lm);
+  $("#pillLive").classList.toggle("on", !!lm);
+  $("#modelChip").textContent = lm ? "engine: "+eff+" ⚡"+(lm==="proxy"?" site key":"") : "engine: musa-core-1";
+  $("#modelSub").textContent  = lm ? "live · "+eff+(lm==="proxy"?" (site key)":"") : "local core · no api key";
+  $("#coreChip").textContent  = lm ? "LIVE MODE" : "CORE ONLINE";
+  if(lm) $("#pillLiveDesc").innerHTML = esc(eff)+"<br>"+(lm==="proxy"?"site-provided key":"streaming · your api key");
 }
 $("#settingsBtn").addEventListener("click", ()=>{
   $("#apiKey").value = getKey();
@@ -1439,8 +1483,8 @@ $("#settingsBtn").addEventListener("click", ()=>{
 $("#apiKey").addEventListener("input", e=>{
   fillModelSelect(e.target.value);
   const p = providerOf(e.target.value.trim());
-  $("#pillLocal").classList.toggle("on", !p);
-  $("#pillLive").classList.toggle("on", !!p);
+  $("#pillLocal").classList.toggle("on", !p && !proxyProviders);
+  $("#pillLive").classList.toggle("on", !!p || !!proxyProviders);
 });
 document.addEventListener("keydown", e=>{
   if(e.key === "Escape" && modal.classList.contains("open")){
@@ -1454,7 +1498,7 @@ $("#saveKey").addEventListener("click", ()=>{
   const v = $("#apiKey").value.trim();
   setKey(v);
   const sel = $("#modelSel");
-  if(v && sel.value) setModel(sel.value);
+  if(sel.value) setModel(sel.value);   /* works for own-key AND site-key model choices */
   syncModePills(); modal.classList.remove("open");
   if(v) addMsg("ai", fmt("**Live mode engaged** on **"+effectiveModel()+"** — same personality, fancier neurons. Ask away."));
 });
@@ -1485,6 +1529,7 @@ document.addEventListener("click", e=>{
 updateStats();
 syncModePills();
 refreshNews(true);
+probeProxy();
 
 $("#msgs").classList.add("solo");
 (function welcome(){

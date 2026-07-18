@@ -1,0 +1,25 @@
+# Netlify config for MusaGPT
+# The app publishes at the site root; the optional /api/chat function lets the
+# site owner provide a server-side AI key (set ANTHROPIC_API_KEY and/or
+# OPENAI_API_KEY in Site settings -> Environment variables) so visitors get
+# live models without pasting a key. Without env vars the app still works
+# (local core + bring-your-own-key), the function just reports no providers.
+
+[build]
+  publish = "musagpt"
+  command = ""
+
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/api/chat"
+  to = "/.netlify/functions/chat"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
