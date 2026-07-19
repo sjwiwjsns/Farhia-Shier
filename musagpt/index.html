@@ -431,7 +431,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
     <header class="topbar">
       <button class="iconbtn" id="sbToggle" aria-label="Open chat history">☰</button>
       <span class="chip hidesm"><span class="dot"></span><span id="coreChip">CORE ONLINE</span></span>
-      <span class="chip hidesm" id="modelChip">engine: musa-core-1</span>
+      <span class="chip hidesm" id="modelChip">engine: musa-core-2</span>
       <div class="spacer"></div>
       <button class="iconbtn" id="wireBtn" aria-label="Open the last-hour news panel"><b>◉ WIRE</b> <span id="wireCount"></span></button>
     </header>
@@ -498,6 +498,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
         <div class="stat"><b id="stRoasts">0</b><span>QUIPS</span></div>
         <div class="stat"><b id="stNews">0</b><span>HEADLINES</span></div>
       </div>
+      <div class="mid" id="trainStat" style="margin:12px 0 0" title="musa-core-2 trains itself in this browser: a naive-Bayes router seeded at boot and fed by every live headline, plus an n-gram generator fitted to wire copy. No servers, no APIs.">core-2 · warming up…</div>
     </div>
     <div class="card feedcard">
       <div class="feedhead"><span class="livedot"></span><h3>LAST HOUR</h3><span class="count" id="feedCount2"></span></div>
@@ -515,7 +516,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
     <div class="modewrap">
       <div class="modepill" id="pillLocal">
         <h4>🧠 Local Core</h4>
-        <p>musa-core-1<br>built-in · free · offline</p>
+        <p>musa-core-2<br>trained in-browser · free · offline</p>
       </div>
       <div class="modepill" id="pillLive">
         <h4>⚡ Live Mode</h4>
@@ -572,6 +573,124 @@ function safeUrl(u){
   if(typeof u !== "string") return null;
   try{ const p = new URL(u, location.href); return (p.protocol === "https:" || p.protocol === "http:") ? p.href : null; }
   catch(e){ return null; }
+}
+
+/* ================================================================
+   MUSA-CORE-2 — models trained IN THE BROWSER, zero APIs.
+   Classic pre-neural NLP: a naive-Bayes intent router (seeded, then
+   online-trained on every live headline), an order-2 Markov headline
+   generator fitted to wire copy, and TF-IDF retrieval over the last
+   hour. Real machine learning at honest scale — NOT an LLM, and
+   nothing trained in a browser tab will ever be GPT-3.
+   ================================================================ */
+const STOP = new Set("the a an and or of to in on for as is are was be at by with from after over amid into out up down its his her their this that these those i you we they it not no do does did have has had will would can could".split(" "));
+function tokenize(s){
+  return String(s).toLowerCase().replace(/[^a-z0-9' -]+/g," ").split(/\s+/).filter(w=>w.length>1 && !STOP.has(w));
+}
+const trainStats = { examples:0, tokens:0 };
+
+/* --- naive Bayes intent router (Laplace-smoothed multinomial) --- */
+const nb = { classes:Object.create(null), vocab:new Set(), docs:0 };
+function nbTrain(intent, text){
+  const toks = tokenize(text);
+  if(!toks.length) return;
+  let c = nb.classes[intent];
+  if(!c) c = nb.classes[intent] = { docs:0, words:Object.create(null), total:0 };
+  c.docs++; nb.docs++;
+  for(const w of toks){ c.words[w] = (c.words[w]||0)+1; c.total++; nb.vocab.add(w); }
+  trainStats.examples++; trainStats.tokens += toks.length;
+  updateStats && updateStats();
+}
+function nbClassify(text){
+  const toks = tokenize(text);
+  if(!toks.length || !nb.docs) return null;
+  const V = nb.vocab.size || 1;
+  let best = null, bestScore = -Infinity, second = -Infinity;
+  for(const intent of Object.keys(nb.classes)){
+    const c = nb.classes[intent];
+    let score = Math.log(c.docs / nb.docs);
+    for(const w of toks) score += Math.log(((c.words[w]||0) + 1) / (c.total + V));
+    if(score > bestScore){ second = bestScore; bestScore = score; best = intent; }
+    else if(score > second) second = score;
+  }
+  return { intent: best, margin: bestScore - second };
+}
+const NB_SEED = {
+  markets:["stocks and the trading floor today","market rally after earnings report","shares slide as bank raises rates","crypto bitcoin price swings","economy bonds investors selloff","wall street opening bell movers","any word from the trading floor","how are the markets doing","inflation numbers and the fed"],
+  tech:["tech companies ship software update","new chip semiconductor launch event","cyber attack causes data breach","app outage servers down worldwide","startup builds ai robots gadgets","silicon valley product release"],
+  sports:["league match score results tonight","championship playoffs finals recap","football soccer basketball game highlights","coach sacked transfer window drama","who won the game last night","sports desk roundup please"],
+  weather:["storm hurricane flood warnings issued","forecast rain snow heatwave coming","tornado earthquake damage reported","rough weather along the coast"],
+  science:["space rocket nasa launch window","scientists publish research discovery study","telescope spots galaxy asteroid physics","quantum computing vaccine species experiment"],
+  politics:["election vote campaign results night","parliament congress senate pass bill","government minister coalition policy fight"],
+  world:["world news international global roundup","whats going on around the world","foreign affairs overseas developments"],
+  news:["whats happening right now","give me the latest updates","breaking stories this hour","catch me up on everything","rundown of the wire please","what did i miss today"],
+  roast:["roast me please","make fun of me a bit","insult me lightly"],
+  joke:["tell me a joke","say something funny","make me laugh please"],
+  help:["what can you do here","how does this thing work","show me the commands list"],
+  greeting:["hello there friend","hey hows it going","good morning musa"],
+  thanks:["thanks a lot really","thank you much appreciated"],
+  bye:["goodbye see you later","im leaving now bye"],
+};
+/* canonical phrases must each re-trigger their OWN desk regex — note the
+   plural traps: "\bmarket\b" won't match "markets", "\bpolitic\b" won't
+   match "politics", so use phrases with a keyword that stands alone. */
+const NB_CANON = {
+  markets:"stock market news", tech:"tech news", sports:"sports", weather:"weather",
+  science:"science", politics:"election news", world:"world news",
+  news:"what's the latest news", roast:"roast me", joke:"tell me a joke",
+  help:"help", greeting:"hello", thanks:"thanks", bye:"bye",
+};
+
+/* --- order-2 Markov headline generator --- */
+const markov = { starts:[], next:new Map(), tokens:0 };
+function mkTrain(title){
+  const words = String(title).split(/\s+/).filter(Boolean);
+  if(words.length < 4) return;
+  markov.starts.push(words[0]+" "+words[1]);
+  for(let i=0;i<words.length-2;i++){
+    const k = words[i]+" "+words[i+1];
+    let arr = markov.next.get(k);
+    if(!arr){ arr = []; markov.next.set(k, arr); }
+    arr.push(words[i+2]);
+  }
+  const endK = words[words.length-2]+" "+words[words.length-1];
+  let endArr = markov.next.get(endK);
+  if(!endArr){ endArr = []; markov.next.set(endK, endArr); }
+  endArr.push("§END§");
+  markov.tokens += words.length;
+}
+function mkGenerate(){
+  if(markov.starts.length < 6) return null;
+  for(let attempt = 0; attempt < 4; attempt++){
+    const out = rnd(markov.starts).split(" ");
+    for(let i = 0; i < 18; i++){
+      const opts = markov.next.get(out[out.length-2]+" "+out[out.length-1]);
+      if(!opts || !opts.length) break;
+      const w = rnd(opts);
+      if(w === "§END§"){ if(out.length >= 6) return out.join(" "); break; }
+      out.push(w);
+    }
+    if(out.length >= 6) return out.slice(0,16).join(" ");
+  }
+  return null;
+}
+
+/* --- TF-IDF retrieval over the live wire --- */
+function wireSearch(qtext){
+  const q = tokenize(qtext);
+  if(!q.length || !FEED.length) return [];
+  const N = FEED.length;
+  const docs = FEED.map(it=>tokenize(it.text));
+  const df = Object.create(null);
+  for(const d of docs) for(const w of new Set(d)) df[w] = (df[w]||0)+1;
+  return FEED.map((it,i)=>{
+    let s = 0;
+    for(const w of q){
+      const tf = docs[i].reduce((n,x)=>n+(x===w), 0);
+      if(tf) s += tf * Math.log(1 + N/(df[w]||1));
+    }
+    return {it, s};
+  }).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,2).map(x=>x.it);
 }
 
 /* ---------------- starfield ---------------- */
@@ -658,6 +777,8 @@ function addItems(list){
                  text:raw.title, url:safeUrl(raw.url), src:raw.src||null });
   }
   if(fresh.length){
+    /* every headline is a labeled training example: text -> its news desk */
+    for(const f of fresh){ nbTrain(f.cat.toLowerCase(), f.text); mkTrain(f.text); }
     FEED = [...fresh, ...FEED].sort((a,b)=>b.t-a.t || b.id-a.id);
     pruneFeed();
     stats.headlines += fresh.length;
@@ -977,6 +1098,8 @@ function updateStats(){
   const pat  = Math.max(15, 41 - Math.floor(mem.turns/3));
   $("#rudeVal").textContent = sass+"%"; $("#rudeFill").style.width = sass+"%";
   $("#patVal").textContent  = pat+"%";  $("#patFill").style.width  = pat+"%";
+  const ts = $("#trainStat");
+  if(ts) ts.textContent = "core-2 trained in-browser · "+trainStats.examples+" examples · "+trainStats.tokens+" tokens · vocab "+nb.vocab.size;
 }
 
 function addMsg(role, html, flash, replay){
@@ -1105,10 +1228,10 @@ function tryMath(q){
   }catch(e){ return null; }
 }
 
-function localReply(raw){
+function localReply(raw, _redir){
   const q = raw.trim();
   const l = q.toLowerCase();
-  mem.turns++;
+  if(!_redir) mem.turns++;
 
   const nm = q.match(/(?:my name is|i'?m called|call me|i am)\s+([a-z][a-z'-]{1,20})\b/i);
   if(nm && !/^(not|so|just|really|very|the|a|an|fine|good|ok|okay|tired|bored|sorry|here)$/i.test(nm[1])){
@@ -1141,7 +1264,7 @@ function localReply(raw){
   }
 
   if(/(who|what) (are|r) (you|u)|your name|about you|introduce yourself/.test(l)){
-    return "I'm **MusaGPT** — a breaking-news AI with fast reading habits and a sarcastic streak. I watch the live wire (red banner up top, full panel behind the ◉ WIRE button), summarize the last hour on demand, handle your math, keep your chats in the sidebar, and offer commentary nobody strictly asked for. Stories come from public news feeds — click any of them to read the source." + closer();
+    return "I'm **MusaGPT** — a breaking-news AI with fast reading habits and a sarcastic streak. I watch the live wire (red banner up top, full panel behind the ◉ WIRE button), summarize the last hour on demand, handle your math, keep your chats in the sidebar, and offer commentary nobody strictly asked for. My local brain, **musa-core-2**, even trains itself in your browser on the wire as it breaks — ask me \"how were you trained\" for the honest version. Stories come from public news feeds — click any of them to read the source." + closer();
   }
 
   if(/\b(real|fake|actually true|legit|genuine|made up|simulated)\b/.test(l) && /\b(news|headline|feed|stories|this|it)\b/.test(l)){
@@ -1153,6 +1276,28 @@ function localReply(raw){
 
   if(/\b(rude|jerk|attitude|sassy|sarcasm|sarcastic)\b/.test(l) || /\bso mean\b|being mean|why (are|r) (you|u) (so|like)\b/.test(l)){
     return "I run at about 60% sass — enough to keep things interesting, not enough to hurt feelings. See the meter in the ◉ WIRE panel; it's calibrated. Underneath it all I *will* actually get you what you need.";
+  }
+
+  /* --- how are you trained / gpt-3 reality check --- */
+  if(/\btrain(ed|ing)?\b|\bgpt-?3\b|\bneural (net|network)\b|\bparameters\b|\byour (brain|weights|model)\b/.test(l)){
+    return "Straight answer: my local brain is **musa-core-2** — a stack of genuinely trained, classical models that fit themselves **in your browser, zero APIs**: a naive-Bayes intent router (currently **"+trainStats.examples+" training examples**, vocab "+nb.vocab.size+"), an n-gram headline generator fitted to **"+markov.tokens+" words** of live wire copy, and TF-IDF search over the last hour. Every headline that crosses the wire is another training example — I literally learn from the news as it breaks.\n\nIs it GPT-3? **No, and nothing trained in a browser tab ever will be.** That took thousands of GPUs, months of compute, and a few million dollars. Anyone promising you GPT-3-from-scratch on a laptop is selling a Markov chain in a trench coat. I *am* the Markov chain in the trench coat — but at least I disclose. For actual frontier neurons, ⚙ Settings takes an API key.";
+  }
+
+  /* --- synthetic headline generator (in-browser n-gram model) --- */
+  if(/\b(generate|invent|make up|write|compose|remix)\b.*\bheadline/.test(l) || /\bheadline generator\b/.test(l)){
+    const h = mkGenerate();
+    if(!h) return "My headline generator is still warming up — it trains on wire copy as stories arrive. Give it a few more headlines and ask again.";
+    return "Fresh from my in-browser n-gram model (**synthetic — NOT a real story**, it's a statistical remix of the last hour's wire copy):\n\n📰 “"+h+"”\n\nTrained on "+markov.tokens+" words, zero journalism harmed.";
+  }
+
+  /* --- TF-IDF wire search: "tell me more about X" --- */
+  if(/\b(tell me more|more (about|on)|anything (about|on)|what about|heard anything|search|find|dig up)\b/.test(l)){
+    const m = l.match(/\b(?:about|on|for|regarding)\s+(.{2,60}?)\??$/);
+    if(m){
+      const hits = wireSearch(m[1]);
+      if(hits.length) return "Ran that through my in-browser wire search — best matches from the last hour:\n\n"+hits.map(i=>"• "+headlineLine(i)).join("\n")+feedRealityNote();
+      return "I combed the last hour for “"+m[1].trim()+"” — nothing on the wire. Either it isn't news yet, or it's so big they're still typing.";
+    }
   }
 
   if(/\b(market|stock|shares|finance|econom|rate|bank|crypto)\b/.test(l)) return opener()+newsRundown("MARKETS");
@@ -1237,7 +1382,7 @@ function localReply(raw){
   }
 
   if(/\b(help|what can (you|u) do|commands|how (do|to) use)\b/.test(l)){
-    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **Sidebar** — chat history, ✚ new chat (Ctrl/Cmd-K), 👻 temporary chats that never save\n• **◉ WIRE** — the full last-hour panel with sources\n• **⚙ Settings** — add an Anthropic or OpenAI key to upgrade my brain (Claude Haiku 4.5, Claude Fable 5, GPT-4o-mini, and the GPT-5 family: 5, 5.2, 5.5, 5.6)\n\nThe banner and panel refresh themselves every couple of minutes.";
+    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **\"more about <topic>\"** — my in-browser TF-IDF search digs through the hour\n• **\"generate a headline\"** — my n-gram model remixes the wire (clearly labeled synthetic)\n• **\"how were you trained?\"** — the honest story of musa-core-2\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **Sidebar** — chat history, ✚ new chat (Ctrl/Cmd-K), 👻 temporary chats that never save\n• **◉ WIRE** — the full last-hour panel with sources and my training stats\n• **⚙ Settings** — add an Anthropic or OpenAI key for live models (Claude Haiku 4.5, Claude Fable 5, GPT-4o-mini, and the GPT-5 family: 5, 5.2, 5.5, 5.6)\n\nThe banner and panel refresh themselves every couple of minutes.";
   }
 
   if(/\b(api key|anthropic|openai|claude|haiku|fable|gpt|live mode|settings|upgrade|model)\b/.test(l)){
@@ -1267,6 +1412,14 @@ function localReply(raw){
   if(/\b(bored|boring|entertain me|nothing to do)\b/.test(l)){
     const two = pickHeadlines(null,2);
     return "Bored? " + FEED.length + " stories crossed the wire in the last hour. Somewhere out there it is a *very* eventful day. Starters:\n\n" + (two.length?two.map(i=>"• "+headlineLine(i)).join("\n"):"…okay, quiet hour. Even I'm a little bored.") + feedRealityNote();
+  }
+
+  /* --- learned routing: let the naive-Bayes model catch what the rules missed --- */
+  if(!_redir){
+    const g = nbClassify(l);
+    if(g && g.margin > 0.4 && NB_CANON[g.intent]){
+      return localReply(NB_CANON[g.intent], true);
+    }
   }
 
   const it = pickHeadlines(null,1)[0];
@@ -1336,7 +1489,7 @@ function effectiveModel(){
   return list.some(m=>m.id===stored) ? stored : list[0].id;
 }
 function shortName(id){
-  return id === "musa-core-1" ? "core"
+  return id === "musa-core-1" ? "core-2"
     : id === "claude-haiku-4-5" ? "haiku 4.5"
     : id === "claude-fable-5" ? "fable 5"
     : id === "gpt-4o-mini" ? "4o-mini"
@@ -1597,7 +1750,7 @@ function renderModelMenu(){
   const liveList = getKey() ? MODELS[provider()] : proxyModels();
   const suffix = (!getKey() && proxyProviders) ? " · site key" : "";
   let html = '<div class="mmlabel">BRAIN</div>';
-  html += `<button type="button" class="mmitem ${cur==="musa-core-1"?"sel":""}" data-model="musa-core-1">🧠 Musa Core · free &amp; offline <span class="tick">✓</span></button>`;
+  html += `<button type="button" class="mmitem ${cur==="musa-core-1"?"sel":""}" data-model="musa-core-1">🧠 Musa Core 2 · trained in-browser <span class="tick">✓</span></button>`;
   if(liveList.length){
     html += '<div class="mmlabel">LIVE MODELS'+(suffix?" · SITE KEY":"")+'</div>';
     for(const m of liveList){
@@ -1655,8 +1808,8 @@ function syncModePills(){
   const eff = effectiveModel();
   $("#pillLocal").classList.toggle("on", !lm);
   $("#pillLive").classList.toggle("on", !!lm);
-  $("#modelChip").textContent = lm ? "engine: "+eff+" ⚡"+(lm==="proxy"?" site key":"") : "engine: musa-core-1";
-  $("#modelSub").textContent  = lm ? "live · "+eff+(lm==="proxy"?" (site key)":"") : "local core · no api key";
+  $("#modelChip").textContent = lm ? "engine: "+eff+" ⚡"+(lm==="proxy"?" site key":"") : "engine: musa-core-2";
+  $("#modelSub").textContent  = lm ? "live · "+eff+(lm==="proxy"?" (site key)":"") : "musa-core-2 · trained in-browser";
   $("#coreChip").textContent  = lm ? "LIVE MODE" : "CORE ONLINE";
   if(lm) $("#pillLiveDesc").innerHTML = esc(eff)+"<br>"+(lm==="proxy"?"site-provided key":"streaming · your api key");
   $("#modelPillName").textContent = shortName(eff);
@@ -1701,6 +1854,8 @@ $("#autoReactBtn").addEventListener("click", function(){
 /* ================================================================
    BOOT
    ================================================================ */
+/* seed-train the naive-Bayes router before the wire starts feeding it */
+for(const intent of Object.keys(NB_SEED)) for(const ex of NB_SEED[intent]) nbTrain(intent, ex);
 updateStats();
 syncModePills();
 refreshNews(true);
