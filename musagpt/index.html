@@ -511,7 +511,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 <div class="overlay" id="settingsModal">
   <div class="modal">
     <h2>⚙ Settings</h2>
-    <p class="sub">MusaGPT runs on its built-in <b>local core</b> by default — zero setup, works offline. Plug in an <b>Anthropic</b> or <b>OpenAI</b> API key to upgrade the brain to a real model, streamed live with the same wit. Provider is auto-detected from the key; pick the exact model below or from the pill in the composer.</p>
+    <p class="sub">MusaGPT runs on its built-in <b>local core</b> by default — zero setup, works offline. Plug in an <b>Anthropic</b>, <b>OpenAI</b>, <b>DeepSeek</b>, or <b>Google AI</b> key to upgrade the brain to a real model, streamed live with the same wit. Provider is auto-detected from the key; pick the exact model below or from the pill in the composer.</p>
 
     <div class="modewrap">
       <div class="modepill" id="pillLocal">
@@ -525,13 +525,13 @@ textarea#input::placeholder{color:var(--txt-faint)}
     </div>
 
     <label for="apiKey">ANTHROPIC OR OPENAI API KEY (optional)</label>
-    <input type="password" id="apiKey" placeholder="sk-ant-… (Anthropic)  or  sk-… (OpenAI)">
+    <input type="password" id="apiKey" placeholder="sk-ant-… · sk-… (OpenAI/DeepSeek) · AIza… (Google)">
 
     <label for="modelSel">LIVE MODEL</label>
     <select id="modelSel"></select>
-    <p class="note" id="modelNote">Model list follows the key you paste: Anthropic keys unlock Claude models, OpenAI keys unlock GPT models. On deployments with a server-side key (e.g. Netlify with env vars set), "site key" models appear here automatically — nothing to paste.</p>
+    <p class="note" id="modelNote">Model list follows the key you paste: <code>sk-ant-</code> → Claude, <code>AIza</code> → Gemini, and <code>sk-</code> shows both OpenAI &amp; DeepSeek (they share the prefix — just pick the model your key is for). On deployments with a server-side key (e.g. Netlify env vars), "site key" models appear here automatically — nothing to paste.</p>
 
-    <p class="note">Key is stored only in this browser's localStorage and sent only to <code>api.anthropic.com</code> or <code>api.openai.com</code>. <b>Don't use a production key</b> — browser-side keys are visible to anyone with access to this device.</p>
+    <p class="note">Key is stored only in this browser's localStorage and sent only to the matching provider (<code>api.anthropic.com</code>, <code>api.openai.com</code>, <code>api.deepseek.com</code>, or <code>generativelanguage.googleapis.com</code>). <b>Don't use a production key</b> — browser-side keys are visible to anyone with access to this device.</p>
 
     <div class="mbtns">
       <button class="btn danger" id="clearKey">Clear key</button>
@@ -1382,11 +1382,11 @@ function localReply(raw, _redir){
   }
 
   if(/\b(help|what can (you|u) do|commands|how (do|to) use)\b/.test(l)){
-    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **\"more about <topic>\"** — my in-browser TF-IDF search digs through the hour\n• **\"generate a headline\"** — my n-gram model remixes the wire (clearly labeled synthetic)\n• **\"how were you trained?\"** — the honest story of musa-core-2\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **Sidebar** — chat history, ✚ new chat (Ctrl/Cmd-K), 👻 temporary chats that never save\n• **◉ WIRE** — the full last-hour panel with sources and my training stats\n• **⚙ Settings** — add an Anthropic or OpenAI key for live models (Claude Haiku 4.5, Claude Fable 5, GPT-4o-mini, and the GPT-5 family: 5, 5.2, 5.5, 5.6)\n\nThe banner and panel refresh themselves every couple of minutes.";
+    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **\"more about <topic>\"** — my in-browser TF-IDF search digs through the hour\n• **\"generate a headline\"** — my n-gram model remixes the wire (clearly labeled synthetic)\n• **\"how were you trained?\"** — the honest story of musa-core-2\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **Sidebar** — chat history, ✚ new chat (Ctrl/Cmd-K), 👻 temporary chats that never save\n• **◉ WIRE** — the full last-hour panel with sources and my training stats\n• **⚙ Settings** — add an Anthropic, OpenAI, DeepSeek, or Google AI key for live models (Claude Haiku 4.5 / Fable 5, GPT-4o-mini & the GPT-5 family, DeepSeek V3 & R1, Gemini 2.5 Flash/Pro & 2.0 Flash)\n\nThe banner and panel refresh themselves every couple of minutes.";
   }
 
-  if(/\b(api key|anthropic|openai|claude|haiku|fable|gpt|live mode|settings|upgrade|model)\b/.test(l)){
-    return "Hit **⚙ Settings** in the sidebar (or the model pill in the composer). Paste an **Anthropic** key (`sk-ant-…`) to unlock **Claude Haiku 4.5** or **Claude Fable 5**, or an **OpenAI** key to unlock **GPT-4o-mini** and the **GPT-5 family (5, 5.2, 5.5, 5.6)** — auto-detected, same personality, your dime. On deployments with a site key, live models appear with nothing to paste. No key? The local core and I will manage just fine.";
+  if(/\b(api key|anthropic|openai|deepseek|gemini|google ai|claude|haiku|fable|gpt|live mode|settings|upgrade|model)\b/.test(l)){
+    return "Hit **⚙ Settings** in the sidebar (or the model pill in the composer). Four providers, auto-detected from the key:\n\n• **Anthropic** (`sk-ant-…`) → Claude Haiku 4.5 / Fable 5\n• **OpenAI** (`sk-…`) → GPT-4o-mini + the GPT-5 family\n• **DeepSeek** (`sk-…`) → DeepSeek V3 & R1\n• **Google AI** (`AIza…`) → Gemini 2.5 Flash/Pro, 2.0 Flash\n\nSame personality, your dime. `sk-` keys show both OpenAI and DeepSeek — just pick the model your key is for. On deployments with a site key, live models appear with nothing to paste. No key? The local core and I will manage just fine.";
   }
 
   if(/\b(history|temporary chat|incognito|private chat|save(d)? chats?|delete chat)\b/.test(l)){
@@ -1441,6 +1441,7 @@ function setKey(v){ try{ v ? localStorage.setItem(LS_KEY,v) : localStorage.remov
 function getModel(){ try{ return localStorage.getItem(LS_MODEL) || ""; }catch(e){ return ""; } }
 function setModel(v){ try{ v ? localStorage.setItem(LS_MODEL,v) : localStorage.removeItem(LS_MODEL); }catch(e){} }
 
+const PROVIDER_ORDER = ["anthropic","openai","deepseek","google"];
 const MODELS = {
   anthropic: [
     {id:"claude-haiku-4-5", label:"Claude Haiku 4.5 · fast & cheap"},
@@ -1452,25 +1453,55 @@ const MODELS = {
     {id:"gpt-5.2",     label:"GPT-5.2"},
     {id:"gpt-5.5",     label:"GPT-5.5"},
     {id:"gpt-5.6",     label:"GPT-5.6"},
-  ]
+  ],
+  deepseek: [
+    {id:"deepseek-chat",     label:"DeepSeek V3 · chat"},
+    {id:"deepseek-reasoner", label:"DeepSeek R1 · reasoner"},
+  ],
+  google: [
+    {id:"gemini-2.5-flash", label:"Gemini 2.5 Flash · fast"},
+    {id:"gemini-2.5-pro",   label:"Gemini 2.5 Pro · max"},
+    {id:"gemini-2.0-flash", label:"Gemini 2.0 Flash"},
+  ],
 };
-function providerOf(key){ return !key ? null : (key.startsWith("sk-ant-") ? "anthropic" : "openai"); }
+/* which cloud a model belongs to (routing) */
+function modelProvider(id){
+  if(id.startsWith("claude")) return "anthropic";
+  if(id.startsWith("gemini")) return "google";
+  if(id.startsWith("deepseek")) return "deepseek";
+  return "openai";
+}
+/* which provider groups a pasted key can reach. sk- is shared by OpenAI and
+   DeepSeek (both OpenAI-compatible), so an sk- key surfaces both families and
+   the chosen model decides where the request goes. */
+function keyProviders(key){
+  if(!key) return [];
+  if(key.startsWith("sk-ant-")) return ["anthropic"];
+  if(key.startsWith("AIza")) return ["google"];
+  return ["openai","deepseek"];
+}
+function providerOf(key){ const p = keyProviders(key); return p.length ? p[0] : null; }
 function provider(){ return providerOf(getKey()); }
+function keyModels(){
+  let out = [];
+  for(const pr of keyProviders(getKey())) out = out.concat(MODELS[pr] || []);
+  return out;
+}
 
 let proxyProviders = null;
 function proxyModels(){
   if(!proxyProviders) return [];
   let out = [];
-  if(proxyProviders.anthropic) out = out.concat(MODELS.anthropic);
-  if(proxyProviders.openai) out = out.concat(MODELS.openai);
+  for(const pr of PROVIDER_ORDER) if(proxyProviders[pr]) out = out.concat(MODELS[pr]);
   return out;
 }
+function anyProxy(){ return !!(proxyProviders && PROVIDER_ORDER.some(p=>proxyProviders[p])); }
 async function probeProxy(){
   try{
     const r = await fetch("/api/chat", {signal: timeoutSignal(5000)});
     if(!r.ok) return;
     const d = await r.json();
-    if(d && d.ok && d.providers && (d.providers.anthropic || d.providers.openai)){
+    if(d && d.ok && d.providers && PROVIDER_ORDER.some(p=>d.providers[p])){
       proxyProviders = d.providers;
       syncModePills();
     }
@@ -1479,20 +1510,23 @@ async function probeProxy(){
 /* own key beats site proxy; picking "musa-core-1" forces the local brain */
 function liveMode(){
   if(getModel() === "musa-core-1") return null;
-  return getKey() ? "key" : (proxyProviders ? "proxy" : null);
+  return getKey() ? "key" : (anyProxy() ? "proxy" : null);
 }
 function effectiveModel(){
   const mode = liveMode();
   if(!mode) return "musa-core-1";
-  const list = mode === "key" ? MODELS[provider()] : proxyModels();
+  const list = mode === "key" ? keyModels() : proxyModels();
   const stored = getModel();
-  return list.some(m=>m.id===stored) ? stored : list[0].id;
+  return list.some(m=>m.id===stored) ? stored : (list[0] ? list[0].id : "musa-core-1");
 }
 function shortName(id){
   return id === "musa-core-1" ? "core-2"
     : id === "claude-haiku-4-5" ? "haiku 4.5"
     : id === "claude-fable-5" ? "fable 5"
     : id === "gpt-4o-mini" ? "4o-mini"
+    : id === "deepseek-chat" ? "deepseek v3"
+    : id === "deepseek-reasoner" ? "deepseek r1"
+    : id.startsWith("gemini") ? id.replace("gemini-","gemini ")
     : id;
 }
 
@@ -1537,17 +1571,37 @@ async function liveReply(userText, bubble){
     return text;
   }
 
-  if(provider() === "openai"){
-    url = "https://api.openai.com/v1/chat/completions";
+  const prov = modelProvider(model);
+  if(prov === "openai" || prov === "deepseek"){
+    /* DeepSeek is OpenAI-API-compatible — same request shape, different host */
+    url = prov === "deepseek" ? "https://api.deepseek.com/chat/completions" : "https://api.openai.com/v1/chat/completions";
     headers = { "content-type":"application/json", "authorization":"Bearer "+key };
     body = {
       model,
       stream:true,
       messages:[{role:"system", content:personaPrompt()}, ...history, {role:"user", content:userText}]
     };
-    if(/^gpt-5/.test(model)) body.max_completion_tokens = 2048;
-    else body.max_tokens = 1024;
+    if(prov === "openai" && /^gpt-5/.test(model)) body.max_completion_tokens = 2048;
+    else body.max_tokens = (model === "deepseek-reasoner") ? 2048 : 1024;
+    /* deepseek-reasoner also streams reasoning_content; we keep only .content */
     extract = ev => ev.choices?.[0]?.delta?.content || "";
+  }else if(prov === "google"){
+    /* Gemini REST: distinct schema (contents/parts, role "model"), SSE via ?alt=sse */
+    url = "https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":streamGenerateContent?alt=sse";
+    headers = { "content-type":"application/json", "x-goog-api-key": key };
+    body = {
+      systemInstruction: { parts:[{ text: personaPrompt() }] },
+      contents: [...history, {role:"user", content:userText}].map(m=>({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }]
+      })),
+      generationConfig: { maxOutputTokens: 1024 }
+    };
+    extract = ev => {
+      const c = ev.candidates && ev.candidates[0];
+      if((c && c.finishReason === "SAFETY") || (ev.promptFeedback && ev.promptFeedback.blockReason)) state.refusal = true;
+      return c && c.content && c.content.parts ? c.content.parts.map(p=>p.text||"").join("") : "";
+    };
   }else{
     url = "https://api.anthropic.com/v1/messages";
     headers = {
@@ -1614,7 +1668,7 @@ async function liveReply(userText, bubble){
     }
   }
   if(state.refusal && !full){
-    full = "Fable 5's safety layer waved that one off (it happens — its classifiers are strict). Try rephrasing, or switch models via the pill in the composer.";
+    full = "The model's safety layer waved that one off (it happens — some are strict). Try rephrasing, or switch models via the pill in the composer.";
   }
   bubble.innerHTML = fmt(full || "…the wire went quiet on me. Try that again?");
   return full;
@@ -1747,8 +1801,8 @@ document.addEventListener("keydown", e=>{
 function renderModelMenu(){
   const mm = $("#modelMenu");
   const cur = effectiveModel();
-  const liveList = getKey() ? MODELS[provider()] : proxyModels();
-  const suffix = (!getKey() && proxyProviders) ? " · site key" : "";
+  const liveList = getKey() ? keyModels() : proxyModels();
+  const suffix = (!getKey() && anyProxy()) ? " · site key" : "";
   let html = '<div class="mmlabel">BRAIN</div>';
   html += `<button type="button" class="mmitem ${cur==="musa-core-1"?"sel":""}" data-model="musa-core-1">🧠 Musa Core 2 · trained in-browser <span class="tick">✓</span></button>`;
   if(liveList.length){
@@ -1786,10 +1840,13 @@ function openSettings(){
 }
 function fillModelSelect(keyValue){
   const sel = $("#modelSel");
-  const p = providerOf((keyValue !== undefined ? keyValue : getKey()).trim());
-  const list = p ? MODELS[p] : (proxyProviders ? proxyModels() : null);
+  const kv = (keyValue !== undefined ? keyValue : getKey()).trim();
+  const provs = keyProviders(kv);
+  let list = null, site = false;
+  if(provs.length){ list = []; for(const pr of provs) list = list.concat(MODELS[pr]); }
+  else if(anyProxy()){ list = proxyModels(); site = true; }
   sel.innerHTML = "";
-  if(!list){
+  if(!list || !list.length){
     sel.innerHTML = '<option value="">— paste a key first —</option>';
     sel.disabled = true;
     return;
@@ -1798,7 +1855,7 @@ function fillModelSelect(keyValue){
   const stored = getModel();
   for(const m of list){
     const o = document.createElement("option");
-    o.value = m.id; o.textContent = m.label + (p ? "" : " · site key");
+    o.value = m.id; o.textContent = m.label + (site ? " · site key" : "");
     if(m.id === stored) o.selected = true;
     sel.appendChild(o);
   }
@@ -1817,9 +1874,9 @@ function syncModePills(){
 $("#settingsBtn").addEventListener("click", ()=>{ openSettings(); closeSidebarMobile(); });
 $("#apiKey").addEventListener("input", e=>{
   fillModelSelect(e.target.value);
-  const p = providerOf(e.target.value.trim());
-  $("#pillLocal").classList.toggle("on", !p && !proxyProviders);
-  $("#pillLive").classList.toggle("on", !!p || !!proxyProviders);
+  const hasKey = keyProviders(e.target.value.trim()).length > 0;
+  $("#pillLocal").classList.toggle("on", !hasKey && !anyProxy());
+  $("#pillLive").classList.toggle("on", hasKey || anyProxy());
 });
 $("#closeSettings").addEventListener("click", ()=>modal.classList.remove("open"));
 modal.addEventListener("click", e=>{ if(e.target === modal) modal.classList.remove("open"); });

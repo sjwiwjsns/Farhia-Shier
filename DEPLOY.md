@@ -19,9 +19,11 @@ local core, or paste their own API key in ⚙ Settings.
    `sjwiwjsns/Farhia-Shier`. The build settings come from `netlify.toml`
    automatically (publish `musagpt`, no build command).
 2. (Optional, recommended) **Site configuration → Environment variables**, add
-   either or both:
-   - `OPENAI_API_KEY` — unlocks GPT-4o-mini / GPT-5 family for all visitors
-   - `ANTHROPIC_API_KEY` — unlocks Claude Haiku 4.5 / Fable 5 for all visitors
+   any of these — each unlocks its models for all visitors, no key pasting:
+   - `ANTHROPIC_API_KEY` — Claude Haiku 4.5 / Fable 5
+   - `OPENAI_API_KEY` — GPT-4o-mini / GPT-5 family
+   - `DEEPSEEK_API_KEY` — DeepSeek V3 / R1
+   - `GOOGLE_API_KEY` (or `GEMINI_API_KEY`) — Gemini 2.5 Flash/Pro, 2.0 Flash
 3. Deploy. The app auto-detects the function at `/api/chat` and shows
    "site key" models in ⚙ Settings — visitors never see or paste a key.
 
