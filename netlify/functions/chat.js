@@ -14,10 +14,14 @@
  */
 
 const MODELS = {
+  google: [
+    "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+    "gemini-2.0-flash", "gemini-2.0-flash-lite",
+    "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-flash-8b",
+  ],
   anthropic: ["claude-haiku-4-5", "claude-fable-5"],
   openai: ["gpt-4o-mini", "gpt-5", "gpt-5.2", "gpt-5.5", "gpt-5.6"],
   deepseek: ["deepseek-chat", "deepseek-reasoner"],
-  google: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
 };
 
 exports.handler = async (event) => {
@@ -27,16 +31,16 @@ exports.handler = async (event) => {
     body: JSON.stringify(body),
   });
   const keys = {
+    google: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "",
     anthropic: process.env.ANTHROPIC_API_KEY || "",
     openai: process.env.OPENAI_API_KEY || "",
     deepseek: process.env.DEEPSEEK_API_KEY || "",
-    google: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "",
   };
 
   if (event.httpMethod === "GET") {
     return json(200, { ok: true, providers: {
-      anthropic: !!keys.anthropic, openai: !!keys.openai,
-      deepseek: !!keys.deepseek, google: !!keys.google,
+      google: !!keys.google, anthropic: !!keys.anthropic,
+      openai: !!keys.openai, deepseek: !!keys.deepseek,
     }});
   }
   if (event.httpMethod !== "POST") return json(405, { error: "method not allowed" });

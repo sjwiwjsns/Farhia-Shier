@@ -511,7 +511,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 <div class="overlay" id="settingsModal">
   <div class="modal">
     <h2>⚙ Settings</h2>
-    <p class="sub">MusaGPT runs on its built-in <b>local core</b> by default — zero setup, works offline. Plug in an <b>Anthropic</b>, <b>OpenAI</b>, <b>DeepSeek</b>, or <b>Google AI</b> key to upgrade the brain to a real model, streamed live with the same wit. Provider is auto-detected from the key; pick the exact model below or from the pill in the composer.</p>
+    <p class="sub">MusaGPT runs on its built-in <b>local core</b> by default — zero setup, works offline. Plug in a <b>Google AI</b>, <b>Anthropic</b>, <b>OpenAI</b>, or <b>DeepSeek</b> key to upgrade the brain to a real model, streamed live with the same wit. Provider is auto-detected from the key; pick the exact model below or from the pill in the composer.</p>
 
     <div class="modewrap">
       <div class="modepill" id="pillLocal">
@@ -1382,11 +1382,11 @@ function localReply(raw, _redir){
   }
 
   if(/\b(help|what can (you|u) do|commands|how (do|to) use)\b/.test(l)){
-    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **\"more about <topic>\"** — my in-browser TF-IDF search digs through the hour\n• **\"generate a headline\"** — my n-gram model remixes the wire (clearly labeled synthetic)\n• **\"how were you trained?\"** — the honest story of musa-core-2\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **Sidebar** — chat history, ✚ new chat (Ctrl/Cmd-K), 👻 temporary chats that never save\n• **◉ WIRE** — the full last-hour panel with sources and my training stats\n• **⚙ Settings** — add an Anthropic, OpenAI, DeepSeek, or Google AI key for live models (Claude Haiku 4.5 / Fable 5, GPT-4o-mini & the GPT-5 family, DeepSeek V3 & R1, Gemini 2.5 Flash/Pro & 2.0 Flash)\n\nThe banner and panel refresh themselves every couple of minutes.";
+    return "Happy to give the tour:\n\n• **\"what's breaking\"** — last-hour rundown from the live wire\n• **\"markets / tech / sports / weather / science / world / politics\"** — desk-specific wrap\n• **\"more about <topic>\"** — my in-browser TF-IDF search digs through the hour\n• **\"generate a headline\"** — my n-gram model remixes the wire (clearly labeled synthetic)\n• **\"how were you trained?\"** — the honest story of musa-core-2\n• **math** — `(1200*7)/3` and friends\n• **\"is this news real?\"** — source transparency, always honest\n• **Sidebar** — chat history, ✚ new chat (Ctrl/Cmd-K), 👻 temporary chats that never save\n• **◉ WIRE** — the full last-hour panel with sources and my training stats\n• **⚙ Settings** — add a Google AI, Anthropic, OpenAI, or DeepSeek key for live models (the full Gemini lineup, Claude Haiku 4.5 / Fable 5, GPT-4o-mini & the GPT-5 family, DeepSeek V3 & R1)\n\nThe banner and panel refresh themselves every couple of minutes.";
   }
 
   if(/\b(api key|anthropic|openai|deepseek|gemini|google ai|claude|haiku|fable|gpt|live mode|settings|upgrade|model)\b/.test(l)){
-    return "Hit **⚙ Settings** in the sidebar (or the model pill in the composer). Four providers, auto-detected from the key:\n\n• **Anthropic** (`sk-ant-…`) → Claude Haiku 4.5 / Fable 5\n• **OpenAI** (`sk-…`) → GPT-4o-mini + the GPT-5 family\n• **DeepSeek** (`sk-…`) → DeepSeek V3 & R1\n• **Google AI** (`AIza…`) → Gemini 2.5 Flash/Pro, 2.0 Flash\n\nSame personality, your dime. `sk-` keys show both OpenAI and DeepSeek — just pick the model your key is for. On deployments with a site key, live models appear with nothing to paste. No key? The local core and I will manage just fine.";
+    return "Hit **⚙ Settings** in the sidebar (or the model pill in the composer). Four providers, auto-detected from the key:\n\n• **Google AI** (`AIza…`) → the full Gemini lineup (2.5 Pro/Flash/Flash-Lite, 2.0 Flash/Flash-Lite, 1.5 Pro/Flash/Flash-8B)\n• **Anthropic** (`sk-ant-…`) → Claude Haiku 4.5 / Fable 5\n• **OpenAI** (`sk-…`) → GPT-4o-mini + the GPT-5 family\n• **DeepSeek** (`sk-…`) → DeepSeek V3 & R1\n\nSame personality, your dime. `sk-` keys show both OpenAI and DeepSeek — just pick the model your key is for. On deployments with a site key, live models appear with nothing to paste. No key? The local core and I will manage just fine.";
   }
 
   if(/\b(history|temporary chat|incognito|private chat|save(d)? chats?|delete chat)\b/.test(l)){
@@ -1441,8 +1441,18 @@ function setKey(v){ try{ v ? localStorage.setItem(LS_KEY,v) : localStorage.remov
 function getModel(){ try{ return localStorage.getItem(LS_MODEL) || ""; }catch(e){ return ""; } }
 function setModel(v){ try{ v ? localStorage.setItem(LS_MODEL,v) : localStorage.removeItem(LS_MODEL); }catch(e){} }
 
-const PROVIDER_ORDER = ["anthropic","openai","deepseek","google"];
+const PROVIDER_ORDER = ["google","anthropic","openai","deepseek"];
 const MODELS = {
+  google: [
+    {id:"gemini-2.5-pro",        label:"Gemini 2.5 Pro · max"},
+    {id:"gemini-2.5-flash",      label:"Gemini 2.5 Flash · fast"},
+    {id:"gemini-2.5-flash-lite", label:"Gemini 2.5 Flash-Lite · cheapest"},
+    {id:"gemini-2.0-flash",      label:"Gemini 2.0 Flash"},
+    {id:"gemini-2.0-flash-lite", label:"Gemini 2.0 Flash-Lite"},
+    {id:"gemini-1.5-pro",        label:"Gemini 1.5 Pro"},
+    {id:"gemini-1.5-flash",      label:"Gemini 1.5 Flash"},
+    {id:"gemini-1.5-flash-8b",   label:"Gemini 1.5 Flash-8B"},
+  ],
   anthropic: [
     {id:"claude-haiku-4-5", label:"Claude Haiku 4.5 · fast & cheap"},
     {id:"claude-fable-5",   label:"Claude Fable 5 · maximum brains"},
@@ -1457,11 +1467,6 @@ const MODELS = {
   deepseek: [
     {id:"deepseek-chat",     label:"DeepSeek V3 · chat"},
     {id:"deepseek-reasoner", label:"DeepSeek R1 · reasoner"},
-  ],
-  google: [
-    {id:"gemini-2.5-flash", label:"Gemini 2.5 Flash · fast"},
-    {id:"gemini-2.5-pro",   label:"Gemini 2.5 Pro · max"},
-    {id:"gemini-2.0-flash", label:"Gemini 2.0 Flash"},
   ],
 };
 /* which cloud a model belongs to (routing) */
@@ -1526,7 +1531,7 @@ function shortName(id){
     : id === "gpt-4o-mini" ? "4o-mini"
     : id === "deepseek-chat" ? "deepseek v3"
     : id === "deepseek-reasoner" ? "deepseek r1"
-    : id.startsWith("gemini") ? id.replace("gemini-","gemini ")
+    : id.startsWith("gemini") ? id.replace("gemini-","gemini ").replace(/-/g," ")
     : id;
 }
 
