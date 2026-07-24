@@ -229,6 +229,28 @@ logarithmic depth buffer, so every `ShaderMaterial` must include the `logdepthbu
 chunks or it will lose the depth test (and reversed-argument `smoothstep()` is
 undefined behavior in GLSL — both bit us during development).
 
+## Sky & atmosphere (`render/sky.js`)
+
+Fixed-midday dome whose gradient warms and pales toward the sun (aerial
+perspective) with a thickened haze band at the horizon that matches the scene
+fog. Clouds are shaded cumulus billboards — canvas-built puff clusters with a
+flat base, sunlit crown and grey underside, four variants — spread over two
+decks, drifting on the live wind vector and recycled to the upwind side when
+they pass the cloud radius, so the deck never thins out however far you fly.
+Sprites keep the texture's 2:1 aspect; squashing them reads as fog.
+
+## Ground decals (`world/airportBuilder.js`)
+
+Cities sit on baked **urban ground**: a seamless tiling street grid with
+per-parcel roof tones, parks, lots and merged superblocks, laid under both the
+skyline cluster and the surrounding town clutter. The airport hole and outer
+rim come from `radialFadeMaterial`, which fades alpha by *world* distance from
+a centre in the fragment shader — keeping the texture tileable, so a 24 km
+decal still resolves individual blocks up close. The apron and terminal slabs
+use a tiling cast-concrete texture (expansion joints on the tile grid, sealed
+cracks, aggregate speckle, oil staining) with instanced gate lead-in lines,
+stop bars, safety-box outlines and perimeter flood-light masts.
+
 ## Building facades (`world/airportBuilder.js` — `patchFacadeShader`)
 
 Every rectangular building gets **procedural windows in the fragment shader**,

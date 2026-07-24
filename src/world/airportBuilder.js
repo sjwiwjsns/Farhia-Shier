@@ -27,10 +27,14 @@ function patchFacadeShader(mat, opts = {}) {
   const winW = (opts.winW ?? 3.2).toFixed(3);
   const floorH = (opts.floorH ?? 3.6).toFixed(3);
   const mullW = (opts.mullW ?? 2.8).toFixed(3);
+  // How strongly glass replaces wall. Small buildings are nearly all window at
+  // a fixed floor height, so full strength turns distant low-rise clutter into
+  // black boxes — those get a lighter mix.
+  const winMix = (opts.winMix ?? 0.92).toFixed(3);
   // three's program cache keys on onBeforeCompile SOURCE TEXT, which is
   // identical for every facade variant — key on the actual params instead,
   // or office and ribbon materials would silently share one program
-  mat.customProgramCacheKey = () => `facade|${mode}|${winW}|${floorH}|${mullW}`;
+  mat.customProgramCacheKey = () => `facade|${mode}|${winW}|${floorH}|${mullW}|${winMix}`;
   mat.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vFacPos;\nvarying vec3 vFacNrm;')
@@ -55,7 +59,7 @@ function patchFacadeShader(mat, opts = {}) {
     float h = facHash(cell);
     vec3 glass = mix(vec3(0.10, 0.13, 0.18), vec3(0.30, 0.38, 0.47), h);
     if (h > 0.965) glass = vec3(0.55, 0.47, 0.28);  // the odd lit interior
-    diffuseColor.rgb = mix(diffuseColor.rgb, glass, win * 0.92);
+    diffuseColor.rgb = mix(diffuseColor.rgb, glass, win * ${winMix});
     diffuseColor.rgb *= 0.80 + 0.20 * clamp(vFacPos.y * 0.025, 0.0, 1.0); // street grime`;
     const ribbon = /* glsl */`
     float u = nA.x > nA.z ? vFacPos.z : vFacPos.x;
@@ -183,6 +187,68 @@ function groundTexture(base, blotch) {
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(60, 60);
   tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Apron concrete: cast slabs with expansion joints, sealed cracks, jet-blast
+// scorch and oil/rubber staining. Tiles at ~7.5 m per panel.
+function concreteTexture(size, rand) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+  const cells = 4;                    // 4x4 panels per tile
+  const cw = size / cells;
+
+  g.fillStyle = '#6d7075';
+  g.fillRect(0, 0, size, size);
+
+  // per-panel pour variation — real aprons are visibly patchwork
+  for (let i = 0; i < cells; i++) {
+    for (let j = 0; j < cells; j++) {
+      const v = 0.90 + rand() * 0.18;
+      g.fillStyle = `rgba(${(109 * v) | 0},${(112 * v) | 0},${(117 * v) | 0},1)`;
+      g.fillRect(i * cw, j * cw, cw, cw);
+      // aggregate speckle
+      for (let k = 0; k < 90; k++) {
+        g.fillStyle = `rgba(${rand() < 0.5 ? '255,255,255' : '0,0,0'},${0.03 + rand() * 0.05})`;
+        g.fillRect(i * cw + rand() * cw, j * cw + rand() * cw, 1 + rand() * 2, 1 + rand() * 2);
+      }
+      // a sealed crack across some panels
+      if (rand() < 0.28) {
+        g.strokeStyle = `rgba(48,48,50,${0.25 + rand() * 0.3})`;
+        g.lineWidth = 1 + rand();
+        g.beginPath();
+        let px = i * cw + rand() * cw, py = j * cw;
+        g.moveTo(px, py);
+        for (let s = 0; s < 4; s++) {
+          px += (rand() - 0.5) * cw * 0.5;
+          py += cw / 4;
+          g.lineTo(px, py);
+        }
+        g.stroke();
+      }
+    }
+  }
+  // expansion joints (dark grooves on the panel grid — these must tile)
+  g.strokeStyle = 'rgba(52,54,57,0.85)';
+  g.lineWidth = Math.max(1.5, size / 340);
+  for (let i = 0; i <= cells; i++) {
+    g.beginPath(); g.moveTo(i * cw, 0); g.lineTo(i * cw, size); g.stroke();
+    g.beginPath(); g.moveTo(0, i * cw); g.lineTo(size, i * cw); g.stroke();
+  }
+  // oil / rubber staining
+  for (let i = 0; i < 26; i++) {
+    const x = rand() * size, y = rand() * size, r = size * (0.02 + rand() * 0.06);
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(30,30,32,${0.10 + rand() * 0.16})`);
+    grad.addColorStop(1, 'rgba(30,30,32,0)');
+    g.fillStyle = grad;
+    g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
 
@@ -406,13 +472,21 @@ export function buildAirport(airport, tier, fleetPool = []) {
 
   // Apron slab around terminals + one slab per terminal footprint (covers
   // gates and parked aircraft), so the buildings never sit on turf.
-  const apron = new THREE.Mesh(new THREE.CircleGeometry(520, 28), lambertOrStandard(tier, { color: '#63666a' }));
+  // cast-concrete apron: panel joints, sealed cracks and staining, ~7.5 m panels
+  const concTex = concreteTexture(tier.texScale >= 0.75 ? 512 : 256, rng);
+  concTex.anisotropy = tier.anisotropy;
+  concTex.repeat.setScalar(1040 / 30);   // 4 panels per tile -> 7.5 m panels
+  const apron = new THREE.Mesh(new THREE.CircleGeometry(520, 28),
+    lambertOrStandard(tier, { map: concTex, color: '#ffffff' }));
   apron.rotation.x = -Math.PI / 2;
   apron.position.set(apronCentroid.x, 0.10, apronCentroid.z);
   apron.receiveShadow = tier.shadows;
   group.add(apron);
   paveCircle(apronCentroid.x, apronCentroid.z, 560);
-  const slabMat = lambertOrStandard(tier, { color: '#616468' });
+  const slabTex = concTex.clone();
+  slabTex.needsUpdate = true;
+  slabTex.repeat.setScalar(760 / 30);
+  const slabMat = lambertOrStandard(tier, { map: slabTex, color: '#f2f2f4' });
   for (const t of airport.terminals) {
     const slabR = Math.max(t.lenM, t.widM) / 2 + t.widM + 55;
     const slab = new THREE.Mesh(new THREE.CircleGeometry(slabR, 24), slabMat);
@@ -534,6 +608,73 @@ export function buildAirport(airport, tier, fleetPool = []) {
         });
       }
     }
+  }
+
+  // Gate markings: a yellow lead-in line running out from each stand with a
+  // stop bar across it, plus a safety box outline. One instanced mesh for the
+  // lot (a unit quad pre-laid flat, scaled/rotated per marking).
+  if (gates.length) {
+    const quad = new THREE.PlaneGeometry(1, 1);
+    quad.rotateX(-Math.PI / 2);
+    const paint = new THREE.MeshLambertMaterial({ color: '#e8c53a' });
+    const marks = new THREE.InstancedMesh(quad, paint, gates.length * 4);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    const pos = new THREE.Vector3(), scl = new THREE.Vector3();
+    let n = 0;
+    const put = (x, z, rotY, w, l) => {
+      q.setFromAxisAngle(up, rotY);
+      pos.set(x, 0.22, z);
+      scl.set(w, 1, l);
+      m4.compose(pos, q, scl);
+      marks.setMatrixAt(n++, m4);
+    };
+    for (const gate of gates) {
+      // aircraft parks nose-in on `rotY`; the lead-in runs out behind it
+      const nx = Math.sin(gate.rotY), nz = Math.cos(gate.rotY);
+      const px = gate.pos.x, pz = gate.pos.z;
+      put(px - nx * 26, pz - nz * 26, gate.rotY, 0.9, 52);          // lead-in line
+      put(px, pz, gate.rotY, 11, 0.9);                               // stop bar
+      put(px - nx * 52 - nz * 13, pz - nz * 52 + nx * 13, gate.rotY, 0.5, 26); // safety box L
+      put(px - nx * 52 + nz * 13, pz - nz * 52 - nx * 13, gate.rotY, 0.5, 26); // safety box R
+    }
+    marks.count = n;
+    marks.instanceMatrix.needsUpdate = true;
+    group.add(marks);
+  }
+
+  // Apron flood-light masts around the ramp perimeter.
+  if (tier.clutter >= 0.4) {
+    const N = 10;
+    const mastGeo = new THREE.CylinderGeometry(0.35, 0.55, 1, 6);
+    const mastInst = new THREE.InstancedMesh(mastGeo,
+      lambertOrStandard(tier, { color: '#9aa0a7' }), N);
+    const headInst = new THREE.InstancedMesh(new THREE.BoxGeometry(4.2, 0.8, 1.6),
+      lambertOrStandard(tier, { color: '#3f444a' }), N);
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    const pos = new THREE.Vector3(), scl = new THREE.Vector3(1, 1, 1);
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 + 0.3;
+      const x = apronCentroid.x + Math.sin(a) * 500, z = apronCentroid.z + Math.cos(a) * 500;
+      const h = 26;
+      q.setFromAxisAngle(up, -a);
+      pos.set(x, h / 2, z);
+      scl.set(1, h, 1);
+      m4.compose(pos, q, scl);
+      mastInst.setMatrixAt(i, m4);
+      pos.set(x, h + 0.4, z);
+      scl.set(1, 1, 1);
+      m4.compose(pos, q, scl);
+      headInst.setMatrixAt(i, m4);
+    }
+    mastInst.instanceMatrix.needsUpdate = true;
+    headInst.instanceMatrix.needsUpdate = true;
+    mastInst.castShadow = headInst.castShadow = tier.shadows;
+    group.add(mastInst);
+    group.add(headInst);
   }
 
   // Rooftop mechanical clutter: AC units, vents and plant rooms scattered on
@@ -719,6 +860,110 @@ export function buildAirport(airport, tier, fleetPool = []) {
   };
 }
 
+// Fades a ground decal out by WORLD distance from a centre: an inner hole
+// (keeps the airfield clear) and an outer rim (melts into terrain). Doing it
+// in-shader instead of baking alpha lets the texture tile, so a 24 km decal
+// still resolves individual city blocks up close.
+function radialFadeMaterial(map, { cx = 0, cz = 0, hole = 0, rimStart, rimEnd }) {
+  const mat = new THREE.MeshLambertMaterial({ map, transparent: true, depthWrite: false });
+  mat.customProgramCacheKey = () => 'radialfade';
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uFadeC = { value: new THREE.Vector2(cx, cz) };
+    sh.uniforms.uFadeR = { value: new THREE.Vector3(hole, rimStart, rimEnd) };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFadeW;')
+      .replace('#include <fog_vertex>', '#include <fog_vertex>\n  vFadeW = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>',
+        '#include <common>\nvarying vec3 vFadeW;\nuniform vec2 uFadeC;\nuniform vec3 uFadeR;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    float dR = distance(vFadeW.xz, uFadeC);
+    float a = 1.0 - smoothstep(uFadeR.y, uFadeR.z, dR);
+    if (uFadeR.x > 0.0) a *= smoothstep(uFadeR.x * 0.5, uFadeR.x, dR);
+    diffuseColor.a *= a;
+  }`);
+  };
+  return mat;
+}
+
+// Urban ground: a seamless, tiling street grid with block-by-block tone
+// variation, parks and parking lots. Without this, skylines and town clutter
+// read as boxes standing on open pasture.
+function urbanGroundTexture(size, rand, { blockPx }) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const g = cv.getContext('2d');
+
+  // dark asphalt base — the street network shows through between parcels
+  g.fillStyle = '#3f3f3c';
+  g.fillRect(0, 0, size, size);
+
+  // Parcel palette. Aerial cities are mostly mid-to-dark roofs punctuated by
+  // bright ones, with green pockets — high contrast is what makes it read as
+  // a city rather than farmland once haze washes it out at distance.
+  const roofs = [
+    [96, 92, 86], [122, 116, 106], [70, 72, 76], [148, 142, 130],
+    [88, 80, 72], [110, 104, 112], [162, 156, 144], [78, 84, 88]
+  ];
+  const road = Math.max(2, Math.round(blockPx * 0.16));
+  const cells = size / blockPx;
+  // merge some neighbours into superblocks so the grid isn't a perfect
+  // checkerboard (malls, campuses, rail yards)
+  const merged = new Set();
+  for (let i = 0; i < cells * cells * 0.10; i++) {
+    const mx = Math.floor(rand() * (cells - 1)), my = Math.floor(rand() * (cells - 1));
+    merged.add(`${mx + 1},${my}`);
+    merged.add(`${mx},${my + 1}`);
+    merged.add(`${mx + 1},${my + 1}`);
+  }
+  const inner = blockPx - road * 2;
+  for (let x = 0; x < size; x += blockPx) {
+    for (let y = 0; y < size; y += blockPx) {
+      const gx = x / blockPx, gy = y / blockPx;
+      const wide = !merged.has(`${gx},${gy}`) && merged.has(`${gx + 1},${gy}`);
+      const r = rand();
+      let col;
+      if (r < 0.11) col = `rgb(${58 + rand() * 20 | 0},${88 + rand() * 26 | 0},${48 + rand() * 18 | 0})`;       // park
+      else if (r < 0.19) col = `rgb(${74 + rand() * 10 | 0},${74 + rand() * 10 | 0},${79 + rand() * 10 | 0})`;  // parking lot
+      else {
+        const c0 = roofs[Math.floor(rand() * roofs.length)];
+        const j = 0.86 + rand() * 0.28;
+        col = `rgb(${Math.min(255, c0[0] * j) | 0},${Math.min(255, c0[1] * j) | 0},${Math.min(255, c0[2] * j) | 0})`;
+      }
+      const w = wide ? inner + blockPx : inner;   // superblock spans its neighbour
+      g.fillStyle = col;
+      g.fillRect(x + road, y + road, w, inner);
+      // sub-parcels: split the block into a couple of distinct buildings
+      const subs = 1 + Math.floor(rand() * 3);
+      for (let s = 0; s < subs; s++) {
+        const c0 = roofs[Math.floor(rand() * roofs.length)];
+        g.fillStyle = `rgba(${c0[0] | 0},${c0[1] | 0},${c0[2] | 0},${0.5 + rand() * 0.5})`;
+        const sw = w * (0.22 + rand() * 0.5), sh = inner * (0.22 + rand() * 0.5);
+        g.fillRect(x + road + rand() * (w - sw), y + road + rand() * (inner - sh), sw, sh);
+      }
+    }
+  }
+  // arterials cutting across the grid (kept slim — a wide dark band reads as
+  // a scar when you taxi past it at eye level)
+  g.strokeStyle = 'rgba(58,58,55,0.75)';
+  g.lineWidth = road * 1.15;
+  for (let i = 0; i < 3; i++) {
+    g.beginPath(); g.moveTo(rand() * size, 0); g.lineTo(rand() * size, size); g.stroke();
+    g.beginPath(); g.moveTo(0, rand() * size); g.lineTo(size, rand() * size); g.stroke();
+  }
+  // grain
+  for (let i = 0; i < 3000; i++) {
+    g.fillStyle = `rgba(${rand() < 0.5 ? '0,0,0' : '255,255,255'},0.07)`;
+    g.fillRect(rand() * size, rand() * size, 2, 2);
+  }
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 // ---------------------------------------------------------------- scenery
 function buildScenery(airport, tier, group, collidables, rng, has) {
   const skl = airport.skyline;
@@ -729,6 +974,22 @@ function buildScenery(airport, tier, group, collidables, rng, has) {
     const cx = Math.sin(dir) * skl.distM, cz = -Math.cos(dir) * skl.distM;
     const conf = { m: [12, 120, 1000], l: [22, 210, 1600], xl: [38, 300, 2200], strip: [14, 160, 1400] }[skl.size] || [14, 130, 1100];
     const [count, maxH, radius] = conf;
+
+    // downtown street grid beneath the towers so the skyline stands on a
+    // city instead of open pasture (tiling: ~90 m blocks at any distance)
+    const citySpan = radius * 2.8;
+    const cityTex = urbanGroundTexture(tier.texScale >= 0.75 ? 1024 : 512, rng, { blockPx: 64 });
+    cityTex.anisotropy = tier.anisotropy;
+    cityTex.repeat.setScalar(citySpan / 1440);
+    const cityGround = new THREE.Mesh(
+      new THREE.PlaneGeometry(citySpan, citySpan),
+      radialFadeMaterial(cityTex, { cx, cz, rimStart: radius * 0.80, rimEnd: radius * 1.42 })
+    );
+    cityGround.rotation.x = -Math.PI / 2;
+    cityGround.position.set(cx, 0.06, cz);
+    cityGround.receiveShadow = tier.shadows;
+    group.add(cityGround);
+
     // white base + per-instance facade tint; the office window grid, lobby,
     // grime gradient and roof speckle come from the facade shader
     const mat = patchFacadeShader(lowMat('#ffffff'), { mode: 'office', winW: 3.4, floorH: 3.7 });
@@ -912,9 +1173,23 @@ function buildScenery(airport, tier, group, collidables, rng, has) {
     if (has('urban') || has('suburban')) {
       const urban = has('urban');
       const count = Math.round((urban ? 1000 : 550) * clutter);
+
+      // land-use ring under the town clutter: streets and parcels everywhere
+      // except a clear hole over the airfield itself
+      const ringTex = urbanGroundTexture(tier.texScale >= 0.75 ? 1024 : 512, rng, { blockPx: 64 });
+      ringTex.anisotropy = tier.anisotropy;
+      ringTex.repeat.setScalar(24000 / 1760);
+      const ring = new THREE.Mesh(
+        new THREE.PlaneGeometry(24000, 24000),
+        radialFadeMaterial(ringTex, { hole: 2300, rimStart: 6200, rimEnd: 11000 })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.05;
+      group.add(ring);
+
       const geom = new THREE.BoxGeometry(1, 1, 1);
       const mats = ['#9b9489', '#8b8e94', '#a3937f'].map((c) =>
-        patchFacadeShader(lowMat(c), { mode: 'office', winW: 2.5, floorH: 3.1 }));
+        patchFacadeShader(lowMat(c), { mode: 'office', winW: 2.5, floorH: 3.1, winMix: 0.5 }));
       for (let k = 0; k < 3; k++) {
         const inst = new THREE.InstancedMesh(geom, mats[k], Math.ceil(count / 3));
         const m4 = new THREE.Matrix4();

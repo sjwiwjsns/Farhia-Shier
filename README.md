@@ -70,7 +70,11 @@ are **detailed and windowed**: terminals wear continuous ribbon-glass bands with
 mullions and rooftop AC clutter, and skyline towers get procedural window grids,
 per-tower facade tints, glass lobbies, stepped crowns and antenna spires — all
 computed in-shader at fixed real-world scale, so the whole skyline stays one
-draw call.
+draw call. Cities stand on real ground — a tiling street grid of blocks,
+parks and arterials under both the downtown cluster and the surrounding town —
+and the ramp is cast concrete with expansion joints, sealed cracks, oil stains,
+yellow gate lead-in lines and flood-light masts. Overhead, shaded cumulus
+drift on the live wind across a sky that warms toward the sun.
 
 ## Controls
 

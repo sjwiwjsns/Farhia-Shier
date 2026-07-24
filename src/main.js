@@ -359,7 +359,7 @@ class Sim {
     this.effects.update(dt);
     updateAirportDynamics(this.world, dt, this.time, this.wind);
     this.rig.update(dt, this.entity, this.shared.input, this.tower);
-    this.sky.update(this.camera);
+    this.sky.update(this.camera, dt, this.wind);
     updateSunTarget(this.lights.sun, this.fm.pos);
     this.shared.renderer.render(this.scene, this.camera);
     this.shared.hud.draw(dt, this.fm, this.entity, this.rig.mode, {

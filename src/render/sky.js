@@ -1,7 +1,7 @@
 // Always-day sky: fixed midday sun, gradient dome, sun bloom sprites and a
 // static decorative cloud layer. No time-of-day or weather simulation (v1).
 import * as THREE from 'three';
-import { DEG2RAD } from '../core/math.js';
+import { DEG2RAD, mulberry32 } from '../core/math.js';
 
 export const SUN_ELEVATION = 55 * DEG2RAD;
 export const SUN_AZIMUTH = 135 * DEG2RAD;
@@ -22,20 +22,66 @@ function glowTexture(inner, outer, stops = [[0, inner], [0.35, inner], [1, outer
   return new THREE.CanvasTexture(cv);
 }
 
-function cloudTexture() {
+// A proper fair-weather cumulus: a cluster of soft puffs massed along a spine
+// with a flattish base, then shaded top-down (sunlit crown, grey underside)
+// and given a cool rim so it reads as a lit volume rather than a fog blob.
+function cloudTexture(rand) {
+  const W = 512, H = 256;
   const cv = document.createElement('canvas');
-  cv.width = 256; cv.height = 128;
+  cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
-  for (let i = 0; i < 26; i++) {
-    const x = 30 + Math.random() * 196, y = 40 + Math.random() * 50;
-    const r = 14 + Math.random() * 30;
-    const grad = g.createRadialGradient(x, y, 2, x, y, r);
-    grad.addColorStop(0, 'rgba(255,255,255,0.55)');
+
+  const baseY = H * 0.74;           // flat-ish cumulus base
+  const puff = (x, y, r, a) => {
+    const grad = g.createRadialGradient(x, y, r * 0.15, x, y, r);
+    grad.addColorStop(0, `rgba(255,255,255,${a})`);
+    grad.addColorStop(0.55, `rgba(255,255,255,${a * 0.85})`);
     grad.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = grad;
-    g.fillRect(x - r, y - r, r * 2, r * 2);
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  };
+
+  // main mass: big puffs along the spine, tallest near the middle
+  const lobes = 7 + Math.floor(rand() * 5);
+  for (let i = 0; i < lobes; i++) {
+    const t = i / (lobes - 1);
+    const bell = Math.sin(t * Math.PI);            // fat middle, tapered ends
+    const x = W * (0.13 + t * 0.74) + (rand() - 0.5) * 26;
+    const r = (26 + bell * 52) * (0.75 + rand() * 0.5);
+    const y = baseY - r * (0.35 + bell * 0.55);
+    puff(x, y, r, 0.95);
   }
-  return new THREE.CanvasTexture(cv);
+  // cauliflower detail on the crown
+  for (let i = 0; i < 22; i++) {
+    const t = rand();
+    const bell = Math.sin(t * Math.PI);
+    const x = W * (0.16 + t * 0.68) + (rand() - 0.5) * 40;
+    const r = 12 + rand() * 26;
+    const y = baseY - (18 + bell * 78) * (0.5 + rand() * 0.7);
+    puff(x, y, r, 0.7);
+  }
+  // ragged base so it doesn't cut off as a straight line
+  for (let i = 0; i < 9; i++) {
+    const x = W * (0.18 + rand() * 0.64);
+    puff(x, baseY - 4 + rand() * 8, 16 + rand() * 22, 0.55);
+  }
+
+  // vertical shading: warm sunlit crown -> neutral -> grey shadowed base
+  g.globalCompositeOperation = 'source-atop';
+  const shade = g.createLinearGradient(0, baseY - 150, 0, baseY + 14);
+  shade.addColorStop(0, 'rgba(255,252,244,0.95)');
+  shade.addColorStop(0.45, 'rgba(238,242,248,0.30)');
+  shade.addColorStop(0.78, 'rgba(150,163,181,0.42)');
+  shade.addColorStop(1, 'rgba(118,132,152,0.62)');
+  g.fillStyle = shade;
+  g.fillRect(0, 0, W, H);
+  g.globalCompositeOperation = 'source-over';
+
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 export function createSky(scene, drawDist) {
@@ -48,16 +94,25 @@ export function createSky(scene, drawDist) {
     depthWrite: false,
     fog: false,
     uniforms: {
-      zenith: { value: new THREE.Color('#2f6bad') },
+      zenith: { value: new THREE.Color('#2a63a8') },
       mid: { value: new THREE.Color('#84abd0') },
-      horizon: { value: new THREE.Color('#d3dce0') }
+      horizon: { value: new THREE.Color('#d6dee2') },
+      sunGlow: { value: new THREE.Color('#ffe6bd') },
+      sunDir: { value: SUN_DIR.clone() }
     },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);}`,
-    fragmentShader: `varying vec3 vDir; uniform vec3 zenith; uniform vec3 mid; uniform vec3 horizon;
+    fragmentShader: `varying vec3 vDir;
+      uniform vec3 zenith; uniform vec3 mid; uniform vec3 horizon; uniform vec3 sunGlow; uniform vec3 sunDir;
       void main(){
-        float h = clamp(vDir.y, 0.0, 1.0);
-        vec3 c = mix(horizon, mid, smoothstep(0.0, 0.18, h));
-        c = mix(c, zenith, smoothstep(0.18, 0.65, h));
+        vec3 d = normalize(vDir);
+        float h = clamp(d.y, 0.0, 1.0);
+        vec3 c = mix(horizon, mid, smoothstep(0.0, 0.16, h));
+        c = mix(c, zenith, smoothstep(0.16, 0.70, h));
+        // aerial perspective: the sky warms and pales toward the sun, and the
+        // haze thickens into a band just above the horizon
+        float sun = max(dot(d, normalize(sunDir)), 0.0);
+        c = mix(c, sunGlow, pow(sun, 5.0) * 0.55 + pow(sun, 1.6) * 0.10);
+        c = mix(c, horizon, (1.0 - smoothstep(0.0, 0.09, h)) * 0.55);
         gl_FragColor = vec4(c, 1.0);
       }`
   });
@@ -81,30 +136,61 @@ export function createSky(scene, drawDist) {
   halo.scale.setScalar(drawDist * 0.30);
   group.add(halo);
 
-  // Static cloud layer (world-fixed, decorative)
+  // Cloud layer: shaded cumulus billboards on two decks, drifting with the
+  // wind and wrapped around the camera so the sky stays populated wherever
+  // you fly. Sprites keep the texture's 2:1 aspect (squashing reads as fog).
+  const rand = mulberry32(0x0c10d5);
   const cloudGroup = new THREE.Group();
-  const ctex = cloudTexture();
-  for (let i = 0; i < 20; i++) {
+  const textures = [cloudTexture(rand), cloudTexture(rand), cloudTexture(rand), cloudTexture(rand)];
+  const CLOUD_R = Math.min(19000, drawDist * 0.62);
+  for (let i = 0; i < 34; i++) {
+    const high = i >= 24;                       // thinner, higher, hazier deck
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: ctex, transparent: true, opacity: 0.5 + Math.random() * 0.3, depthWrite: false, fog: false
+      map: textures[Math.floor(rand() * textures.length)],
+      transparent: true,
+      opacity: high ? 0.30 + rand() * 0.18 : 0.72 + rand() * 0.26,
+      depthWrite: false, fog: false
     }));
-    const a = Math.random() * Math.PI * 2, d = 2500 + Math.random() * Math.min(14000, drawDist * 0.5);
-    sp.position.set(Math.sin(a) * d, 1900 + Math.random() * 1400, -Math.cos(a) * d);
-    sp.scale.set(1100 + Math.random() * 1400, 380 + Math.random() * 300, 1);
+    const a = rand() * Math.PI * 2, d = 1800 + rand() * (CLOUD_R - 1800);
+    const w = (high ? 1900 : 1000) + rand() * (high ? 2100 : 1500);
+    sp.position.set(Math.sin(a) * d, (high ? 3700 : 1700) + rand() * (high ? 1500 : 1100), -Math.cos(a) * d);
+    sp.scale.set(w, w * 0.5, 1);                // 512x256 texture -> 2:1
     cloudGroup.add(sp);
   }
   scene.add(cloudGroup);
 
+  const _drift = new THREE.Vector3();
+
   return {
     group,
     clouds: cloudGroup,
-    update(camera) {
+    update(camera, dt = 0, wind = null) {
       // dome and sun track the camera (infinite-distance illusion)
       group.position.set(camera.position.x, 0, camera.position.z);
+
+      if (dt > 0) {
+        // clouds ride the wind aloft (a little faster than the surface layer)
+        if (wind) _drift.set(wind.x, 0, wind.z).multiplyScalar(1.6);
+        else _drift.set(2.4, 0, -1.8);
+        const cx = camera.position.x, cz = camera.position.z;
+        for (const sp of cloudGroup.children) {
+          sp.position.x += _drift.x * dt;
+          sp.position.z += _drift.z * dt;
+          const dx = sp.position.x - cx, dz = sp.position.z - cz;
+          const dist = Math.hypot(dx, dz);
+          if (dist > CLOUD_R) {
+            // recycle to the upwind side so the deck never thins out
+            const k = (CLOUD_R * 0.94) / dist;
+            sp.position.x = cx - dx * k;
+            sp.position.z = cz - dz * k;
+          }
+        }
+      }
     },
     dispose() {
       scene.remove(group);
       scene.remove(cloudGroup);
+      for (const t of textures) t.dispose();
     }
   };
 }
