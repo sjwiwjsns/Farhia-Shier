@@ -30,6 +30,22 @@ Three live sources fetched **in parallel** and merged: GDELT + Reddit + Hacker N
 
 **Urgency → BREAKING:** `urgencyScore()` = urgent wording (+3) + big numbers (+1) + 2×(sources−1) + freshness (+1); `sevFor()` returns BREAKING at ≥4 within 25 min, else JUST IN / DEVELOPING / UPDATE. BREAKING sorts to the top of ticker and feed (`wireOrder`). Feed URLs pass `safeUrl()` (http/https only).
 
+## Simulated-fallback failsafes (drive with all three feeds aborted)
+
+Route all three feeds to `r.abort("failed")`, wait for `srcMode === "sim"`, then assert the fiction can't pass for news. `scratchpad/drive-sim.js` covers all of it (67 assertions); the invariants:
+
+- `sevFor()` returns **`"DEMO"`** for anything `isSim()` — never BREAKING/JUST IN. `isHot()` and `breakingNow()` exclude sim; `wireOrder` sorts sim *below* everything real.
+- `catClass(it)` is the **single** source of the severity-chip class — both the full render and the cheap in-place repaint call it, so labels can't drift. Always re-assert after `onFeedChanged()`.
+- Cluster keys are namespaced `sim::` so a real story can never merge into a simulated one.
+- Banner: `#brkBanner.simmode`, `#brkWord` reads SIMULATED, `#srcTag.sim`, `document.title` prefixed, `#wireHeading` reads DEMO WIRE, `#wirePanel.simmode`.
+- Every feed row gets `.simtag` + `.simrow` and drops its source/◈/👁 badges; `headlineLine()` prefixes `⚠ SIMULATED · CAT`.
+- `fireNotification()` returns early for sim — nothing simulated ever reaches the OS.
+- "what's breaking?" in sim mode returns a **refusal-style answer** ("Nothing — and I want to be very clear about why"), not a rundown. Briefings get a top-of-message warning.
+- `personaPrompt()` tags **every** wire line `[SIMULATED — NOT REAL…]` and swaps `## The wire you are working from` for the CRITICAL block (forbids elaboration, orders correction).
+- Export prepends the ⚠ header when `srcMode==="sim" || sawSimThisSession` (sticky — set once, never cleared, since the transcript keeps demo lines after recovery). `copyPayload()` appends a disclaimer when text matches `SIM_TEXT_RE`.
+- `#simToggle` sets `noSim` (persisted `musagpt_nosim`): purges sim items, empties the wire honestly, survives reload, and reseeds when toggled back. `simSpawnLoop(fromTimer)` re-checks `noSim`/`srcMode` every tick and `simLoopArmed` prevents double loops.
+- Recovery: one live feed answering purges all sim items and restores the red banner/LIVE WIRE heading/clean title.
+
 ## v3 flows worth driving
 
 - **Hero/empty state**: `#chatarea.empty` on boot; hero + `#wireStrip` (`#wsSrc`, `#wsCount`) visible; first send removes `.empty`. No chat is saved until the first message (`localStorage.musagpt_chats` stays empty on boot).
