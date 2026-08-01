@@ -46,6 +46,24 @@ Route all three feeds to `r.abort("failed")`, wait for `srcMode === "sim"`, then
 - `#simToggle` sets `noSim` (persisted `musagpt_nosim`): purges sim items, empties the wire honestly, survives reload, and reseeds when toggled back. `simSpawnLoop(fromTimer)` re-checks `noSim`/`srcMode` every tick and `simLoopArmed` prevents double loops.
 - Recovery: one live feed answering purges all sim items and restores the red banner/LIVE WIRE heading/clean title.
 
+## THE DESK (`#deckBtn` / sidebar / Ctrl-D / Escape closes; `scratchpad/drive-desk.js`, 120 assertions)
+
+Five boards in `#deck`, tabs in `#dkTabs[data-b]`, panels `#b-<name>`. Shared rule: **chrome never depends on the network, data always does.** Both maps are drawn from run-length-encoded land masks compiled into the file (`WORLD_MASK` 160×74, `US_MASK` 132×62 — regenerate with `scratchpad/mkmask.py` / `mkus.py`), so there is no tile server to stub and no "map failed to load" state.
+
+- **Marker clicks use nearest-marker picking** (`installMapPicker`), not DOM hit-testing: Gaza and Beirut are ~2.7 units apart on a 320-unit map, so hit circles overlapped and whichever painted last won. `.mk{pointer-events:none}` — Playwright `.click()` on a marker will NOT work; click the computed pixel coords (see `clickMarker()` in the driver).
+- **War map**: `warPoints()` = wire stories that are conflict-shaped (`WAR_KIND`) AND placeable (`placeOf`). Geocoder ranking is **specific-locality > earliest-in-headline > longest-name**; bare "Georgia" resolves to nothing on purpose. Unplaceable stories are counted, never guessed onto the map. Labels de-conflict greedily.
+  - **Regex plural trap** (bit us twice): `\bair ?strike\b` does not match "air strikes" — the `\b` fails against the following `s`. Every noun in `WAR_KIND` needs `s?` or `\w*`.
+- **Flock cams**: live Overpass query (3 mirrors) for `man_made=surveillance` + `surveillance:type~ALPR`. **No seeded dataset** — if all mirrors fail the map is empty and says "empty on purpose". State attribution prefers OSM's `addr:state`; geometric fallback is bbox-then-centroid (centroid alone puts Chicago in Indiana) and untagged rows are labelled "inferred" — Memphis is a genuine AR/TN coin-flip.
+- **Prayer**: `prayerTimes()` from solar geometry, Diyanet (Fajr 18°, Isha 17°), Tema İstanbul/Başakşehir, fixed UTC+3 via `istanbulNow()`. **Verified against an independent NOAA implementation** (`scratchpad/sun.py`) on 5 dates — max drift 1 min. Don't "fix" these against remembered clock times: Istanbul is at 28.8°E on the 45°E meridian, so everything runs ~65 min later than solar noon. Reminders never `await` `Notification.requestPermission()` (a stalled prompt used to wedge the toggle).
+- **Al Jazeera Arabic**: RSS via the `CORS_RELAYS` chain → translation ladder MyMemory → user's model (`oneShot`) → local glossary. The glossary result is labelled **"not a translation"**, never presented as one.
+- **Senate 2026**: `SENATE_2026` = 33 Class II + 2 specials, 13D/22R, 8 open. Structure is drawn; **no poll numbers anywhere** and the board states why (X.com has no keyless CORS-open API). Live signal is wire coverage + Reddit chatter — assert it never renders a margin/probability.
+- `deskSummary()` feeds live board state into `personaPrompt()` (now ~7.5k chars); chat intents cover prayer/qibla/war map/flock/AJ/senate/desk.
+- **Sim-mode carryover**: `drive-sim.js` §6b asserts the desk can't launder demo stories — war markers amber, no BREAKING, rows badged.
+
+## Extra news fallbacks
+
+`fetchWires()` pulls 6 newsroom RSS feeds (BBC/AJE/NPR/DW/France24/Sky) through `viaRelay()` — allorigins → codetabs → corsproxy, reordered by `relayHealth`. Stub `**/api.allorigins.win/**` and abort the others to exercise the chain; `liveSources` gains `"Newsrooms"`.
+
 ## v3 flows worth driving
 
 - **Hero/empty state**: `#chatarea.empty` on boot; hero + `#wireStrip` (`#wsSrc`, `#wsCount`) visible; first send removes `.empty`. No chat is saved until the first message (`localStorage.musagpt_chats` stays empty on boot).

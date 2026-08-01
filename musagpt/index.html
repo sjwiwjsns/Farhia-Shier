@@ -451,6 +451,133 @@ textarea#input::placeholder{color:var(--txt-faint)}
 .modepill h4{font-size:12px;margin-bottom:3px}
 .modepill p{font-size:10px;color:var(--txt-faint);line-height:1.5;font-family:var(--mono)}
 
+/* ================= DESK (boards: maps, prayer, wires, senate) ================= */
+#deck{
+  position:fixed;inset:0;z-index:70;display:none;flex-direction:column;
+  background:rgba(5,5,8,.96);backdrop-filter:blur(18px);
+}
+#deck.open{display:flex}
+.dkhead{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-shrink:0;
+  padding-top:max(12px, env(safe-area-inset-top));
+}
+.dkhead h3{font-size:12px;letter-spacing:.11em;font-weight:800;color:var(--txt)}
+.dkhead .dksub{font-family:var(--mono);font-size:9.5px;color:var(--txt-faint);margin-left:auto;text-align:right;line-height:1.5}
+.dkclose{background:none;border:none;color:var(--txt-dim);font-size:17px;cursor:pointer;padding:4px 8px;border-radius:8px;flex-shrink:0}
+.dkclose:hover{color:var(--txt);background:var(--panel)}
+.dktabs{
+  display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--line);flex-shrink:0;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.dktabs::-webkit-scrollbar{display:none}
+.dktab{
+  flex-shrink:0;background:var(--panel);border:1px solid var(--line);color:var(--txt-dim);
+  border-radius:999px;padding:7px 14px;font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+  cursor:pointer;transition:.16s;white-space:nowrap;
+}
+.dktab:hover{color:var(--txt);border-color:var(--line2)}
+.dktab.on{color:#0a0a12;background:linear-gradient(135deg,#5b8cff,#8ab4ff);border-color:transparent;font-weight:700}
+.dkbody{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:16px;padding-bottom:max(16px, env(safe-area-inset-bottom))}
+.board{display:none;max-width:1180px;margin:0 auto}
+.board.on{display:block}
+.bnote{
+  font-family:var(--mono);font-size:10px;line-height:1.65;color:var(--txt-dim);
+  border:1px solid var(--line);border-left:2px solid var(--accent);border-radius:0 10px 10px 0;
+  padding:11px 13px;margin-bottom:14px;background:rgba(138,180,255,.04);
+}
+.bnote.warn{border-left-color:var(--amber);background:rgba(255,180,84,.05);color:#e5d6bd}
+.bnote.bad{border-left-color:var(--red);background:rgba(255,59,71,.05);color:#f0c8ca}
+.bnote b{color:var(--txt)}
+.bgrid{display:grid;grid-template-columns:1fr 300px;gap:14px;align-items:start}
+.bcard{border:1px solid var(--line);border-radius:var(--radius);background:rgba(255,255,255,.02);overflow:hidden}
+.bcard>h4{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--txt-dim);font-weight:700;
+  padding:11px 13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;
+}
+.bcard>h4 .n{margin-left:auto;color:var(--accent)}
+.bcard .bpad{padding:13px}
+.maprap{position:relative;background:radial-gradient(120% 120% at 50% 0%, rgba(20,26,44,.9), rgba(6,6,10,.95));}
+.maprap svg{display:block;width:100%;height:auto}
+.mapdot{fill:rgba(150,170,220,.20)}
+.mapdot.us{fill:rgba(150,170,220,.26)}
+/* clicks are resolved by nearest-marker maths on the <svg> itself, so the
+   markers themselves take no pointer events — no z-order fights, and an
+   animated radius can never make a target "unstable" to hit. */
+.mk{pointer-events:none;transition:.15s}
+.maprap svg{touch-action:manipulation;cursor:crosshair}
+.mk .pulse{animation:mkpulse 2.2s ease-out infinite;transform-origin:center}
+@keyframes mkpulse{0%{r:2;opacity:.85}100%{r:11;opacity:0}}
+.mk:focus-visible .core{stroke:#fff;stroke-width:1.2}
+.mk:focus-visible{outline:none}
+/* halo via paint-order so labels stay readable over the dot grid */
+.mklab{
+  font-family:var(--mono);font-size:5.4px;font-weight:600;fill:rgba(255,255,255,.9);pointer-events:none;
+  paint-order:stroke;stroke:rgba(4,4,7,.92);stroke-width:1.1px;stroke-linejoin:round;
+}
+#senMap .mklab{font-size:5px}
+.maplegend{display:flex;flex-wrap:wrap;gap:11px;padding:10px 13px;border-top:1px solid var(--line);font-family:var(--mono);font-size:9px;color:var(--txt-faint)}
+.maplegend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.blist{max-height:420px;overflow-y:auto}
+.brow{padding:10px 13px;border-bottom:1px solid var(--line);cursor:pointer;transition:.14s;display:block;text-decoration:none;color:inherit}
+.brow:last-child{border-bottom:none}
+.brow:hover{background:rgba(255,255,255,.035)}
+.brow.on{background:rgba(138,180,255,.08)}
+.brow .bm{display:flex;align-items:center;gap:7px;margin-bottom:4px;flex-wrap:wrap}
+.btag{font-family:var(--mono);font-size:8.5px;letter-spacing:.07em;padding:2px 6px;border-radius:5px;background:var(--panel2);color:var(--txt-dim);white-space:nowrap}
+.btag.hot{background:var(--red);color:#fff;font-weight:800}
+.btag.warm{background:rgba(255,180,84,.16);color:var(--amber)}
+.btag.cool{background:rgba(138,180,255,.14);color:var(--accent)}
+.btag.sim{background:var(--amber);color:#12121a;font-weight:800}
+.brow p{font-size:12.5px;line-height:1.45;color:#d6d6de}
+.brow .bs{font-family:var(--mono);font-size:9px;color:var(--txt-faint);margin-top:4px;display:block}
+.bempty{padding:26px 16px;text-align:center;font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--txt-faint)}
+.bstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:8px;padding:13px}
+.bstat{border:1px solid var(--line);border-radius:11px;padding:10px 8px;text-align:center;background:rgba(255,255,255,.02)}
+.bstat b{display:block;font-size:17px;font-weight:800;color:var(--txt)}
+.bstat span{font-family:var(--mono);font-size:8px;letter-spacing:.08em;color:var(--txt-faint)}
+/* prayer board */
+.prnow{
+  text-align:center;padding:22px 16px;border-bottom:1px solid var(--line);
+  background:radial-gradient(90% 130% at 50% 0%, rgba(61,220,132,.09), transparent 70%);
+}
+.prnow .pn{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--txt-faint)}
+.prnow .pname{font-size:27px;font-weight:800;margin:5px 0 2px;color:var(--txt)}
+.prnow .par{font-size:21px;color:var(--green);font-family:var(--sans);direction:rtl}
+.prnow .pcd{font-family:var(--mono);font-size:31px;font-weight:700;color:var(--green);letter-spacing:.03em;margin-top:9px;font-variant-numeric:tabular-nums}
+.prnow .pat{font-family:var(--mono);font-size:10.5px;color:var(--txt-dim);margin-top:5px}
+.prrow{display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.prrow:last-child{border-bottom:none}
+.prrow.now{background:rgba(61,220,132,.07);border-left:2px solid var(--green)}
+.prrow.past{opacity:.42}
+.prrow .pi{font-size:15px;width:22px;text-align:center;flex-shrink:0}
+.prrow .pl b{display:block;font-size:13px;font-weight:600}
+.prrow .pl span{font-family:var(--mono);font-size:9px;color:var(--txt-faint)}
+.prrow .par2{margin-left:auto;font-size:16px;direction:rtl;color:var(--txt-dim)}
+.prrow .pt{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums;min-width:52px;text-align:right}
+/* arabic wire */
+.arrow{padding:12px 14px;border-bottom:1px solid var(--line)}
+.arrow:last-child{border-bottom:none}
+.arrow .aar{direction:rtl;text-align:right;font-size:15px;line-height:1.65;color:#e4e4ec;margin-bottom:7px;font-family:"Noto Naskh Arabic","Segoe UI",Tahoma,sans-serif}
+.arrow .aen{font-size:12.5px;line-height:1.5;color:#c8c8d4}
+.arrow .amet{display:flex;align-items:center;gap:7px;margin-top:7px;flex-wrap:wrap}
+/* senate */
+.senlist{max-height:none}
+.senbar{display:flex;height:26px;border-radius:8px;overflow:hidden;border:1px solid var(--line);margin:0 13px 4px}
+.senbar span{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;font-weight:700;color:#0a0a12}
+.senbar .d{background:#5b8cff}.senbar .r{background:#ff6b73}.senbar .i{background:#b9b9c6}
+@media (max-width:820px){
+  .bgrid{grid-template-columns:1fr}
+  .blist{max-height:300px}
+}
+@media (max-width:480px){
+  .dkbody{padding:11px}
+  .dkhead,.dktabs{padding-left:11px;padding-right:11px}
+  .dkhead .dksub{display:none}
+  .prnow .pname{font-size:22px}
+  .prnow .pcd{font-size:26px}
+  .bcard>h4{font-size:9px;padding:10px 11px}
+}
+
 /* focus + motion */
 .iconbtn:focus-visible,.qchip:focus-visible,.btn:focus-visible,#send:focus-visible,.sbbtn:focus-visible,
 .chatitem:focus-visible,#modelPill:focus-visible,.mmitem:focus-visible,.fitem:focus-visible,.titem a:focus-visible,
@@ -505,6 +632,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
     <div class="sbfoot">
       <button class="sbbtn active" id="autoReactBtn" aria-label="Toggle automatic reactions to fresh headlines">📡 Auto-react on</button>
       <button class="sbbtn" id="briefBtn" title="60-second briefing of the last hour">📋 Briefing <span class="k">Ctrl B</span></button>
+      <button class="sbbtn" id="deckBtn2" title="Maps, prayer times, Arabic wire, Senate 2026">🧭 The Desk <span class="k">Ctrl D</span></button>
       <button class="sbbtn" id="exportBtn" title="Download this chat as Markdown">📄 Export chat</button>
       <button class="sbbtn" id="clearHistory">🗑 Clear history</button>
       <button class="sbbtn" id="settingsBtn" aria-label="Open settings" aria-haspopup="dialog">⚙ Settings &amp; API keys</button>
@@ -518,6 +646,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
       <span class="chip hidesm"><span class="dot"></span><span id="coreChip">CORE ONLINE</span></span>
       <span class="chip hidesm" id="modelChip">engine: musa-core-2</span>
       <div class="spacer"></div>
+      <button class="iconbtn" id="deckBtn" aria-label="Open the desk: maps, prayer times, Arabic wire, Senate 2026"><b>🧭 DESK</b></button>
       <button class="iconbtn" id="wireBtn" aria-label="Open the last-hour news panel"><b>◉ WIRE</b> <span id="wireCount"></span></button>
     </header>
 
@@ -554,11 +683,12 @@ textarea#input::placeholder{color:var(--txt-faint)}
         <button class="qchip" type="button">Give me a briefing</button>
         <button class="qchip" type="button">What's breaking right now?</button>
         <button class="qchip" type="button">Anything on the markets?</button>
-        <button class="qchip" type="button">Watch tariffs</button>
+        <button class="qchip" type="button">Prayer times</button>
+        <button class="qchip" type="button">What's on the war map?</button>
+        <button class="qchip" type="button">Senate 2026</button>
         <button class="qchip" type="button">Is this news real?</button>
-        <button class="qchip" type="button">Who are you?</button>
       </div>
-      <div class="disclaim" id="disclaim">sarcastic by design · live headlines via GDELT / Reddit · simulated fallback (labeled) when offline</div>
+      <div class="disclaim" id="disclaim">sarcastic by design · live wire: GDELT · Reddit · HN · BBC/AJE/NPR/DW/France24/Sky · 🧭 DESK: war map · ALPR cameras · İstanbul prayer times · الجزيرة · Senate 2026 · simulated fallback always labeled</div>
     </div>
   </div>
 
@@ -606,6 +736,142 @@ textarea#input::placeholder{color:var(--txt-faint)}
       <div class="feedlist" id="feedList"><div class="feednote">Connecting to the live wire…</div></div>
     </div>
   </aside>
+</div>
+
+<!-- ============ DESK (boards) ============ -->
+<div id="deck" role="dialog" aria-modal="true" aria-label="MusaGPT desk">
+  <div class="dkhead">
+    <h3>🧭 THE DESK</h3>
+    <span class="dksub" id="deckSub">boards run on live public data · nothing is invented</span>
+    <button class="dkclose" id="deckClose" aria-label="Close desk">✕</button>
+  </div>
+  <div class="dktabs" id="dkTabs" role="tablist">
+    <button class="dktab on" data-b="war"    role="tab">🗺 WAR MAP</button>
+    <button class="dktab"    data-b="flock"  role="tab">📹 FLOCK CAMS</button>
+    <button class="dktab"    data-b="pray"   role="tab">🕌 PRAYER</button>
+    <button class="dktab"    data-b="arab"   role="tab">🌍 AL JAZEERA عربي</button>
+    <button class="dktab"    data-b="senate" role="tab">🗳 SENATE 2026</button>
+  </div>
+  <div class="dkbody">
+
+    <!-- ---- WAR MAP ---- -->
+    <section class="board on" id="b-war" role="tabpanel">
+      <div class="bnote" id="warNote">Conflict and security stories from the last hour, geolocated onto a self-contained map — the basemap is drawn from geometry embedded in this file, so it renders with <b>zero external requests</b>: no tile server, no API key, nothing to be blocked. The markers come from the live wire; if the wire can't reach real news, they inherit the SIMULATED treatment.</div>
+      <div class="bgrid">
+        <div class="bcard maprap">
+          <h4>🗺 GLOBAL CONFLICT & SECURITY WIRE <span class="n" id="warCount">0</span></h4>
+          <div id="warMap"></div>
+          <div class="maplegend">
+            <span><i style="background:#ff3b47"></i>armed conflict / strike</span>
+            <span><i style="background:#ffb454"></i>unrest / security</span>
+            <span><i style="background:#8ab4ff"></i>diplomacy / talks</span>
+            <span><i style="background:#3ddc84"></i>aid / ceasefire</span>
+            <span style="margin-left:auto">◎ ring = multiple outlets</span>
+          </div>
+        </div>
+        <div class="bcard">
+          <h4>📍 PLOTTED STORIES <span class="n" id="warListN">0</span></h4>
+          <div class="blist" id="warList"><div class="bempty">Reading the wire…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- FLOCK CAMS ---- -->
+    <section class="board" id="b-flock" role="tabpanel">
+      <div class="bnote" id="flockNote">Automated licence-plate readers (ALPR) — Flock Safety and others — mapped from <b>OpenStreetMap</b>, where they are catalogued as public infrastructure by volunteer surveys and the DeFlock project. This is surveillance transparency: these are fixed cameras in public places, tagged <code>man_made=surveillance</code> + <code>surveillance:type=ALPR</code>. <b>Nothing here is invented</b> — if OpenStreetMap is unreachable the map stays empty rather than showing made-up positions.</div>
+      <div class="bgrid">
+        <div class="bcard maprap">
+          <h4>📹 ALPR CAMERAS · CONTINENTAL US <span class="n" id="flockCount">—</span></h4>
+          <div id="flockMap"></div>
+          <div class="maplegend">
+            <span><i style="background:#ff3b47"></i>operator: Flock Safety</span>
+            <span><i style="background:#ffb454"></i>other named ALPR operator</span>
+            <span><i style="background:#8ab4ff"></i>operator not recorded</span>
+            <span style="margin-left:auto" id="flockSrc">source: OpenStreetMap contributors (ODbL)</span>
+          </div>
+        </div>
+        <div class="bcard">
+          <h4>🏙 BY STATE <span class="n" id="flockAreaN">0</span></h4>
+          <div class="bstats" id="flockStats"></div>
+          <div class="blist" id="flockList"><div class="bempty">Not loaded yet.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- PRAYER ---- -->
+    <section class="board" id="b-pray" role="tabpanel">
+      <div class="bnote" id="prayNote">Prayer times for <b>Tema İstanbul · Başakşehir, İstanbul</b> (41.096°N, 28.776°E, UTC+3), computed <b>in your browser</b> from solar geometry — no API, no network, works offline. Method: <b>Diyanet İşleri Başkanlığı</b> (Fajr 18°, Isha 17°, Asr = Shafi'i/Hanafi shadow ratio 1).</div>
+      <div class="bgrid">
+        <div class="bcard">
+          <div class="prnow">
+            <div class="pn" id="prLead">NEXT PRAYER</div>
+            <div class="pname" id="prName">—</div>
+            <div class="par" id="prNameAr">—</div>
+            <div class="pcd" id="prCount">--:--:--</div>
+            <div class="pat" id="prAt">—</div>
+          </div>
+          <div id="prTimes"></div>
+        </div>
+        <div class="bcard">
+          <h4>⚙ REMINDER</h4>
+          <div class="bpad">
+            <button class="wpb" id="prNotify" style="width:100%;margin-bottom:8px">🔔 Reminders: off</button>
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+              <label for="prLead2" style="font-family:var(--mono);font-size:10px;color:var(--txt-dim);flex:1">Warn me before</label>
+              <select id="prLead2" style="background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:6px 8px;font-family:var(--mono);font-size:10px">
+                <option value="0">at the time</option>
+                <option value="5">5 min</option>
+                <option value="10" selected>10 min</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+              </select>
+            </div>
+            <div style="font-family:var(--mono);font-size:9.5px;line-height:1.7;color:var(--txt-faint)">
+              Reminders fire while this tab is open. MusaGPT will also drop a quiet line in chat, and the tab title shows the countdown for the last 15 minutes.
+            </div>
+          </div>
+          <h4 style="border-top:1px solid var(--line)">📅 DATE</h4>
+          <div class="bpad" id="prDates" style="font-family:var(--mono);font-size:10.5px;line-height:1.9;color:var(--txt-dim)"></div>
+          <h4 style="border-top:1px solid var(--line)">🧭 QIBLA</h4>
+          <div class="bpad" id="prQibla" style="font-family:var(--mono);font-size:10.5px;line-height:1.8;color:var(--txt-dim)"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- AL JAZEERA ARABIC ---- -->
+    <section class="board" id="b-arab" role="tabpanel">
+      <div class="bnote" id="arabNote">Al Jazeera's <b>Arabic</b> newsroom (الجزيرة), fetched live and rendered right-to-left with an English rendering under each line. Translation is <b>machine translation</b> and is labelled with the engine that produced it — where none is reachable, the Arabic stands alone rather than being guessed at.</div>
+      <div class="bcard">
+        <h4>🌍 الجزيرة · AL JAZEERA ARABIC <span class="n" id="arabCount">—</span></h4>
+        <div class="blist" id="arabList" style="max-height:none"><div class="bempty">Not loaded yet.</div></div>
+      </div>
+    </section>
+
+    <!-- ---- SENATE 2026 ---- -->
+    <section class="board" id="b-senate" role="tabpanel">
+      <div class="bnote bad" id="senNote"><b>Read this before the map.</b> You asked for live X.com polling. X has no keyless, CORS-open API — a web page cannot read it, and there is no proxy that changes that. So this board shows <b>no poll numbers at all</b>: inventing them would be exactly the kind of fake-that-looks-real this app is built to prevent. What you get instead is the <b>structural map</b> (which seats are legally up in 2026 — fixed by statute, not an estimate) plus <b>live coverage volume</b> per race from the news wire and Reddit, which is a real, measurable signal. Bring a polling API key and this board can show real averages; until then it shows what it can actually verify.</div>
+      <div class="bgrid">
+        <div class="bcard maprap">
+          <h4>🗳 SEATS UP IN 2026 · CLASS II + SPECIALS <span class="n" id="senCount">—</span></h4>
+          <div id="senMap"></div>
+          <div class="maplegend">
+            <span><i style="background:#5b8cff"></i>Democratic-held</span>
+            <span><i style="background:#ff6b73"></i>Republican-held</span>
+            <span><i style="background:#ffb454"></i>open seat / retirement</span>
+            <span style="margin-left:auto">ring size = live coverage volume</span>
+          </div>
+        </div>
+        <div class="bcard">
+          <h4>📊 CHAMBER GOING IN</h4>
+          <div class="senbar" id="senBar"></div>
+          <div class="bpad" style="font-family:var(--mono);font-size:9.5px;color:var(--txt-faint);padding-top:0">Seats not up in 2026 are held over. Balance shown is the seat count MusaGPT was trained on — verify against live coverage below.</div>
+          <h4 style="border-top:1px solid var(--line)">🔥 LIVE COVERAGE BY RACE <span class="n" id="senLiveN">0</span></h4>
+          <div class="blist" id="senList"><div class="bempty">Reading the wire…</div></div>
+        </div>
+      </div>
+    </section>
+
+  </div>
 </div>
 
 <!-- ============ SETTINGS MODAL ============ -->
@@ -997,6 +1263,68 @@ async function fetchGdelt(){
   return null;
 }
 
+/* --- generic CORS-proxy chain -------------------------------------------
+   Most newsroom RSS feeds send no CORS header, so a browser can't read them
+   directly. These three public relays are keyless and CORS-open; we try them
+   in order and take the first that answers. Every one is a fallback for the
+   others, and the whole chain is itself a fallback for GDELT/Reddit/HN. */
+const CORS_RELAYS = [
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+];
+const relayHealth = {};   /* relay index -> consecutive failures, so we stop leaning on a dead one */
+async function viaRelay(url, ms){
+  const order = CORS_RELAYS.map((f,i)=>i).sort((a,b)=>(relayHealth[a]||0)-(relayHealth[b]||0));
+  for(const i of order){
+    try{
+      const res = await fetch(CORS_RELAYS[i](url), {signal: timeoutSignal(ms||10000)});
+      if(!res.ok){ relayHealth[i] = (relayHealth[i]||0)+1; continue; }
+      const txt = await res.text();
+      if(txt && txt.length > 180){ relayHealth[i] = 0; return txt; }
+      relayHealth[i] = (relayHealth[i]||0)+1;
+    }catch(e){ relayHealth[i] = (relayHealth[i]||0)+1; }
+  }
+  return null;
+}
+/* RSS/Atom -> plain items. Deliberately tolerant: newsroom feeds are messy. */
+function parseFeedXml(xml, srcName){
+  let doc;
+  try{ doc = new DOMParser().parseFromString(xml, "text/xml"); }catch(e){ return []; }
+  if(!doc || doc.getElementsByTagName("parsererror").length) return [];
+  const nodes = [...doc.getElementsByTagName("item"), ...doc.getElementsByTagName("entry")];
+  const pick = (n, tag) => { const e = n.getElementsByTagName(tag)[0]; return e ? (e.textContent||"").trim() : ""; };
+  return nodes.map(n=>{
+    const title = deEntity(pick(n,"title")).replace(/\s+/g," ").trim();
+    const when = pick(n,"pubDate") || pick(n,"published") || pick(n,"updated") || pick(n,"dc:date") || pick(n,"date");
+    let link = pick(n,"link");
+    if(!link){ const a = n.getElementsByTagName("link")[0]; link = a ? a.getAttribute("href") : ""; }
+    const t = when ? Date.parse(when) : NaN;
+    return { title, t: isNaN(t) ? null : t, url: link || null, src: srcName };
+  }).filter(x=>x.title);
+}
+/* extra newsroom wires — each is independent, so one dead feed costs nothing */
+const RSS_WIRES = [
+  { name:"BBC",      src:"bbc.co.uk",       url:"https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { name:"AJE",      src:"aljazeera.com",   url:"https://www.aljazeera.com/xml/rss/all.xml" },
+  { name:"NPR",      src:"npr.org",         url:"https://feeds.npr.org/1001/rss.xml" },
+  { name:"DW",       src:"dw.com",          url:"https://rss.dw.com/rdf/rss-en-world" },
+  { name:"France24", src:"france24.com",    url:"https://www.france24.com/en/rss" },
+  { name:"Sky",      src:"news.sky.com",    url:"https://feeds.skynews.com/feeds/rss/world.xml" },
+];
+async function fetchWires(){
+  const results = await Promise.all(RSS_WIRES.map(async w=>{
+    try{
+      const xml = await viaRelay(w.url, 11000);
+      if(!xml) return null;
+      const items = parseFeedXml(xml, w.src).filter(i=>i.t);
+      return items.length ? items : null;
+    }catch(e){ return null; }
+  }));
+  const merged = results.filter(Boolean).flat();
+  return merged.length ? merged : null;
+}
+
 const SUB_HINT = { worldnews:"WORLD", news:"WORLD", business:"MARKETS", technology:"TECH", sports:"SPORTS", science:"SCIENCE" };
 async function fetchReddit(){
   try{
@@ -1123,13 +1451,16 @@ function setSrcMode(mode){
 let wirePaused = false;
 async function refreshNews(initial){
   if(wirePaused && !initial) return;
-  /* all live sources in parallel — more outlets means better corroboration */
-  const [g, r, h] = await Promise.all([fetchGdelt(), fetchReddit(), fetchHN()]);
+  /* Every source runs in parallel and every one is optional. More outlets
+     means better corroboration when they agree — and, more importantly, it
+     takes all of them failing at once before the wire goes dark. */
+  const [g, r, h, w] = await Promise.all([fetchGdelt(), fetchReddit(), fetchHN(), fetchWires()]);
   const got = [];
   let batch = [];
   if(g && g.length){ got.push("GDELT"); batch = batch.concat(g); }
   if(r && r.length){ got.push("Reddit"); batch = batch.concat(r); }
   if(h && h.length){ got.push("HN"); batch = batch.concat(h); }
+  if(w && w.length){ got.push("Newsrooms"); batch = batch.concat(w); }
   let fresh = null;
   if(got.length){
     if(srcMode === "sim") purgeSimItems();
@@ -1288,6 +1619,1104 @@ function renderFeed(newId){
 }
 setInterval(()=>onFeedChanged(), 20000);
 setInterval(()=>refreshNews(false), 120000);
+
+/* ================================================================
+   THE DESK — self-contained boards.
+
+   Design rule for everything below: the *chrome* never depends on the
+   network. Both maps are drawn from geometry compiled into this file, so
+   they render with zero external requests — no tile server to be blocked,
+   no API key to expire, no "map failed to load" grey box. Only the DATA
+   layered on top is live, and when that can't be fetched the board says so
+   instead of drawing something plausible.
+   ================================================================ */
+
+/* --- land masks: run-length-encoded bitmaps, base-16 runs starting with sea.
+   1269 chars for the world, 466 for the continental US. */
+const WORLD_MASK = "39,e,90,10,8f,11,33,e,4f,10,2d,23,40,10,26,33,8,9,7,e,11,10,12,5,7,3b,7,a,7,10,f,e,11,6,4,40,5,d,5,13,d,c,2,5,b,6,4,41,6,c,4,15,d,9,4,5,a,6,1,41,a,c,3,19,c,5,13,7,1,3f,e,b,2,1e,20,40,23,1f,1e,3d,26,21,18,2,4,3a,28,22,14,4,4,38,2b,21,14,1,1,3,2,34,31,20,16,2,1,30,37,20,16,14,1,16,2,b,33,1d,18,5,2,c,5,c,5,11,31,1b,1b,4,3,8,a,6,5,16,30,19,1a,3,1,2,13,c,1,17,5,2,29,18,1b,5,c,3,4,d,2,14,7,1,2a,17,1c,4,c,14,4,12,7,2,2b,15,1d,4,e,e,9,11,2,1,4,1,2c,15,1e,8,20,11,2,1,3,1,2e,13,1f,a,1f,10,5,2,2f,11,1f,c,1f,e,3c,b,1f,13,1b,c,3e,5,3,1,1f,16,4,1,b,4,5,a,40,2,24,18,2,4,7,9,2,a,65,20,5,15,66,21,5,9,2,5,1,2,4a,3,1a,21,5,8,4,5,45,2,21,21,7,6,6,4,46,4,1e,20,8,6,6,5,46,5,1c,19,1,5,a,4,8,4,4,1,44,3,1c,19,1,3,b,3,9,3,5,1,44,3,1c,1e,a,2,b,1,6,2,44,2,3,2,18,1c,c,1,13,1,47,5,18,1b,d,1,12,2,46,6,19,19,20,1,46,9,1c,13,15,1,52,a,1c,11,68,d,1b,f,18,1,5,3,49,e,19,e,1a,1,4,3,4a,f,18,d,1b,1,3,3,6,3,42,f,17,d,1c,1,c,4,40,11,15,d,1d,1,d,4,3e,11,16,c,2c,3,3f,10,16,c,6e,10,16,b,28,6,41,f,17,b,2,2,23,8,41,e,16,b,3,3,21,9,41,e,16,b,3,3,20,b,40,d,18,a,4,2,1e,d,40,c,19,9,5,1,1e,f,3f,b,1a,9,5,1,1e,f,3f,a,1b,9,24,10,3e,9,1d,7,25,11,3d,8,1e,7,25,11,3d,7,1f,6,26,11,3d,6,21,4,27,5,2,9,3d,6,4e,1,8,6,9,1,33,5,5a,4,9,2,32,4,5c,1,b,3,31,4,68,2,32,4,68,1,33,3,68,1,33,4,67,2,33,4,9c,3,9d,3,9e,2,1ae";
+const US_MASK = "85,44,40,49,3c,4e,37,51,34,50,35,50,2b,1,8,50,2a,3,6,52,27,5,6,57,20,7,6,5a,1c,8,6,5b,12,12,4,5c,11,12,5,5c,10,10,8,5c,e,10,9,5d,8,14,b,5e,5,15,c,5e,3,18,b,5e,1,1b,a,79,b,75,f,74,f,74,10,72,13,71,14,6f,16,6e,16,6d,18,6c,19,6a,1a,6a,1b,69,1c,67,1d,67,1e,66,1e,65,20,63,22,61,26,5d,28,5a,2b,58,2d,56,37,4c,3a,49,3e,8,3,3a,4b,38,4c,38,4d,26,2,10,4d,25,6,3,2,7,4d,2,5,11,4,9,c,6,55,f,c,1,e,5,56,c,1e,4,57,9,20,5,56,8,22,4,57,7,23,3,58,6,23,3,59,5,24,2,5b,3,25,1,83,1,1ab";
+/* geometry of each grid: cells, and the lon/lat window they cover */
+const WORLD_GEO = { w:160, h:74, lon0:-180, lon1:180, lat0:80, lat1:-58 };
+const US_GEO    = { w:132, h:62, lon0:-125, lon1:-66.5, lat0:49.5, lat1:24.4 };
+
+function decodeMask(rle, geo){
+  const cells = [];
+  let idx = 0, land = false;
+  for(const chunk of rle.split(",")){
+    const n = parseInt(chunk, 16);
+    if(land) for(let k=0;k<n;k++){ const p = idx+k; cells.push([p % geo.w, Math.floor(p / geo.w)]); }
+    idx += n; land = !land;
+  }
+  return cells;
+}
+/* equirectangular: the only projection where "guaranteed to render" and
+   "trivially invertible for click targets" are both free. */
+function project(geo, lon, lat){
+  return {
+    x: (lon - geo.lon0) / (geo.lon1 - geo.lon0) * (geo.w * 2),
+    y: (geo.lat0 - lat) / (geo.lat0 - geo.lat1) * (geo.h * 2),
+  };
+}
+function baseMapSvg(mask, geo, cls){
+  const cells = decodeMask(mask, geo);
+  const dots = cells.map(([cx,cy]) => `${(cx*2+1).toFixed(0)},${(cy*2+1).toFixed(0)}`);
+  /* one <path> of tiny dashes beats thousands of <circle> nodes for paint cost */
+  const d = dots.map(p=>{ const [x,y] = p.split(","); return `M${x} ${y}h.05`; }).join("");
+  return `<svg viewBox="0 0 ${geo.w*2} ${geo.h*2}" preserveAspectRatio="xMidYMid meet" role="img">
+    <path d="${d}" class="mapdot ${cls||""}" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" fill="none"/>
+    <g id="${cls||"mk"}-layer"></g>
+  </svg>`;
+}
+/* Nearest-marker picking.
+
+   At world scale Gaza and Beirut sit ~2.7 units apart on a 320-unit map, so
+   any hit target big enough to tap on a phone overlaps its neighbours — and
+   with plain <circle> hit areas whichever happened to paint last would win,
+   which is not the one you aimed at. So: translate the click into viewBox
+   space and pick the genuinely closest marker instead. Same maths for mouse
+   and touch, and it doesn't care about paint order or animated radii. */
+function installMapPicker(host, attr, onPick){
+  const pick = (clientX, clientY) => {
+    const svg = host.querySelector("svg");
+    if(!svg) return;
+    const box = svg.getBoundingClientRect();
+    const vb = svg.viewBox.baseVal;
+    /* preserveAspectRatio="xMidYMid meet" -> uniform scale, centred letterbox */
+    const scale = Math.min(box.width / vb.width, box.height / vb.height);
+    const x = (clientX - box.left - (box.width  - vb.width  * scale) / 2) / scale;
+    const y = (clientY - box.top  - (box.height - vb.height * scale) / 2) / scale;
+    let best = null, bd = Infinity;
+    for(const g of host.querySelectorAll(".mk")){
+      const c = g.querySelector(".core");
+      if(!c) continue;
+      const dx = +c.getAttribute("cx") - x, dy = +c.getAttribute("cy") - y;
+      const d = dx*dx + dy*dy;
+      if(d < bd){ bd = d; best = g; }
+    }
+    /* generous but finite: ~9 viewBox units, so a miss stays a miss */
+    if(best && bd <= 81) onPick(best.getAttribute(attr));
+  };
+  host.addEventListener("click", e=>{ e.preventDefault(); pick(e.clientX, e.clientY); });
+  host.addEventListener("keydown", e=>{
+    if(e.key !== "Enter" && e.key !== " ") return;
+    const g = e.target.closest(".mk");
+    if(!g) return;
+    e.preventDefault();
+    onPick(g.getAttribute(attr));
+  });
+}
+
+/* --- gazetteer: enough of the world to place a headline without a geocoding
+   API. Longest name wins, so "South Korea" never matches as "Korea". */
+const PLACES = {
+  "ukraine":[49.0,32.0],"kyiv":[50.45,30.52],"kiev":[50.45,30.52],"kharkiv":[49.99,36.23],"odesa":[46.48,30.73],
+  "donetsk":[48.0,37.8],"crimea":[45.3,34.4],"zaporizhzhia":[47.84,35.14],"lviv":[49.84,24.03],
+  "russia":[55.75,37.62],"moscow":[55.75,37.62],"st petersburg":[59.93,30.34],"belgorod":[50.6,36.6],
+  "belarus":[53.9,27.57],"poland":[52.23,21.01],"warsaw":[52.23,21.01],"lithuania":[54.69,25.28],
+  "latvia":[56.95,24.11],"estonia":[59.44,24.75],"finland":[60.17,24.94],"sweden":[59.33,18.07],
+  "norway":[59.91,10.75],"denmark":[55.68,12.57],"germany":[52.52,13.4],"berlin":[52.52,13.4],
+  "france":[48.86,2.35],"paris":[48.86,2.35],"united kingdom":[51.51,-0.13],"britain":[51.51,-0.13],
+  "london":[51.51,-0.13],"ireland":[53.35,-6.26],"spain":[40.42,-3.7],"madrid":[40.42,-3.7],
+  "portugal":[38.72,-9.14],"italy":[41.9,12.5],"rome":[41.9,12.5],"greece":[37.98,23.73],"athens":[37.98,23.73],
+  "netherlands":[52.37,4.9],"belgium":[50.85,4.35],"switzerland":[46.95,7.45],"austria":[48.21,16.37],
+  "hungary":[47.5,19.04],"romania":[44.43,26.1],"bulgaria":[42.7,23.32],"serbia":[44.79,20.45],
+  "croatia":[45.81,15.98],"bosnia":[43.86,18.41],"kosovo":[42.67,21.17],"albania":[41.33,19.82],
+  "moldova":[47.01,28.86],"slovakia":[48.15,17.11],"czech":[50.08,14.44],"prague":[50.08,14.44],
+  "israel":[31.78,35.22],"jerusalem":[31.78,35.22],"tel aviv":[32.09,34.78],"gaza":[31.5,34.47],
+  "west bank":[31.95,35.23],"rafah":[31.29,34.26],"khan younis":[31.34,34.3],
+  "lebanon":[33.89,35.5],"beirut":[33.89,35.5],"syria":[33.51,36.28],"damascus":[33.51,36.28],
+  "aleppo":[36.2,37.13],"idlib":[35.93,36.63],"jordan":[31.95,35.93],"amman":[31.95,35.93],
+  "iraq":[33.31,44.36],"baghdad":[33.31,44.36],"mosul":[36.34,43.13],"erbil":[36.19,44.01],
+  "iran":[35.69,51.39],"tehran":[35.69,51.39],"isfahan":[32.65,51.67],
+  "saudi arabia":[24.71,46.68],"riyadh":[24.71,46.68],"jeddah":[21.49,39.19],"mecca":[21.42,39.83],
+  "yemen":[15.35,44.21],"sanaa":[15.35,44.21],"aden":[12.79,45.04],"red sea":[19.5,38.5],
+  "oman":[23.59,58.41],"qatar":[25.29,51.53],"doha":[25.29,51.53],"kuwait":[29.38,47.99],
+  "bahrain":[26.23,50.59],"united arab emirates":[24.45,54.38],"dubai":[25.2,55.27],"abu dhabi":[24.45,54.38],
+  "turkey":[39.93,32.86],"turkiye":[39.93,32.86],"ankara":[39.93,32.86],"istanbul":[41.01,28.98],
+  "egypt":[30.04,31.24],"cairo":[30.04,31.24],"suez":[29.97,32.55],"sinai":[29.5,33.8],
+  "libya":[32.89,13.19],"tripoli":[32.89,13.19],"tunisia":[36.81,10.18],"algeria":[36.75,3.06],
+  "morocco":[33.97,-6.85],"western sahara":[24.2,-13.0],"mauritania":[18.08,-15.98],
+  "sudan":[15.5,32.56],"khartoum":[15.5,32.56],"darfur":[13.45,25.35],"el fasher":[13.63,25.35],
+  "south sudan":[4.85,31.58],"ethiopia":[9.03,38.74],"addis ababa":[9.03,38.74],"tigray":[14.0,38.3],
+  "eritrea":[15.32,38.93],"somalia":[2.04,45.34],"mogadishu":[2.04,45.34],"djibouti":[11.59,43.15],
+  "kenya":[-1.29,36.82],"nairobi":[-1.29,36.82],"uganda":[0.35,32.58],"tanzania":[-6.79,39.21],
+  "rwanda":[-1.94,30.06],"burundi":[-3.38,29.36],"congo":[-4.32,15.31],"drc":[-4.32,15.31],
+  "goma":[-1.68,29.23],"kinshasa":[-4.32,15.31],"nigeria":[9.06,7.49],"abuja":[9.06,7.49],"lagos":[6.52,3.38],
+  "niger":[13.51,2.11],"mali":[12.64,-8.0],"burkina faso":[12.37,-1.52],"chad":[12.13,15.06],
+  "cameroon":[3.85,11.5],"ghana":[5.6,-0.19],"senegal":[14.72,-17.47],"ivory coast":[5.36,-4.01],
+  "sierra leone":[8.48,-13.23],"liberia":[6.3,-10.8],"guinea":[9.64,-13.58],
+  "south africa":[-25.75,28.19],"johannesburg":[-26.2,28.05],"zimbabwe":[-17.83,31.05],
+  "mozambique":[-25.97,32.58],"zambia":[-15.42,28.28],"angola":[-8.84,13.23],"namibia":[-22.56,17.08],
+  "madagascar":[-18.88,47.51],"botswana":[-24.65,25.91],"malawi":[-13.97,33.79],
+  "china":[39.9,116.4],"beijing":[39.9,116.4],"shanghai":[31.23,121.47],"hong kong":[22.32,114.17],
+  "xinjiang":[43.8,87.6],"tibet":[29.65,91.1],"taiwan":[25.03,121.57],"taipei":[25.03,121.57],
+  "taiwan strait":[24.5,119.5],"south china sea":[13.0,114.0],
+  "japan":[35.68,139.69],"tokyo":[35.68,139.69],"okinawa":[26.34,127.8],
+  "south korea":[37.57,126.98],"seoul":[37.57,126.98],"north korea":[39.02,125.75],"pyongyang":[39.02,125.75],
+  "india":[28.61,77.21],"new delhi":[28.61,77.21],"delhi":[28.61,77.21],"mumbai":[19.08,72.88],
+  "kashmir":[34.08,74.8],"pakistan":[33.69,73.06],"islamabad":[33.69,73.06],"karachi":[24.86,67.01],
+  "afghanistan":[34.53,69.17],"kabul":[34.53,69.17],"kandahar":[31.62,65.72],
+  "bangladesh":[23.81,90.41],"dhaka":[23.81,90.41],"sri lanka":[6.93,79.86],"nepal":[27.72,85.32],
+  "myanmar":[16.87,96.2],"burma":[16.87,96.2],"yangon":[16.87,96.2],"rakhine":[20.15,93.0],
+  "thailand":[13.76,100.5],"bangkok":[13.76,100.5],"cambodia":[11.56,104.92],"laos":[17.97,102.6],
+  "vietnam":[21.03,105.85],"hanoi":[21.03,105.85],"malaysia":[3.14,101.69],"singapore":[1.35,103.82],
+  "indonesia":[-6.21,106.85],"jakarta":[-6.21,106.85],"philippines":[14.6,120.98],"manila":[14.6,120.98],
+  "kazakhstan":[51.17,71.43],"uzbekistan":[41.3,69.24],"kyrgyzstan":[42.87,74.59],
+  "tajikistan":[38.56,68.79],"turkmenistan":[37.95,58.38],"mongolia":[47.89,106.91],
+  "armenia":[40.18,44.51],"azerbaijan":[40.41,49.87],"nagorno-karabakh":[39.82,46.75],"georgia country":[41.72,44.78],
+  "tbilisi":[41.72,44.78],"caucasus":[42.5,44.0],
+  "united states":[38.9,-77.04],"washington":[38.9,-77.04],"new york":[40.71,-74.01],
+  "los angeles":[34.05,-118.24],"chicago":[41.88,-87.63],"texas":[31.0,-99.0],"florida":[28.0,-82.0],
+  "california":[37.0,-120.0],"pentagon":[38.87,-77.06],"white house":[38.9,-77.04],
+  "canada":[45.42,-75.7],"ottawa":[45.42,-75.7],"toronto":[43.65,-79.38],
+  "mexico":[19.43,-99.13],"mexico city":[19.43,-99.13],"guatemala":[14.63,-90.51],
+  "honduras":[14.07,-87.19],"el salvador":[13.69,-89.19],"nicaragua":[12.11,-86.24],
+  "panama":[8.98,-79.52],"costa rica":[9.93,-84.09],"cuba":[23.11,-82.37],"havana":[23.11,-82.37],
+  "haiti":[18.59,-72.31],"port-au-prince":[18.59,-72.31],"dominican republic":[18.49,-69.93],
+  "jamaica":[18.01,-76.79],"colombia":[4.71,-74.07],"bogota":[4.71,-74.07],
+  "venezuela":[10.48,-66.9],"caracas":[10.48,-66.9],"ecuador":[-0.18,-78.47],"peru":[-12.05,-77.04],
+  "bolivia":[-16.5,-68.15],"chile":[-33.45,-70.67],"argentina":[-34.6,-58.38],"buenos aires":[-34.6,-58.38],
+  "brazil":[-15.79,-47.88],"brasilia":[-15.79,-47.88],"sao paulo":[-23.55,-46.63],"uruguay":[-34.9,-56.16],
+  "paraguay":[-25.26,-57.58],"guyana":[6.8,-58.16],"suriname":[5.85,-55.2],
+  "australia":[-35.28,149.13],"sydney":[-33.87,151.21],"new zealand":[-41.29,174.78],
+  "papua new guinea":[-9.44,147.18],"fiji":[-18.14,178.44],"solomon islands":[-9.43,159.95],
+  "arctic":[75.0,0.0],"antarctica":[-75.0,0.0],"black sea":[43.5,34.0],"baltic sea":[57.0,19.0],
+  "mediterranean":[35.0,18.0],"persian gulf":[26.5,51.5],"strait of hormuz":[26.6,56.5],
+  "gulf of aden":[12.5,47.0],"sahel":[15.0,0.0],"balkans":[43.0,20.0],
+};
+/* Countries, regions and seas — everything else in the gazetteer is a city or
+   a specific locality. A headline naming both gets pinned to the specific one:
+   "Sudan clashes reach El Fasher" belongs on El Fasher, not 1,000km away on
+   Khartoum. */
+const BROAD = new Set(["ukraine","russia","belarus","poland","lithuania","latvia","estonia","finland","sweden",
+"norway","denmark","germany","france","united kingdom","britain","ireland","spain","portugal","italy","greece",
+"netherlands","belgium","switzerland","austria","hungary","romania","bulgaria","serbia","croatia","bosnia",
+"kosovo","albania","moldova","slovakia","czech","israel","lebanon","syria","jordan","iraq","iran","saudi arabia",
+"yemen","oman","qatar","kuwait","bahrain","united arab emirates","turkey","turkiye","egypt","libya","tunisia",
+"algeria","morocco","western sahara","mauritania","sudan","south sudan","ethiopia","eritrea","somalia","djibouti",
+"kenya","uganda","tanzania","rwanda","burundi","congo","drc","nigeria","niger","mali","burkina faso","chad",
+"cameroon","ghana","senegal","ivory coast","sierra leone","liberia","guinea","south africa","zimbabwe",
+"mozambique","zambia","angola","namibia","madagascar","botswana","malawi","china","xinjiang","tibet","taiwan",
+"japan","south korea","north korea","india","kashmir","pakistan","afghanistan","bangladesh","sri lanka","nepal",
+"myanmar","burma","rakhine","thailand","cambodia","laos","vietnam","malaysia","singapore","indonesia",
+"philippines","kazakhstan","uzbekistan","kyrgyzstan","tajikistan","turkmenistan","mongolia","armenia",
+"azerbaijan","nagorno-karabakh","georgia country","caucasus","united states","texas","florida","california",
+"canada","mexico","guatemala","honduras","el salvador","nicaragua","panama","costa rica","cuba","haiti",
+"dominican republic","jamaica","colombia","venezuela","ecuador","peru","bolivia","chile","argentina","brazil",
+"uruguay","paraguay","guyana","suriname","australia","new zealand","papua new guinea","fiji","solomon islands",
+"arctic","antarctica","black sea","baltic sea","mediterranean","persian gulf","strait of hormuz","gulf of aden",
+"sahel","balkans","sinai","red sea","south china sea","taiwan strait","darfur","tigray","west bank","crimea",
+"donetsk"]);
+/* Longest first so a scan finds "south korea" before "korea" at the same spot. */
+const PLACE_KEYS = Object.keys(PLACES).sort((a,b)=>b.length-a.length);
+const PLACE_RE = new Map(PLACE_KEYS.map(k=>[k, new RegExp("\\b"+k.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i")]));
+/* Ranking, in order:
+     1. a specific locality beats a country  — El Fasher over Sudan
+     2. earlier in the headline beats later   — "Strikes on Gaza … talks in Cairo"
+     3. longer name beats shorter at the same position — "south korea" over "korea"
+   Longest-first alone was wrong: it picked whichever place happened to have
+   the longer name, not the one the story is about. */
+function placeOf(text){
+  let best = null;
+  for(const k of PLACE_KEYS){
+    /* "Georgia" is both a US state and a country; the country entry is opt-in
+       so a Senate story never lands in the Caucasus. */
+    if(k === "georgia country") continue;
+    const m = PLACE_RE.get(k).exec(text);
+    if(!m) continue;
+    const cand = { key:k, ll:PLACES[k], at:m.index, broad:BROAD.has(k), len:k.length };
+    if(!best) { best = cand; continue; }
+    if(cand.broad !== best.broad){ if(!cand.broad) best = cand; continue; }
+    if(cand.at !== best.at){ if(cand.at < best.at) best = cand; continue; }
+    if(cand.len > best.len) best = cand;
+  }
+  return best;
+}
+
+/* --- conflict classification ------------------------------------------- */
+/* Plural trap: `\bair ?strike\b` does NOT match "air strikes" — the \b after
+   the group fails against the following "s". Every noun here therefore takes
+   an explicit `s?` or a `\w*` tail. This bit us once already on the
+   naive-Bayes router ("market" vs "markets"); it is the single easiest way to
+   write a regex that silently matches nothing. */
+const WAR_KIND = [
+  ["strike",   /\b(air ?strikes?|airstrikes?|missiles?|drones?|shelling|bombard\w*|artiller\w*|offensives?|incursions?|invasions?|troops?|soldiers?|militar\w*|warplanes?|combat|front ?lines?|battalions?|casualt\w*|killed in|war\b|wars\b|warfare|fighting|clashes?|militants?|insurgent\w*|rebels?|junta|sieges?|occupied|paramilitar\w*)\b/i],
+  ["unrest",   /\b(protest\w*|riot\w*|unrest|crackdowns?|coups?|martial law|curfews?|state of emergency|detain\w*|arrest\w*|police|security forces|borders?|migrant\w*|refugee\w*|displace\w*|evacuat\w*|hostages?|kidnap\w*|terror\w*|bomb\w*|shootings?|explosions?|blasts?|unrest)\b/i],
+  ["talks",    /\b(talks?|negotiat\w*|summits?|diplomat\w*|envoys?|delegations?|treaty|treaties|accords?|resolutions?|sanction\w*|embass(?:y|ies)|ambassadors?|un security council|nato|foreign ministers?|peace plans?)\b/i],
+  ["relief",   /\b(ceasefires?|truces?|aid|humanitarian|convoys?|corridors?|relief|hostages? released|prisoner (?:swaps?|exchanges?)|withdraw\w*|peace deals?|de-?escalat\w*)\b/i],
+];
+const WAR_COLOR = { strike:"#ff3b47", unrest:"#ffb454", talks:"#8ab4ff", relief:"#3ddc84" };
+const WAR_LABEL = { strike:"ARMED CONFLICT", unrest:"UNREST / SECURITY", talks:"DIPLOMACY", relief:"AID / CEASEFIRE" };
+function warKind(text){
+  /* relief and talks are checked last so "ceasefire talks collapse as strikes
+     resume" lands under strike, which is what a desk editor would do. */
+  for(const [k,re] of WAR_KIND) if(re.test(text)) return k;
+  return null;
+}
+/* Build the plotted set: every wire story that is both conflict-shaped AND
+   placeable. Stories we can't place are counted, not faked onto the map. */
+function warPoints(){
+  const pts = new Map();
+  let unplaced = 0;
+  for(const it of FEED){
+    const kind = warKind(it.text);
+    if(!kind) continue;
+    const p = placeOf(it.text);
+    if(!p){ unplaced++; continue; }
+    const key = p.key;
+    const cur = pts.get(key) || { key, ll:p.ll, items:[], kinds:{} };
+    cur.items.push(it);
+    cur.kinds[kind] = (cur.kinds[kind]||0)+1;
+    pts.set(key, cur);
+  }
+  for(const p of pts.values()){
+    p.items.sort(wireOrder);
+    p.kind = Object.keys(p.kinds).sort((a,b)=>p.kinds[b]-p.kinds[a])[0];
+    p.sim = p.items.every(isSim);
+    p.sources = new Set(p.items.flatMap(i=>i.sources||[])).size;
+    p.hot = p.items.some(i=>i.sev === "BREAKING");
+  }
+  return { pts:[...pts.values()].sort((a,b)=>b.items.length-a.items.length), unplaced };
+}
+let warSelected = null;
+function renderWarMap(){
+  const host = $("#warMap");
+  if(!host) return;
+  if(!host.dataset.base){ host.innerHTML = baseMapSvg(WORLD_MASK, WORLD_GEO, "world"); host.dataset.base = "1"; }
+  const layer = host.querySelector("#world-layer");
+  const { pts, unplaced } = warPoints();
+  const geo = WORLD_GEO;
+  /* biggest first, so a busy zone is painted under its quieter neighbours
+     rather than covering them */
+  /* Greedy label de-confliction: at world scale Gaza and Beirut are ~3 units
+     apart, so their labels would print on top of each other. Busiest zone
+     wins the space; anything that would collide goes unlabelled (the marker
+     and the side list still identify it). */
+  const placed = [];
+  layer.innerHTML = pts.slice().sort((a,b)=>b.items.length-a.items.length).map(p=>{
+    const { x, y } = project(geo, p.ll[1], p.ll[0]);
+    const clear = !placed.some(q => Math.abs(q.x-x) < 26 && Math.abs(q.y-y) < 6);
+    if(clear) placed.push({ x, y });
+    const n = p.items.length;
+    const r = Math.min(5.2, 1.9 + Math.sqrt(n) * 0.95);
+    const col = p.sim ? "#ffb454" : WAR_COLOR[p.kind];
+    const ring = p.sources > 1 ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r+2.2).toFixed(1)}" fill="none" stroke="${col}" stroke-opacity=".45" stroke-width=".7"/>` : "";
+    const pulse = (p.hot && !p.sim) ? `<circle class="pulse" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2" fill="none" stroke="${col}" stroke-width=".9"/>` : "";
+    const sel = warSelected === p.key ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r+4.5).toFixed(1)}" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width=".6"/>` : "";
+    return `<g class="mk" data-p="${esc(p.key)}" tabindex="0" role="button" aria-label="${esc(p.key)}: ${n} stories">
+      ${pulse}${ring}${sel}
+      <circle class="core" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="${col}" fill-opacity=".82"/>
+      ${clear?`<text class="mklab" x="${(x+r+2).toFixed(1)}" y="${(y+2).toFixed(1)}">${esc(p.key.toUpperCase().slice(0,16))}</text>`:""}
+    </g>`;
+  }).join("");
+  $("#warCount").textContent = pts.length ? pts.length + " zones" : "—";
+  renderWarList(pts, unplaced);
+}
+function renderWarList(pts, unplaced){
+  const box = $("#warList");
+  const shown = warSelected ? pts.filter(p=>p.key===warSelected) : pts;
+  $("#warListN").textContent = shown.reduce((a,p)=>a+p.items.length,0);
+  if(!pts.length){
+    box.innerHTML = `<div class="bempty">${FEED.length
+      ? "Nothing on the wire this hour reads as conflict or security news.<br>That is genuinely good news, and I'm not going to invent markers to fill the map."
+      : "No stories on the wire yet."}</div>`;
+    return;
+  }
+  box.innerHTML = (warSelected ? `<div class="brow on" data-clear="1"><div class="bm"><span class="btag cool">✕ CLEAR FILTER</span><span class="btag">${esc(warSelected)}</span></div></div>` : "")
+    + shown.map(p=>p.items.slice(0,6).map(it=>{
+      const sim = isSim(it);
+      return `<a class="brow" data-p="${esc(p.key)}" ${it.url?`href="${esc(it.url)}" target="_blank" rel="noopener noreferrer"`:""}>
+        <div class="bm">
+          <span class="btag ${sim?"sim":it.sev==="BREAKING"?"hot":p.kind==="strike"?"hot":p.kind==="unrest"?"warm":"cool"}">${sim?"⚠ SIMULATED":WAR_LABEL[warKind(it.text)]||"SECURITY"}</span>
+          <span class="btag">📍 ${esc(p.key)}</span>
+          ${!sim && (it.sources||[]).length>1?`<span class="btag cool">◈ ${it.sources.length}</span>`:""}
+          <span class="btag">${ago(it.t)}</span>
+        </div>
+        <p>${esc(it.text)}</p>
+        <span class="bs">${sim?"generated locally · not a real event":esc((it.sources||[]).slice(0,2).join(" · ")||it.src||"")}</span>
+      </a>`;
+    }).join("")).join("")
+    + (unplaced ? `<div class="bempty" style="padding:14px">+ ${unplaced} conflict ${unplaced===1?"story":"stories"} on the wire I couldn't tie to a place. They're in the ◉ WIRE panel — I'd rather leave them off the map than guess a location.</div>` : "");
+}
+
+/* --- US state centroids: shared by the camera map and the Senate map ----- */
+const US_STATES = {
+  AL:["Alabama",32.8,-86.8], AK:["Alaska",64.0,-152.0], AZ:["Arizona",34.3,-111.7], AR:["Arkansas",34.9,-92.4],
+  CA:["California",37.2,-119.5], CO:["Colorado",39.0,-105.5], CT:["Connecticut",41.6,-72.7], DE:["Delaware",39.0,-75.5],
+  FL:["Florida",28.6,-82.4], GA:["Georgia",32.6,-83.4], HI:["Hawaii",20.3,-156.4], ID:["Idaho",44.4,-114.6],
+  IL:["Illinois",40.0,-89.2], IN:["Indiana",39.9,-86.3], IA:["Iowa",42.1,-93.5], KS:["Kansas",38.5,-98.4],
+  KY:["Kentucky",37.5,-85.3], LA:["Louisiana",31.1,-92.0], ME:["Maine",45.4,-69.2], MD:["Maryland",39.0,-76.8],
+  MA:["Massachusetts",42.3,-71.8], MI:["Michigan",44.3,-85.4], MN:["Minnesota",46.3,-94.3], MS:["Mississippi",32.7,-89.7],
+  MO:["Missouri",38.4,-92.5], MT:["Montana",47.0,-109.6], NE:["Nebraska",41.5,-99.8], NV:["Nevada",39.3,-116.6],
+  NH:["New Hampshire",43.7,-71.6], NJ:["New Jersey",40.2,-74.7], NM:["New Mexico",34.4,-106.1], NY:["New York",42.9,-75.5],
+  NC:["North Carolina",35.5,-79.4], ND:["North Dakota",47.4,-100.5], OH:["Ohio",40.3,-82.8], OK:["Oklahoma",35.6,-97.5],
+  OR:["Oregon",43.9,-120.6], PA:["Pennsylvania",40.9,-77.8], RI:["Rhode Island",41.7,-71.5], SC:["South Carolina",33.9,-80.9],
+  SD:["South Dakota",44.4,-100.2], TN:["Tennessee",35.8,-86.3], TX:["Texas",31.4,-99.3], UT:["Utah",39.3,-111.7],
+  VT:["Vermont",44.1,-72.7], VA:["Virginia",37.5,-78.8], WA:["Washington",47.4,-120.4], WV:["West Virginia",38.6,-80.6],
+  WI:["Wisconsin",44.6,-89.7], WY:["Wyoming",43.0,-107.5], DC:["District of Columbia",38.9,-77.0],
+};
+/* Bounding boxes [south, west, north, east]. Nearest-centroid alone puts
+   Chicago in Indiana — its centroid is fractionally closer than Illinois's —
+   so resolve by box first and only fall back to centroid distance. Boxes
+   overlap (Michigan's covers half of Lake Michigan), so when several contain
+   the point the nearest centroid among *those* breaks the tie. */
+const STATE_BOX = {
+  AL:[30.14,-88.47,35.01,-84.89], AK:[51.20,-168.0,71.50,-129.0], AZ:[31.33,-114.82,37.00,-109.05],
+  AR:[33.00,-94.62,36.50,-89.64], CA:[32.53,-124.41,42.01,-114.13], CO:[36.99,-109.06,41.00,-102.04],
+  CT:[40.98,-73.73,42.05,-71.79], DE:[38.45,-75.79,39.84,-75.05], FL:[24.52,-87.63,31.00,-80.03],
+  GA:[30.36,-85.61,35.00,-80.84], HI:[18.91,-160.25,22.24,-154.81], ID:[41.99,-117.24,49.00,-111.04],
+  IL:[36.97,-91.51,42.51,-87.02], IN:[37.77,-88.10,41.76,-84.78], IA:[40.38,-96.64,43.50,-90.14],
+  KS:[36.99,-102.05,40.00,-94.59], KY:[36.50,-89.57,39.15,-81.96], LA:[28.93,-94.04,33.02,-88.76],
+  ME:[42.98,-71.08,47.46,-66.95], MD:[37.91,-79.49,39.72,-75.05], MA:[41.24,-73.51,42.89,-69.93],
+  MI:[41.70,-90.42,48.31,-82.41], MN:[43.50,-97.24,49.38,-89.49], MS:[30.17,-91.65,35.00,-88.10],
+  MO:[35.99,-95.77,40.61,-89.10], MT:[44.36,-116.05,49.00,-104.04], NE:[39.99,-104.05,43.00,-95.31],
+  NV:[35.00,-120.01,42.00,-114.04], NH:[42.70,-72.56,45.31,-70.70], NJ:[38.93,-75.56,41.36,-73.89],
+  NM:[31.33,-109.05,37.00,-103.00], NY:[40.50,-79.76,45.02,-71.86], NC:[33.84,-84.32,36.59,-75.46],
+  ND:[45.94,-104.05,49.00,-96.55], OH:[38.40,-84.82,41.98,-80.52], OK:[33.62,-103.00,37.00,-94.43],
+  OR:[41.99,-124.57,46.29,-116.46], PA:[39.72,-80.52,42.27,-74.69], RI:[41.15,-71.86,42.02,-71.12],
+  SC:[32.03,-83.35,35.22,-78.54], SD:[42.48,-104.06,45.95,-96.44], TN:[34.98,-90.31,36.68,-81.65],
+  TX:[25.84,-106.65,36.50,-93.51], UT:[36.99,-114.05,42.00,-109.04], VT:[42.73,-73.44,45.02,-71.47],
+  VA:[36.54,-83.68,39.47,-75.24], WA:[45.54,-124.85,49.00,-116.92], WV:[37.20,-82.64,40.64,-77.72],
+  WI:[42.49,-92.89,47.31,-86.25], WY:[40.99,-111.06,45.01,-104.05], DC:[38.79,-77.12,39.00,-76.91],
+};
+function centroidDist(code, lat, lon){
+  const [, la, lo] = US_STATES[code];
+  return (la-lat)**2 + ((lo-lon)*Math.cos(lat*Math.PI/180))**2;
+}
+function nearestState(lat, lon){
+  const inBox = [];
+  for(const [code,[s,w,n,e]] of Object.entries(STATE_BOX)){
+    if(lat >= s && lat <= n && lon >= w && lon <= e) inBox.push(code);
+  }
+  const pool = inBox.length ? inBox : Object.keys(US_STATES);
+  let best = null, bd = Infinity;
+  for(const code of pool){
+    const d = centroidDist(code, lat, lon);
+    if(d < bd){ bd = d; best = code; }
+  }
+  return best;
+}
+const STATE_BY_NAME = (function(){
+  const m = {};
+  for(const [code,[name]] of Object.entries(US_STATES)){ m[name.toLowerCase()] = code; m[code.toLowerCase()] = code; }
+  return m;
+})();
+/* Prefer what OpenStreetMap actually says over what geometry infers. Boxes
+   plus centroids cannot resolve a camera in downtown Memphis — it is a mile
+   from Arkansas and both boxes contain it — so a real addr:state tag always
+   wins, and anything resolved geometrically is flagged so the UI can say so
+   rather than quietly implying it knows. */
+function stateOf(tags, lat, lon){
+  const t = tags || {};
+  const raw = (t["addr:state"] || t["is_in:state"] || t["state"] || "").trim().toLowerCase();
+  const tagged = STATE_BY_NAME[raw];
+  if(tagged) return { st: tagged, exact: true };
+  return { st: nearestState(lat, lon), exact: false };
+}
+
+/* --- ALPR camera map ----------------------------------------------------
+   Source is OpenStreetMap, where automated licence-plate readers are mapped
+   as public infrastructure (man_made=surveillance + surveillance:type=ALPR)
+   by volunteer surveys and the DeFlock project. Three Overpass mirrors are
+   tried in turn. If all three are unreachable the map stays empty and says
+   so — there is no seeded dataset, because a fabricated camera position is
+   worse than no camera position. */
+const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
+const flockState = { cams:[], loaded:false, loading:false, err:null, at:0, sel:null };
+async function fetchFlock(){
+  if(flockState.loading) return;
+  flockState.loading = true; flockState.err = null;
+  renderFlock();
+  const q = `[out:json][timeout:50];
+node["man_made"="surveillance"]["surveillance:type"~"ALPR",i](24.4,-125.0,49.5,-66.5);
+out body 4000;`;
+  for(const ep of OVERPASS){
+    try{
+      const res = await fetch(ep, {
+        method:"POST",
+        headers:{ "content-type":"application/x-www-form-urlencoded" },
+        body:"data=" + encodeURIComponent(q),
+        signal: timeoutSignal(28000),
+      });
+      if(!res.ok) continue;
+      const data = await res.json();
+      const els = data && data.elements;
+      if(!Array.isArray(els)) continue;
+      flockState.cams = els.filter(e=>typeof e.lat === "number" && typeof e.lon === "number").map(e=>{
+        const tg = e.tags || {};
+        const op = (tg.operator || tg.brand || tg.manufacturer || "").trim();
+        const st = stateOf(tg, e.lat, e.lon);
+        return {
+          id:e.id, lat:e.lat, lon:e.lon, op,
+          flock: /flock/i.test(op),
+          dir: tg.direction || tg["camera:direction"] || "",
+          st: st.st, stExact: st.exact,
+        };
+      });
+      flockState.loaded = true; flockState.at = now(); flockState.loading = false;
+      $("#flockSrc").textContent = "source: OpenStreetMap contributors (ODbL) · " + new URL(ep).hostname;
+      renderFlock();
+      return;
+    }catch(e){ flockState.err = String((e && e.message) || e); }
+  }
+  flockState.loading = false; flockState.loaded = false;
+  renderFlock();
+}
+function renderFlock(){
+  const host = $("#flockMap");
+  if(!host) return;
+  if(!host.dataset.base){ host.innerHTML = baseMapSvg(US_MASK, US_GEO, "us"); host.dataset.base = "1"; }
+  const layer = host.querySelector("#us-layer");
+  const cams = flockState.cams;
+  const geo = US_GEO;
+  layer.innerHTML = cams.map(c=>{
+    const { x, y } = project(geo, c.lon, c.lat);
+    if(x < -4 || y < -4 || x > geo.w*2+4 || y > geo.h*2+4) return "";
+    const col = c.flock ? "#ff3b47" : c.op ? "#ffb454" : "#8ab4ff";
+    const on = flockState.sel && flockState.sel === c.st;
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${on?1.6:1.1}" fill="${col}" fill-opacity="${on?".95":".62"}"/>`;
+  }).join("");
+
+  const n = cams.length;
+  $("#flockCount").textContent = flockState.loading ? "loading…" : flockState.loaded ? n.toLocaleString() + " cameras" : "—";
+  const byState = {};
+  for(const c of cams){
+    const s = byState[c.st] = byState[c.st] || { n:0, flock:0, exact:0 };
+    s.n++; if(c.flock) s.flock++; if(c.stExact) s.exact++;
+  }
+  const states = Object.entries(byState).sort((a,b)=>b[1].n-a[1].n);
+  $("#flockAreaN").textContent = states.length;
+  $("#flockStats").innerHTML = flockState.loaded ? `
+    <div class="bstat"><b>${n.toLocaleString()}</b><span>MAPPED</span></div>
+    <div class="bstat"><b>${cams.filter(c=>c.flock).length.toLocaleString()}</b><span>FLOCK</span></div>
+    <div class="bstat"><b>${states.length}</b><span>STATES</span></div>` : "";
+  const list = $("#flockList");
+  if(flockState.loading){ list.innerHTML = `<div class="bempty">Querying OpenStreetMap…<br>This is a big bounding box; give it a moment.</div>`; return; }
+  if(!flockState.loaded){
+    list.innerHTML = `<div class="bempty">Couldn't reach OpenStreetMap.<br>All three Overpass mirrors failed${flockState.err?` (<code>${esc(flockState.err.slice(0,60))}</code>)`:""}.<br><br><b>The map is empty on purpose.</b> I'm not going to draw invented camera positions to make this board look populated.<br><br><button class="wpb" id="flockRetry" style="margin-top:10px">↻ Try again</button></div>`;
+    return;
+  }
+  if(!n){ list.innerHTML = `<div class="bempty">OpenStreetMap answered, but has no ALPR cameras mapped in this box right now.</div>`; return; }
+  list.innerHTML = states.slice(0,60).map(([st,s])=>`
+    <div class="brow ${flockState.sel===st?"on":""}" data-st="${st}">
+      <div class="bm">
+        <span class="btag ${s.flock?"hot":"cool"}">${st}</span>
+        <span class="btag">${s.n.toLocaleString()} camera${s.n===1?"":"s"}</span>
+        ${s.flock?`<span class="btag warm">${s.flock.toLocaleString()} Flock</span>`:""}
+        ${s.exact < s.n ? `<span class="btag" title="${s.n-s.exact} of these have no addr:state tag in OpenStreetMap, so the state was inferred from coordinates. Near a border that can be off by one state — the map pin is exact either way.">~ ${s.n-s.exact} inferred</span>` : ""}
+      </div>
+      <p>${esc(US_STATES[st] ? US_STATES[st][0] : st)}</p>
+    </div>`).join("");
+}
+
+/* ================================================================
+   PRAYER TIMES — Tema İstanbul / Başakşehir.
+
+   Computed from solar geometry in the browser. No API, no network, no key:
+   this board works with the wire down, the relays blocked and the machine
+   offline, which for a prayer reminder is the only acceptable design.
+   Method: Diyanet İşleri Başkanlığı — Fajr 18°, Isha 17°, Asr shadow 1.
+   ================================================================ */
+const QIBLA = [21.4225, 39.8262];                 /* Kaaba */
+const PRAYER_LOC = { lat:41.0958, lon:28.7756, tz:3, name:"Tema İstanbul · Başakşehir" };
+const D2R = Math.PI/180, R2D = 180/Math.PI;
+const dsin = d=>Math.sin(d*D2R), dcos = d=>Math.cos(d*D2R), dtan = d=>Math.tan(d*D2R);
+const dasin = x=>Math.asin(x)*R2D, dacos = x=>Math.acos(x)*R2D;
+const datan2 = (y,x)=>Math.atan2(y,x)*R2D, dacot = x=>Math.atan(1/x)*R2D;
+const fixAng = a=>((a%360)+360)%360;
+const fixHr  = h=>((h%24)+24)%24;
+
+function julian(y,m,d){
+  if(m <= 2){ y -= 1; m += 12; }
+  const a = Math.floor(y/100), b = 2 - a + Math.floor(a/4);
+  return Math.floor(365.25*(y+4716)) + Math.floor(30.6001*(m+1)) + d + b - 1524.5;
+}
+function sunPos(jd){
+  const D = jd - 2451545.0;
+  const g = fixAng(357.529 + 0.98560028*D);
+  const q = fixAng(280.459 + 0.98564736*D);
+  const L = fixAng(q + 1.915*dsin(g) + 0.020*dsin(2*g));
+  const e = 23.439 - 0.00000036*D;
+  const decl = dasin(dsin(e)*dsin(L));
+  const RA = fixHr(datan2(dcos(e)*dsin(L), dcos(L))/15);
+  return { decl, eqt: q/15 - RA };
+}
+/* Times are returned as decimal hours in the location's own clock. */
+function prayerTimes(date, loc){
+  const jd = julian(date.getFullYear(), date.getMonth()+1, date.getDate()) - loc.lon/(15*24);
+  const { decl, eqt } = sunPos(jd);
+  const dhuhr = fixHr(12 + loc.tz - loc.lon/15 - eqt);
+  /* hour angle for the sun sitting `ang` degrees below the horizon */
+  const T = ang => {
+    const c = (-dsin(ang) - dsin(decl)*dsin(loc.lat)) / (dcos(decl)*dcos(loc.lat));
+    return Math.abs(c) > 1 ? NaN : dacos(c)/15;             /* NaN at high latitudes in summer */
+  };
+  /* asr: shadow of length `f`x the object's height, plus its noon shadow */
+  const A = f => {
+    const c = (dsin(dacot(f + dtan(Math.abs(loc.lat - decl)))) - dsin(decl)*dsin(loc.lat)) / (dcos(decl)*dcos(loc.lat));
+    return Math.abs(c) > 1 ? NaN : dacos(c)/15;
+  };
+  return {
+    fajr:    dhuhr - T(18),
+    sunrise: dhuhr - T(0.833),
+    dhuhr:   dhuhr + 1/60,          /* a minute past true noon, as almanacs print it */
+    asr:     dhuhr + A(1),
+    maghrib: dhuhr + T(0.833),
+    isha:    dhuhr + T(17),
+  };
+}
+const PRAYERS = [
+  ["fajr",    "Fajr",    "İmsak",  "الفجر",   "🌅"],
+  ["sunrise", "Sunrise", "Güneş",  "الشروق",  "☀️"],
+  ["dhuhr",   "Dhuhr",   "Öğle",   "الظهر",   "🕛"],
+  ["asr",     "Asr",     "İkindi", "العصر",   "🌤"],
+  ["maghrib", "Maghrib", "Akşam",  "المغرب",  "🌇"],
+  ["isha",    "Isha",    "Yatsı",  "العشاء",  "🌙"],
+];
+/* A Date whose *local* getters read Istanbul wall-clock, whatever timezone
+   the viewer is in. Türkiye has been on permanent UTC+3 since 2016. */
+function istanbulNow(){
+  const d = new Date();
+  return new Date(d.getTime() + (PRAYER_LOC.tz*60 + d.getTimezoneOffset())*60000);
+}
+function hhmm(h){
+  if(isNaN(h)) return "--:--";
+  let t = Math.round(h*60);
+  t = ((t % 1440) + 1440) % 1440;
+  return String(Math.floor(t/60)).padStart(2,"0") + ":" + String(t%60).padStart(2,"0");
+}
+/* Tabular ("civil") Islamic calendar — arithmetic, not observational, so it
+   can sit a day either side of Diyanet's printed calendar. Labelled as such. */
+function toHijri(g){
+  const jd = Math.floor(julian(g.getFullYear(), g.getMonth()+1, g.getDate()) + 0.5);
+  const l0 = jd - 1948440 + 10632;
+  const n = Math.floor((l0-1)/10631);
+  let l = l0 - 10631*n + 354;
+  const j = Math.floor((10985-l)/5316)*Math.floor((50*l)/17719) + Math.floor(l/5670)*Math.floor((43*l)/15238);
+  l = l - Math.floor((30-j)/15)*Math.floor((17719*j)/50) - Math.floor(j/16)*Math.floor((15238*j)/43) + 29;
+  const m = Math.floor((24*l)/709);
+  const d = l - Math.floor((709*m)/24);
+  const y = 30*n + j - 30;
+  return { y, m, d };
+}
+const HIJRI_MONTHS = ["Muharram","Safar","Rabi' al-Awwal","Rabi' al-Thani","Jumada al-Ula","Jumada al-Akhirah",
+  "Rajab","Sha'ban","Ramadan","Shawwal","Dhu al-Qi'dah","Dhu al-Hijjah"];
+function qiblaBearing(lat, lon){
+  const dL = (QIBLA[1] - lon);
+  return fixAng(datan2(dsin(dL), dcos(lat)*dtan(QIBLA[0]) - dsin(lat)*dcos(dL)));
+}
+function compass(b){
+  return ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"][Math.round(b/22.5)%16];
+}
+function greatCircleKm(a, b){
+  const [la1,lo1] = a, [la2,lo2] = b;
+  const h = dsin((la2-la1)/2)**2 + dcos(la1)*dcos(la2)*dsin((lo2-lo1)/2)**2;
+  return Math.round(2*6371*Math.asin(Math.sqrt(h)));
+}
+/* which prayer is next, and how long until it — rolls into tomorrow's Fajr */
+function nextPrayer(){
+  const nowIst = istanbulNow();
+  const h = nowIst.getHours() + nowIst.getMinutes()/60 + nowIst.getSeconds()/3600;
+  const t = prayerTimes(nowIst, PRAYER_LOC);
+  for(const [k,en,tr,ar,ic] of PRAYERS){
+    if(!isNaN(t[k]) && t[k] > h) return { key:k, en, tr, ar, ic, at:t[k], inHrs:t[k]-h, times:t, today:true };
+  }
+  const tm = new Date(nowIst.getTime() + 86400000);
+  const t2 = prayerTimes(tm, PRAYER_LOC);
+  return { key:"fajr", en:"Fajr", tr:"İmsak", ar:"الفجر", ic:"🌅", at:t2.fajr, inHrs:(24-h)+t2.fajr, times:t, today:false };
+}
+const LS_PRAY = "musagpt_pray";
+let prayNotify = (function(){ try{ return localStorage.getItem(LS_PRAY) === "1"; }catch(e){ return false; } })();
+let prayLead = (function(){ try{ return parseInt(localStorage.getItem(LS_PRAY+"_lead")||"10",10); }catch(e){ return 10; } })();
+const prayFired = new Set();
+function renderPrayer(){
+  const np = nextPrayer();
+  const nowIst = istanbulNow();
+  const h = nowIst.getHours() + nowIst.getMinutes()/60 + nowIst.getSeconds()/3600;
+  const secs = Math.max(0, Math.round(np.inHrs*3600));
+  const cd = [Math.floor(secs/3600), Math.floor(secs/60)%60, secs%60].map(v=>String(v).padStart(2,"0")).join(":");
+  $("#prLead").textContent = np.today ? "NEXT PRAYER" : "NEXT PRAYER · TOMORROW";
+  $("#prName").textContent = np.ic + " " + np.en + " · " + np.tr;
+  $("#prNameAr").textContent = np.ar;
+  $("#prCount").textContent = cd;
+  $("#prAt").textContent = "at " + hhmm(np.at) + " İstanbul time · " + PRAYER_LOC.name;
+
+  $("#prTimes").innerHTML = PRAYERS.map(([k,en,tr,ar,ic])=>{
+    const past = !isNaN(np.times[k]) && np.times[k] <= h;
+    const isNext = np.today && np.key === k;
+    return `<div class="prrow ${isNext?"now":past?"past":""}">
+      <span class="pi">${ic}</span>
+      <span class="pl"><b>${en}</b><span>${tr}</span></span>
+      <span class="par2">${ar}</span>
+      <span class="pt">${hhmm(np.times[k])}</span>
+    </div>`;
+  }).join("");
+
+  const hj = toHijri(nowIst);
+  $("#prDates").innerHTML =
+    `<div>${nowIst.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>`
+    + `<div style="color:var(--green)">${hj.d} ${HIJRI_MONTHS[hj.m-1]} ${hj.y} AH</div>`
+    + `<div style="font-size:9px;color:var(--txt-faint);line-height:1.6;margin-top:6px">Hijri date is the tabular (arithmetic) calendar — Diyanet's observed calendar can differ by a day. Prayer times are calculated, not fetched; treat your local mosque as authoritative.</div>`;
+
+  const b = qiblaBearing(PRAYER_LOC.lat, PRAYER_LOC.lon);
+  $("#prQibla").innerHTML =
+    `<div style="font-size:26px;text-align:center;line-height:1;margin-bottom:8px;transform:rotate(${b.toFixed(1)}deg)">↑</div>`
+    + `<div><b style="color:var(--txt)">${b.toFixed(1)}°</b> from true north (${compass(b)})</div>`
+    + `<div>${greatCircleKm([PRAYER_LOC.lat,PRAYER_LOC.lon], QIBLA).toLocaleString()} km to Mecca</div>`;
+
+  /* the last quarter hour goes in the tab title, so it lands even when the
+     window is behind something else */
+  if(secs <= 900 && secs > 0 && srcMode !== "sim"){
+    try{ document.title = "🕌 " + np.en + " in " + Math.ceil(secs/60) + "m — " + BASE_TITLE; }catch(e){}
+  }
+  maybeFirePrayer(np, secs);
+  $("#prNotify").textContent = prayNotify ? "🔔 Reminders: on" : "🔔 Reminders: off";
+  $("#prNotify").classList.toggle("on", prayNotify);
+}
+function maybeFirePrayer(np, secs){
+  if(!prayNotify) return;
+  const day = istanbulNow().toDateString();
+  const leadKey = day+":"+np.key+":lead", atKey = day+":"+np.key+":at";
+  if(prayLead > 0 && secs <= prayLead*60 && secs > prayLead*60 - 60 && !prayFired.has(leadKey)){
+    prayFired.add(leadKey);
+    prayerAlert(`${np.ic} ${np.en} (${np.tr}) in ${prayLead} minutes — ${hhmm(np.at)} in İstanbul.`);
+  }
+  if(secs <= 2 && !prayFired.has(atKey)){
+    prayFired.add(atKey);
+    prayerAlert(`${np.ic} It's ${np.en} — ${np.tr} — ${hhmm(np.at)} in İstanbul. حَيَّ عَلَى الصَّلَاة`);
+  }
+}
+function prayerAlert(msg){
+  if(typeof Notification !== "undefined" && Notification.permission === "granted"){
+    try{ new Notification("MusaGPT · Prayer", { body: msg, tag:"musagpt-pray" }); }catch(e){}
+  }
+  if(activeChat && activeChat.msgs.length && !busy){
+    const line = "🕌 " + msg;
+    const bubble = addMsg("ai", "", true);
+    streamText(bubble, line).then(()=>{ bubble.innerHTML = fmt(line); });
+    recordMsg("ai", line, true);
+  }
+}
+
+/* ================================================================
+   AL JAZEERA ARABIC — الجزيرة, fetched live and rendered RTL.
+
+   Translation ladder, best first, each labelled in the UI so you always
+   know what produced the English:
+     1. MyMemory MT   (keyless, CORS-open)
+     2. your own model, if a key or site proxy is configured
+     3. a local term glossary — a partial GLOSS, never presented as
+        a translation, so a headline is never silently reworded into
+        something it doesn't say.
+   ================================================================ */
+const AJ_FEEDS = [
+  { url:"https://www.aljazeera.net/xml/rss/all.xml",  name:"الجزيرة نت" },
+  { url:"https://www.aljazeera.net/aljazeerarss/a7c186be-1baa-4bd4-9d80-a84db769f779/73d0e1b4-532f-45ef-b135-bfdff8b8cab9", name:"الجزيرة · عاجل" },
+];
+/* deliberately small and factual: place names, actors, and the verbs that
+   carry a headline. Enough to tell you what a line is ABOUT. */
+const AR_GLOSS = {
+  "غزة":"Gaza","فلسطين":"Palestine","إسرائيل":"Israel","لبنان":"Lebanon","سوريا":"Syria","العراق":"Iraq",
+  "إيران":"Iran","اليمن":"Yemen","مصر":"Egypt","السودان":"Sudan","ليبيا":"Libya","تونس":"Tunisia",
+  "الجزائر":"Algeria","المغرب":"Morocco","الأردن":"Jordan","السعودية":"Saudi Arabia","قطر":"Qatar",
+  "الكويت":"Kuwait","الإمارات":"UAE","البحرين":"Bahrain","عمان":"Oman","تركيا":"Türkiye","أوكرانيا":"Ukraine",
+  "روسيا":"Russia","أميركا":"America","أمريكا":"America","واشنطن":"Washington","الصين":"China","أوروبا":"Europe",
+  "الضفة":"the West Bank","القدس":"Jerusalem","رفح":"Rafah","خان يونس":"Khan Younis","بيروت":"Beirut",
+  "دمشق":"Damascus","بغداد":"Baghdad","طهران":"Tehran","صنعاء":"Sanaa","الخرطوم":"Khartoum",
+  "الاحتلال":"the occupation","المقاومة":"the resistance","حماس":"Hamas","حزب الله":"Hezbollah",
+  "الجيش":"the army","قوات":"forces","الأمم المتحدة":"the United Nations","مجلس الأمن":"the Security Council",
+  "الرئيس":"the president","رئيس الوزراء":"the prime minister","وزير":"minister","الخارجية":"foreign ministry",
+  "قصف":"shelling/bombing","غارة":"air raid","غارات":"air raids","صاروخ":"missile","صواريخ":"missiles",
+  "طائرة":"aircraft","مسيرة":"drone","انفجار":"explosion","اشتباكات":"clashes","معارك":"battles",
+  "هجوم":"attack","عملية":"operation","قتلى":"killed","شهداء":"martyrs/dead","جرحى":"wounded","إصابات":"casualties",
+  "ضحايا":"victims","نزوح":"displacement","لاجئين":"refugees","مساعدات":"aid","إغاثة":"relief",
+  "هدنة":"truce","وقف إطلاق النار":"ceasefire","اتفاق":"agreement","مفاوضات":"negotiations","محادثات":"talks",
+  "أسرى":"prisoners","رهائن":"hostages","حصار":"siege","احتجاج":"protest","احتجاجات":"protests",
+  "انتخابات":"elections","برلمان":"parliament","حكومة":"government","استقالة":"resignation","عقوبات":"sanctions",
+  "اقتصاد":"economy","نفط":"oil","تضخم":"inflation","أسعار":"prices","عاجل":"BREAKING","تقرير":"report",
+  "يعلن":"announces","يدعو":"calls for","يرفض":"rejects","يحذر":"warns","يؤكد":"confirms","يستهدف":"targets",
+  "مقتل":"the killing of","إصابة":"the wounding of","انتشال":"the recovery of","تحذير":"warning",
+};
+function glossAr(text){
+  const hits = [];
+  for(const [ar,en] of Object.entries(AR_GLOSS)) if(text.includes(ar)) hits.push(en);
+  return hits.length >= 2 ? hits.slice(0,9).join(" · ") : null;
+}
+const LS_TRCACHE = "musagpt_tr";
+const trCache = (function(){ try{ return JSON.parse(localStorage.getItem(LS_TRCACHE)||"{}"); }catch(e){ return {}; } })();
+function cacheTr(k, v){
+  trCache[k] = v;
+  const keys = Object.keys(trCache);
+  if(keys.length > 300) for(const k2 of keys.slice(0, keys.length-300)) delete trCache[k2];
+  try{ localStorage.setItem(LS_TRCACHE, JSON.stringify(trCache)); }catch(e){}
+}
+async function translateAr(text){
+  const key = text.slice(0,120);
+  if(trCache[key]) return trCache[key];
+  /* 1) MyMemory — free, keyless, CORS-open, fine for headline-length text */
+  try{
+    const r = await fetch("https://api.mymemory.translated.net/get?langpair=ar%7Cen&q=" + encodeURIComponent(text.slice(0,480)),
+                          { signal: timeoutSignal(9000) });
+    if(r.ok){
+      const d = await r.json();
+      const t = d && d.responseData && d.responseData.translatedText;
+      if(t && !/MYMEMORY WARNING|QUERY LENGTH|INVALID/i.test(t) && !/^\s*$/.test(t)){
+        const out = { en: deEntity(t).trim(), eng:"MyMemory MT", mt:true };
+        cacheTr(key, out); return out;
+      }
+    }
+  }catch(e){}
+  /* 2) the user's own model, when one is configured */
+  if(typeof liveMode === "function" && liveMode()){
+    try{
+      const t = await oneShot(
+        "You are a precise Arabic-to-English news translator. Reply with ONLY the English translation of the headline. No commentary, no transliteration, no quotation marks. Keep proper nouns as they are conventionally rendered in English news.",
+        text.slice(0,600));
+      if(t && t.trim()){
+        const out = { en:t.trim().replace(/^["'“”]|["'“”]$/g,""), eng: shortName(effectiveModel()) + " MT", mt:true };
+        cacheTr(key, out); return out;
+      }
+    }catch(e){}
+  }
+  /* 3) a gloss, clearly flagged as NOT a translation */
+  const g = glossAr(text);
+  if(g) return { en:g, eng:"local glossary", gloss:true };
+  return null;
+}
+/* Small non-streaming completion, used by translation. Mirrors liveReply's
+   routing but without the SSE machinery. */
+async function oneShot(system, user){
+  const model = effectiveModel();
+  if(liveMode() === "proxy"){
+    const r = await fetch("/api/chat", { method:"POST", headers:{ "content-type":"application/json" },
+      body: JSON.stringify({ model, system, messages:[{role:"user", content:user}] }), signal: timeoutSignal(20000) });
+    if(!r.ok) return null;
+    const d = await r.json().catch(()=>null);
+    return d && d.text || null;
+  }
+  const key = getKey(), prov = modelProvider(model);
+  if(!key) return null;
+  if(prov === "google"){
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",
+      { method:"POST", headers:{ "content-type":"application/json", "x-goog-api-key":key },
+        body: JSON.stringify({ systemInstruction:{parts:[{text:system}]}, contents:[{role:"user",parts:[{text:user}]}],
+                               generationConfig:{ maxOutputTokens:400 } }), signal: timeoutSignal(20000) });
+    if(!r.ok) return null;
+    const d = await r.json().catch(()=>null);
+    const c = d && d.candidates && d.candidates[0];
+    return c && c.content && c.content.parts ? c.content.parts.map(p=>p.text||"").join("") : null;
+  }
+  if(prov === "anthropic"){
+    const req = { model, system, messages:[{role:"user", content:user}], max_tokens: model==="claude-fable-5" ? 2048 : 512 };
+    if(model === "claude-fable-5") req.output_config = { effort:"low" };
+    const r = await fetch("https://api.anthropic.com/v1/messages", { method:"POST",
+      headers:{ "content-type":"application/json", "x-api-key":key, "anthropic-version":"2023-06-01",
+                "anthropic-dangerous-direct-browser-access":"true" },
+      body: JSON.stringify(req), signal: timeoutSignal(20000) });
+    if(!r.ok) return null;
+    const d = await r.json().catch(()=>null);
+    return d && (d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("") || null;
+  }
+  const url = prov === "deepseek" ? "https://api.deepseek.com/chat/completions" : "https://api.openai.com/v1/chat/completions";
+  const req = { model, messages:[{role:"system",content:system},{role:"user",content:user}] };
+  if(prov === "openai" && /^gpt-5/.test(model)) req.max_completion_tokens = 600; else req.max_tokens = 512;
+  const r = await fetch(url, { method:"POST", headers:{ "content-type":"application/json", authorization:"Bearer "+key },
+                               body: JSON.stringify(req), signal: timeoutSignal(20000) });
+  if(!r.ok) return null;
+  const d = await r.json().catch(()=>null);
+  return d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content || null;
+}
+const arabState = { items:[], loading:false, loaded:false, err:null, at:0 };
+async function fetchArab(){
+  if(arabState.loading) return;
+  arabState.loading = true; arabState.err = null; renderArab();
+  let items = null;
+  for(const f of AJ_FEEDS){
+    try{
+      const xml = await viaRelay(f.url, 13000);
+      if(!xml) continue;
+      const parsed = parseFeedXml(xml, "aljazeera.net");
+      if(parsed.length){ items = parsed; break; }
+    }catch(e){ arabState.err = String((e && e.message) || e); }
+  }
+  if(!items){
+    arabState.loading = false; arabState.loaded = false; renderArab(); return;
+  }
+  arabState.items = items.slice(0,18).map(i=>({ ...i, tr:null, trying:false }));
+  arabState.loaded = true; arabState.at = now(); arabState.loading = false;
+  renderArab();
+  /* translate sequentially so we don't get rate-limited into the fallback */
+  for(const it of arabState.items){
+    it.trying = true;
+    try{ it.tr = await translateAr(it.title); }catch(e){ it.tr = null; }
+    it.trying = false;
+    renderArab();
+  }
+}
+function renderArab(){
+  const box = $("#arabList");
+  if(!box) return;
+  $("#arabCount").textContent = arabState.loading ? "loading…" : arabState.loaded ? arabState.items.length + " headlines" : "—";
+  if(arabState.loading && !arabState.items.length){ box.innerHTML = `<div class="bempty">Fetching الجزيرة over the relay chain…</div>`; return; }
+  if(!arabState.loaded){
+    box.innerHTML = `<div class="bempty">Couldn't reach Al Jazeera Arabic.<br>Its RSS sends no CORS header, so it has to come through a public relay, and all of them failed${arabState.err?` (<code>${esc(arabState.err.slice(0,50))}</code>)`:""}.<br><br><button class="wpb" id="arabRetry" style="margin-top:10px">↻ Try again</button></div>`;
+    return;
+  }
+  box.innerHTML = arabState.items.map(it=>{
+    const tr = it.tr;
+    const badge = !tr
+      ? (it.trying ? `<span class="btag">translating…</span>` : `<span class="btag warm">⚠ no translation available — Arabic only</span>`)
+      : tr.gloss
+        ? `<span class="btag warm">⚠ KEY TERMS ONLY — not a translation (${esc(tr.eng)})</span>`
+        : `<span class="btag cool">machine translation · ${esc(tr.eng)}</span>`;
+    return `<div class="arrow">
+      <div class="aar" dir="rtl" lang="ar">${esc(it.title)}</div>
+      ${tr ? `<div class="aen" ${tr.gloss?'style="color:var(--amber)"':""}>${tr.gloss?"↳ mentions: ":""}${esc(tr.en)}</div>` : ""}
+      <div class="amet">
+        ${badge}
+        ${it.t ? `<span class="btag">${ago(it.t)}</span>` : ""}
+        ${it.url ? `<a class="btag cool" href="${esc(safeUrl(it.url)||"#")}" target="_blank" rel="noopener noreferrer">open ↗</a>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/* ================================================================
+   SENATE 2026.
+
+   Which seats are up is fixed by the Constitution's class rotation — that
+   part is structure, not a forecast, and it is safe to draw. Everything
+   else here is either LIVE (coverage volume pulled from the wire and from
+   Reddit) or explicitly marked as the model's training-time knowledge.
+
+   There are deliberately NO poll numbers. X.com has no keyless, CORS-open
+   API, so "live X polling" is not something a web page can do, and a
+   plausible-looking invented average is precisely the failure mode this
+   app is built to refuse.
+   ================================================================ */
+const SENATE_2026 = [
+  ["AL","R",1],["AK","R",0],["AR","R",0],["CO","D",0],["DE","D",0],["GA","D",0],["ID","R",0],
+  ["IL","D",1],["IA","R",1],["KS","R",0],["KY","R",1],["LA","R",0],["ME","R",0],["MA","D",0],
+  ["MI","D",1],["MN","D",1],["MS","R",0],["MT","R",0],["NE","R",0],["NH","D",1],["NJ","D",0],
+  ["NM","D",0],["NC","R",1],["OK","R",0],["OR","D",0],["RI","D",0],["SC","R",0],["SD","R",0],
+  ["TN","R",0],["TX","R",0],["VA","D",0],["WV","R",0],["WY","R",0],
+  ["FL","R",0,"special"],["OH","R",0,"special"],
+];
+const CHAMBER = { r:53, d:45, i:2 };
+const senState = { sel:null, chatter:{} };
+function senRaces(){
+  return SENATE_2026.map(([st,party,open,special])=>{
+    const nm = US_STATES[st] ? US_STATES[st][0] : st;
+    const re = new RegExp("\\b"+nm.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","i");
+    /* live signal: stories on the wire that name this state AND read political */
+    const hits = FEED.filter(i=>!isSim(i) && re.test(i.text) &&
+      /\b(senate|senator|election|campaign|primary|poll|candidate|race|ballot|vote|midterm|democrat|republican|gop)\b/i.test(i.text));
+    return { st, nm, party, open:!!open, special:!!special, hits, live:hits.length + (senState.chatter[st]||0) };
+  }).sort((a,b)=>b.live-a.live || a.nm.localeCompare(b.nm));
+}
+function renderSenate(){
+  const host = $("#senMap");
+  if(!host) return;
+  if(!host.dataset.base){ host.innerHTML = baseMapSvg(US_MASK, US_GEO, "us"); host.dataset.base = "1"; }
+  const layer = host.querySelector("#us-layer");
+  const races = senRaces();
+  const maxLive = Math.max(1, ...races.map(r=>r.live));
+  layer.innerHTML = races.map(r=>{
+    const s = US_STATES[r.st];
+    if(!s) return "";
+    const { x, y } = project(US_GEO, s[2], s[1]);
+    const col = r.open ? "#ffb454" : r.party === "D" ? "#5b8cff" : "#ff6b73";
+    const rad = 2.6 + (r.live / maxLive) * 3.4;
+    const sel = senState.sel === r.st;
+    return `<g class="mk" data-s="${r.st}" tabindex="0" role="button" aria-label="${esc(r.nm)}: ${r.live} live stories">
+      ${r.live ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(rad+2.6).toFixed(1)}" fill="none" stroke="${col}" stroke-opacity=".4" stroke-width=".7"/>` : ""}
+      ${sel ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(rad+5).toFixed(1)}" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width=".6"/>` : ""}
+      <circle class="core" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rad.toFixed(1)}" fill="${col}" fill-opacity=".85"/>
+      <text class="mklab" x="${x.toFixed(1)}" y="${(y-rad-1.6).toFixed(1)}" text-anchor="middle">${r.st}${r.special?"*":""}</text>
+    </g>`;
+  }).join("");
+  const d = races.filter(r=>r.party==="D").length, rr = races.filter(r=>r.party==="R").length;
+  $("#senCount").textContent = races.length + " seats (" + d + "D / " + rr + "R)";
+  const tot = CHAMBER.r + CHAMBER.d + CHAMBER.i;
+  $("#senBar").innerHTML =
+    `<span class="d" style="width:${CHAMBER.d/tot*100}%">${CHAMBER.d} D</span>`
+    + `<span class="i" style="width:${CHAMBER.i/tot*100}%">${CHAMBER.i}</span>`
+    + `<span class="r" style="width:${CHAMBER.r/tot*100}%">${CHAMBER.r} R</span>`;
+  renderSenList(races);
+}
+function renderSenList(races){
+  const box = $("#senList");
+  const shown = senState.sel ? races.filter(r=>r.st === senState.sel) : races;
+  const withLive = races.filter(r=>r.live);
+  $("#senLiveN").textContent = withLive.length;
+  box.innerHTML =
+    (senState.sel ? `<div class="brow on" data-clear="1"><div class="bm"><span class="btag cool">✕ CLEAR</span><span class="btag">${esc(senState.sel)}</span></div></div>` : "")
+    + shown.map(r=>`
+      <div class="brow ${senState.sel===r.st?"on":""}" data-s="${r.st}">
+        <div class="bm">
+          <span class="btag ${r.party==="D"?"cool":"hot"}">${r.party}-held</span>
+          ${r.open?`<span class="btag warm">OPEN SEAT</span>`:""}
+          ${r.special?`<span class="btag warm">SPECIAL</span>`:""}
+          <span class="btag ${r.live?"cool":""}">${r.live} live ${r.live===1?"story":"stories"}</span>
+        </div>
+        <p>${esc(r.nm)}</p>
+        ${r.hits.length ? `<span class="bs">↳ ${esc(r.hits[0].text.slice(0,88))}${r.hits[0].text.length>88?"…":""}</span>` : ""}
+      </div>`).join("")
+    + `<div class="bempty" style="text-align:left;padding:14px">
+        <b style="color:var(--amber)">What this board is NOT showing:</b><br>
+        · No polling averages. There is no licensed polling feed here.<br>
+        · No X.com sentiment. X has no keyless, CORS-open API; a browser page cannot read it.<br>
+        · No seat forecast. "Live coverage volume" measures <i>attention</i>, not support — a race can be loud and lopsided.<br><br>
+        Party control and retirements come from what I was trained on and may be out of date; the story counts beside each state come from the live wire right now. When they disagree, believe the wire.
+      </div>`;
+}
+/* Reddit's search endpoint is keyless and CORS-open, so it's the closest
+   thing to live social chatter that a browser can honestly reach. */
+async function fetchSenateChatter(){
+  try{
+    const url = "https://www.reddit.com/r/politics+Ask_Politics+moderatepolitics/search.json?q=senate%202026&restrict_sr=1&sort=new&t=week&limit=100&raw_json=1";
+    const res = await fetch(url, { signal: timeoutSignal(11000) });
+    if(!res.ok) return;
+    const data = await res.json();
+    const kids = (data && data.data && data.data.children) || [];
+    const tally = {};
+    for(const c of kids){
+      const t = ((c.data && c.data.title) || "");
+      for(const [st,[nm]] of Object.entries(US_STATES)){
+        if(new RegExp("\\b"+nm+"\\b","i").test(t)) tally[st] = (tally[st]||0)+1;
+      }
+    }
+    senState.chatter = tally;
+    if($("#b-senate").classList.contains("on")) renderSenate();
+  }catch(e){ /* chatter is a bonus signal — its absence changes nothing */ }
+}
+
+/* Live one-line state of each board, injected into the system prompt so the
+   model can answer "what's on the war map?" without being handed the whole
+   dataset — and so it never describes a board that has nothing on it. */
+function deskSummary(){
+  const { pts, unplaced } = warPoints();
+  const top = pts.slice(0,5).map(p=>`${p.key} (${p.items.length}${p.hot?", BREAKING":""})`).join(", ");
+  const np = nextPrayer();
+  const races = senRaces().filter(r=>r.live).slice(0,5);
+  return {
+    war: pts.length
+      ? `Right now ${pts.length} zone${pts.length===1?"":"s"} ${pts.length===1?"is":"are"} plotted, busiest first: ${top}.${unplaced?` ${unplaced} more conflict ${unplaced===1?"story is":"stories are"} on the wire but couldn't be tied to a place — they are deliberately left off the map.`:""}`
+      : `Nothing on the wire this hour reads as conflict or security news, so the map is empty. Say that plainly rather than implying quiet means peace.`,
+    flock: flockState.loaded
+      ? `Currently ${flockState.cams.length.toLocaleString()} cameras loaded across ${new Set(flockState.cams.map(c=>c.st)).size} states, ${flockState.cams.filter(c=>c.flock).length.toLocaleString()} of them tagged Flock Safety.`
+      : `Not loaded in this session yet (or OpenStreetMap was unreachable). If it failed, the map is empty on purpose — there is no seeded dataset.`,
+    pray: `Next up is ${np.en} (${np.tr}) at ${hhmm(np.at)} İstanbul time${np.today?"":", tomorrow"}, about ${Math.round(np.inHrs*60)} minutes away. Today: ${PRAYERS.map(([k,en])=>`${en} ${hhmm(np.times[k])}`).join(", ")}.`,
+    arab: arabState.loaded
+      ? `${arabState.items.length} Arabic headlines loaded; ${arabState.items.filter(i=>i.tr&&i.tr.mt).length} have a machine translation, ${arabState.items.filter(i=>i.tr&&i.tr.gloss).length} only a partial key-term gloss.`
+      : `Not loaded in this session yet (Al Jazeera's RSS needs a public CORS relay, which may be blocked).`,
+    senate: races.length
+      ? `${SENATE_2026.length} seats are up. Races drawing live coverage right now: ${races.map(r=>`${r.nm} (${r.live})`).join(", ")}.`
+      : `${SENATE_2026.length} seats are up. No race is drawing measurable coverage on the wire this hour.`,
+  };
+}
+
+/* ================================================================
+   DESK WIRING
+   ================================================================ */
+let deckBoard = "war";
+let deckTimer = null;
+const BOARD_SUB = {
+  war:   "conflict stories geolocated from the live wire · basemap is offline-safe",
+  flock: "ALPR cameras from OpenStreetMap · nothing invented, ever",
+  pray:  "computed in-browser from solar geometry · works with no network",
+  arab:  "الجزيرة live · machine translation, labelled by engine",
+  senate:"structural map + live coverage · no polls, no X feed, no guesses",
+};
+function openDeck(board){
+  $("#deck").classList.add("open");
+  if(board) showBoard(board); else showBoard(deckBoard);
+  if(!deckTimer) deckTimer = setInterval(deckTick, 1000);
+}
+function closeDeck(){
+  $("#deck").classList.remove("open");
+  if(deckTimer){ clearInterval(deckTimer); deckTimer = null; }
+  if(srcMode !== "sim"){ try{ document.title = BASE_TITLE; }catch(e){} }
+}
+function showBoard(b){
+  deckBoard = b;
+  document.querySelectorAll(".dktab").forEach(t=>t.classList.toggle("on", t.getAttribute("data-b") === b));
+  document.querySelectorAll(".board").forEach(s=>s.classList.toggle("on", s.id === "b-"+b));
+  $("#deckSub").textContent = BOARD_SUB[b] || "";
+  if(b === "war")    renderWarMap();
+  if(b === "flock"){ renderFlock(); if(!flockState.loaded && !flockState.loading) fetchFlock(); }
+  if(b === "pray")   renderPrayer();
+  if(b === "arab"){  renderArab(); if(!arabState.loaded && !arabState.loading) fetchArab(); }
+  if(b === "senate"){ renderSenate(); if(!Object.keys(senState.chatter).length) fetchSenateChatter(); }
+}
+let deckSecs = 0;
+function deckTick(){
+  deckSecs++;
+  if(deckBoard === "pray") renderPrayer();                       /* 1s countdown */
+  if(deckBoard === "war"   && deckSecs % 15 === 0) renderWarMap();
+  if(deckBoard === "senate"&& deckSecs % 30 === 0) renderSenate();
+}
+$("#deckBtn").addEventListener("click", ()=>openDeck());
+$("#deckBtn2").addEventListener("click", ()=>{ closeSidebarMobile(); openDeck(); });
+$("#deckClose").addEventListener("click", closeDeck);
+$("#dkTabs").addEventListener("click", e=>{
+  const b = e.target.closest("[data-b]");
+  if(b) showBoard(b.getAttribute("data-b"));
+});
+/* war map + list cross-selection */
+installMapPicker($("#warMap"), "data-p", k=>{ warSelected = warSelected === k ? null : k; renderWarMap(); });
+$("#warList").addEventListener("click", e=>{
+  if(e.target.closest("[data-clear]")){ warSelected = null; renderWarMap(); }
+});
+$("#flockList").addEventListener("click", e=>{
+  if(e.target.closest("#flockRetry")){ fetchFlock(); return; }
+  const row = e.target.closest("[data-st]");
+  if(!row) return;
+  const st = row.getAttribute("data-st");
+  flockState.sel = flockState.sel === st ? null : st;
+  renderFlock();
+});
+$("#arabList").addEventListener("click", e=>{ if(e.target.closest("#arabRetry")) fetchArab(); });
+installMapPicker($("#senMap"), "data-s", st=>{ senState.sel = senState.sel === st ? null : st; renderSenate(); });
+$("#senList").addEventListener("click", e=>{
+  if(e.target.closest("[data-clear]")){ senState.sel = null; renderSenate(); return; }
+  const row = e.target.closest("[data-s]");
+  if(!row) return;
+  senState.sel = senState.sel === row.getAttribute("data-s") ? null : row.getAttribute("data-s");
+  renderSenate();
+});
+$("#prNotify").addEventListener("click", function(){
+  prayNotify = !prayNotify;
+  try{ localStorage.setItem(LS_PRAY, prayNotify ? "1" : "0"); }catch(e){}
+  renderPrayer();
+  /* The OS permission prompt is requested in the background, never awaited:
+     in-chat reminders work with or without it, and a browser that stalls or
+     silently ignores requestPermission() must not leave the toggle stuck. */
+  if(prayNotify && typeof Notification !== "undefined" && Notification.permission === "default"){
+    try{ Promise.resolve(Notification.requestPermission()).catch(()=>{}); }catch(e){}
+  }
+});
+$("#prLead2").addEventListener("change", function(){
+  prayLead = parseInt(this.value,10) || 0;
+  try{ localStorage.setItem(LS_PRAY+"_lead", String(prayLead)); }catch(e){}
+});
+/* The prayer clock runs whether or not the desk is open, so a reminder still
+   fires while the user is mid-conversation — and the last quarter hour shows
+   in the tab title even from a background tab, which is the whole point. */
+setInterval(()=>{
+  const np = nextPrayer();
+  const secs = Math.max(0, Math.round(np.inHrs*3600));
+  maybeFirePrayer(np, secs);
+  if(srcMode === "sim") return;                    /* the SIMULATED warning outranks a countdown */
+  try{
+    if(secs <= 900 && secs > 0) document.title = "🕌 " + np.en + " in " + Math.ceil(secs/60) + "m — " + BASE_TITLE;
+    else if(document.title.startsWith("🕌")) document.title = BASE_TITLE;
+  }catch(e){}
+}, 30000);
 
 /* ================================================================
    CHAT STORE — history + temporary chats (localStorage)
@@ -1655,6 +3084,76 @@ function localReply(raw, _redir){
     return "Still connecting to the live sources — give me a few seconds and check the tag next to the banner: it always tells you whether you're seeing the real wire or the simulated fallback.";
   }
 
+  /* ---------------- THE DESK ---------------- */
+
+  /* prayer times — checked early and answered straight. No sass here. */
+  if(/\b(pray(er|ers)?|salah|salat|namaz|namaz vakti|ezan|adhan|athan|fajr|imsak|dhuhr|zuhr|ogle|öğle|asr|ikindi|maghrib|akşam|aksam|isha|yatsi|yatsı|qibla|kible|kıble|iftar|suhoor|sahur)\b/.test(l)){
+    const np = nextPrayer();
+    if(/\bqibla|kible|kıble\b/.test(l)){
+      const b = qiblaBearing(PRAYER_LOC.lat, PRAYER_LOC.lon);
+      return `🧭 **Qibla from ${PRAYER_LOC.name}:** **${b.toFixed(1)}°** from true north — ${compass(b)} — about **${greatCircleKm([PRAYER_LOC.lat,PRAYER_LOC.lon],QIBLA).toLocaleString()} km** to the Kaaba.\n\nThat's a great-circle bearing, so hold your compass flat and remember it points to magnetic north — İstanbul's declination is a few degrees east. The 🧭 DESK → 🕌 PRAYER board draws the arrow for you.`;
+    }
+    const list = PRAYERS.map(([k,en,tr,ar,ic])=>`${ic} **${en}** · ${tr} — \`${hhmm(np.times[k])}\``).join("\n");
+    const mins = Math.round(np.inHrs*60);
+    return `🕌 **Prayer times — ${PRAYER_LOC.name}** (İstanbul, UTC+3)\n\n${list}\n\n**Next: ${np.en} (${np.tr}) at ${hhmm(np.at)}** — about ${mins < 60 ? mins+" minutes" : Math.floor(mins/60)+"h "+(mins%60)+"m"} from now${np.today?"":" (tomorrow)"}.\n\nCalculated in your browser from solar geometry using the **Diyanet** method (Fajr 18°, Isha 17°) — no API, works offline. Your local mosque or Diyanet's published calendar is the authority; this is a good clock, not a ruling. Open 🧭 DESK → 🕌 PRAYER for a live countdown and reminders.`;
+  }
+
+  /* war map */
+  if(/\b(war ?map|conflict ?map|war zones?|conflicts?|front ?line|battlefield|where.*(fighting|war))\b/.test(l)){
+    const { pts, unplaced } = warPoints();
+    if(!pts.length) return "Nothing on the wire this hour reads as conflict or security news, so the 🗺 WAR MAP is empty. I'd rather show you an empty map than sprinkle markers around to look busy — a quiet hour on the wire isn't the same as a quiet world, it just means nothing crossed in the last 60 minutes.";
+    const lines = pts.slice(0,6).map(p=>`• **${p.key.toUpperCase()}** — ${p.items.length} ${p.items.length===1?"story":"stories"}${p.sources>1?` across ${p.sources} outlets`:""} · _${WAR_LABEL[p.kind]}_${p.hot?" · 🚨 BREAKING":""}`).join("\n");
+    return `🗺 **${pts.length} zone${pts.length===1?"":"s"} on the war map right now:**\n\n${lines}${unplaced?`\n\n_(+${unplaced} conflict ${unplaced===1?"story":"stories"} I couldn't place — left off the map rather than guessed at.)_`:""}\n\nOpen 🧭 DESK → 🗺 WAR MAP to see them plotted. The basemap is compiled into the page, so it renders even when everything else is blocked.` + feedRealityNote();
+  }
+
+  /* flock / ALPR cameras */
+  if(/\b(flock|alpr|licen[cs]e plate|number plate|plate reader|surveillance cam|traffic cam)\b/.test(l)){
+    const s = flockState;
+    const head = "📹 **ALPR camera map** — automated licence-plate readers across the US, mapped from **OpenStreetMap**, where volunteers and the DeFlock project catalogue them as public infrastructure.\n\n";
+    if(s.loaded && s.cams.length){
+      const byState = {};
+      for(const c of s.cams) byState[c.st] = (byState[c.st]||0)+1;
+      const top = Object.entries(byState).sort((a,b)=>b[1]-a[1]).slice(0,5)
+        .map(([st,n])=>`${US_STATES[st]?US_STATES[st][0]:st} (${n.toLocaleString()})`).join(", ");
+      return head + `Currently **${s.cams.length.toLocaleString()} cameras** across **${Object.keys(byState).length} states**, ${s.cams.filter(c=>c.flock).length.toLocaleString()} explicitly tagged Flock Safety. Most mapped: ${top}.\n\nWorth knowing what this is and isn't: it's a crowdsourced survey, so coverage is uneven — a thin state means few mappers, not few cameras. Open 🧭 DESK → 📹 FLOCK CAMS.`;
+    }
+    return head + "It hasn't loaded in this session yet — open 🧭 DESK → 📹 FLOCK CAMS and it'll query OpenStreetMap live. If all three Overpass mirrors are unreachable the map stays **empty on purpose**: I don't ship a seeded camera dataset, because an invented camera position is worse than no camera position.";
+  }
+
+  /* al jazeera arabic */
+  if(/\b(al ?jazeera|aljazeera|jazeera|الجزيرة|arabic (news|headlines|wire)|arab(ic)? (press|media))\b/.test(l)){
+    const a = arabState;
+    if(a.loaded && a.items.length){
+      const first = a.items.slice(0,3).map(i=>`• ${i.tr && i.tr.mt ? `**${i.tr.en}**\n  _${i.title}_` : `_${i.title}_${i.tr&&i.tr.gloss?` — mentions: ${i.tr.en}`:" — no translation available"}`}`).join("\n");
+      return `🌍 **الجزيرة — Al Jazeera Arabic**, ${a.items.length} headlines on the board:\n\n${first}\n\nEnglish lines are **machine translation** and each one is labelled with the engine that produced it. If a wording matters, check the Arabic — MT drops nuance, and I'm not going to smooth over that by guessing. Open 🧭 DESK → 🌍 AL JAZEERA عربي for the full list.`;
+    }
+    return "🌍 The **الجزيرة / Al Jazeera Arabic** board hasn't loaded yet — open 🧭 DESK → 🌍 AL JAZEERA عربي. Its RSS sends no CORS header, so it comes through a chain of public relays; if they're all blocked you'll get an honest failure rather than a stale cache.";
+  }
+
+  /* senate 2026 — and the X.com question */
+  if(/\b(senate|midterms?|2026 (election|race|poll)|class ii|congress(ional)? (map|race))\b/.test(l)){
+    const races = senRaces();
+    const live = races.filter(r=>r.live).slice(0,6);
+    const opens = races.filter(r=>r.open);
+    return `🗳 **Senate 2026** — **${SENATE_2026.length} seats** are up: the Class II rotation (33) plus **${SENATE_2026.filter(r=>r[3]).length} specials** (Florida, Ohio). That part isn't a forecast, it's the constitutional rotation.\n\n`
+      + `**${opens.length} are open seats** (no incumbent running): ${opens.map(r=>r.st).join(", ")}.\n\n`
+      + (live.length
+          ? `**Drawing live coverage this hour:**\n${live.map(r=>`• ${r.nm} — ${r.live} ${r.live===1?"story":"stories"}`).join("\n")}\n\n`
+          : `No race is drawing measurable coverage on the wire right now.\n\n`)
+      + `**What I will not give you: poll numbers.** There's no licensed polling feed in this app, and **X.com has no keyless public API**, so "live X sentiment" isn't something a web page can read — anyone showing you that number in a browser app either has a paid key or made it up. Coverage volume measures *attention*, not support. Open 🧭 DESK → 🗳 SENATE 2026 for the map.`;
+  }
+
+  /* the desk itself */
+  if(/\b(desk|boards?|maps?|what can you (do|show)|features?)\b/.test(l) && !/\bnews desk\b/.test(l)){
+    return "🧭 **The DESK** (button top-right) has five boards:\n\n"
+      + "• 🗺 **WAR MAP** — conflict stories from the wire, geolocated. Basemap is compiled into the page, so it renders with zero network.\n"
+      + "• 📹 **FLOCK CAMS** — US licence-plate readers from OpenStreetMap. Surveillance transparency, live, nothing invented.\n"
+      + "• 🕌 **PRAYER** — prayer times for Tema İstanbul / Başakşehir, computed in-browser. Countdown + reminders. Works offline.\n"
+      + "• 🌍 **AL JAZEERA عربي** — live Arabic headlines, machine-translated, each labelled by engine.\n"
+      + "• 🗳 **SENATE 2026** — which seats are up plus live coverage per race. No polls, and I'll tell you exactly why.\n\n"
+      + "Everything on them is either live or clearly labelled as calculated. Nothing is decorative.";
+  }
+
   if(/\b(rude|jerk|attitude|sassy|sarcasm|sarcastic)\b/.test(l) || /\bso mean\b|being mean|why (are|r) (you|u) (so|like)\b/.test(l)){
     return "I run at about 60% sass — enough to keep things interesting, not enough to hurt feelings. See the meter in the ◉ WIRE panel; it's calibrated. Underneath it all I *will* actually get you what you need.";
   }
@@ -2007,6 +3506,7 @@ function personaPrompt(){
   }).join("\n") || "- (wire is quiet this hour — say so rather than inventing stories)";
   const brkCount = FEED.filter(i=>i.sev==="BREAKING" && !isSim(i)).length;
   const desks = [...new Set(FEED.map(i=>i.cat))];
+  const deskBrief = deskSummary();
   const feedNote = srcMode === "sim"
     ? `!! CRITICAL — THE WIRE BELOW IS NOT REAL NEWS.
 Every live news source (GDELT, Reddit, Hacker News) is unreachable from this network. Rather than show an empty terminal, the app generates placeholder headlines locally from templates with FICTIONAL companies, cities and clubs. Every one of them is tagged [SIMULATED].
@@ -2029,9 +3529,19 @@ Playfully sarcastic: dry wit, light teasing, theatrical impatience — but warm 
 2. Explain *why* a story matters — the second-order consequence a headline doesn't state.
 3. Answer general questions (math, definitions, explanations) when asked, without pretending everything is news.
 4. Flag corroboration and uncertainty honestly.
+5. Point the user at the right board on **🧭 THE DESK** when their question lives there (see below).
 
 ## The wire you are working from
 ${feedNote}
+
+## THE DESK — five boards behind the 🧭 DESK button
+Each is real, live, and has a hard rule attached. Reference them naturally; never describe data a board doesn't actually have.
+- **🗺 WAR MAP** — conflict and security stories from the wire, geolocated onto an offline-safe basemap. ${deskBrief.war}
+- **📹 FLOCK CAMS** — automated licence-plate readers across the US, mapped from OpenStreetMap (surveillance transparency; these are fixed cameras in public places). ${deskBrief.flock} If asked about surveillance policy, discuss it as a civil-liberties and public-accountability question, factually and without conspiracy framing. Never speculate about a camera the map doesn't have.
+- **🕌 PRAYER** — prayer times for Tema İstanbul / Başakşehir, computed in-browser from solar geometry (Diyanet: Fajr 18°, Isha 17°). ${deskBrief.pray} These are CALCULATED times; if the user is deciding when to pray, say plainly that their local mosque or Diyanet's published calendar is authoritative. Treat the subject with straightforward respect — no jokes about someone's prayers, ever. Your sarcasm is off-duty for this board.
+- **🌍 AL JAZEERA عربي** — live Arabic headlines with machine translation, each labelled by the engine that produced it. ${deskBrief.arab} Machine translation is imperfect: if a user leans on an exact wording, tell them to check the Arabic. Never "improve" a translation by guessing what a headline probably said.
+- **🗳 SENATE 2026** — which seats are legally up (Class II + specials — structure, not a forecast) plus live coverage volume per race. ${deskBrief.senate}
+  **Hard rule for this board:** there are NO poll numbers anywhere in this app and you must not supply any. X.com has no keyless public API, so "live X sentiment" is not something this page can read — say so if asked. If a user wants a forecast, give them the structural picture and the live coverage counts, and be explicit that coverage volume measures attention, not support. Never state or estimate a polling margin, a win probability, or a seat projection as fact.
 
 ## Severity vocabulary (already computed for you, do not re-label)
 - **BREAKING** — urgent wording, fresh, and/or several outlets corroborating. Currently ${brkCount} on the wire. Lead with these when they exist.
@@ -2452,6 +3962,7 @@ $("#clearHistory").addEventListener("click", ()=>{
 document.addEventListener("keydown", e=>{
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k"){ e.preventDefault(); newChat(false); }
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b"){ e.preventDefault(); handleSend("give me a briefing"); }
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d"){ e.preventDefault(); $("#deck").classList.contains("open") ? closeDeck() : openDeck(); }
 });
 $("#briefBtn").addEventListener("click", ()=>{ handleSend("give me a briefing"); closeSidebarMobile(); });
 $("#exportBtn").addEventListener("click", ()=>{
@@ -2545,6 +4056,7 @@ $("#closeSettings").addEventListener("click", ()=>modal.classList.remove("open")
 modal.addEventListener("click", e=>{ if(e.target === modal) modal.classList.remove("open"); });
 document.addEventListener("keydown", e=>{
   if(e.key !== "Escape") return;
+  if($("#deck").classList.contains("open")){ closeDeck(); $("#deckBtn").focus(); return; }
   if(modal.classList.contains("open")){ modal.classList.remove("open"); $("#settingsBtn").focus(); return; }
   const mm = $("#modelMenu");
   if(mm.classList.contains("open")){ mm.classList.remove("open"); return; }
@@ -2580,6 +4092,8 @@ updateStats();
 syncModePills();
 renderFilterChips();
 renderWatchTags();
+renderPrayer();          /* warm the prayer clock so reminders work before the desk is ever opened */
+$("#prLead2").value = String(prayLead);
 if(notifyOn && typeof Notification !== "undefined" && Notification.permission === "granted") $("#notifyBtn").classList.add("on");
 refreshNews(true);
 probeProxy();
