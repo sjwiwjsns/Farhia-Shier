@@ -60,6 +60,21 @@ Five boards in `#deck`, tabs in `#dkTabs[data-b]`, panels `#b-<name>`. Shared ru
 - `deskSummary()` feeds live board state into `personaPrompt()` (now ~7.5k chars); chat intents cover prayer/qibla/war map/flock/AJ/senate/desk.
 - **Sim-mode carryover**: `drive-sim.js` §6b asserts the desk can't launder demo stories — war markers amber, no BREAKING, rows badged.
 
+## Crypto mode + projections (`scratchpad/drive-crypto.js`, 112 assertions)
+
+- **Price chain**: CoinGecko → CoinCap → Binance, normalised to `{id,sym,name,price,mcap,vol,ch1,ch24,ch7,spark[],rank}`. Stub each and abort the one above to walk the chain. Total failure must show "All three price sources failed" and **zero rows** — there is no cached or seeded price, ever.
+- Auxiliary panels (global / Fear&Greed / mempool fees / hashrate / block height / DefiLlama TVL) each fail independently; every one has its own honest empty state.
+- **Crypto mode** (`#cryptoModeBtn`, `#cryptoModeTop`, persisted `musagpt_cmode`): weaves a price strip into the ticker *after* the news (BREAKING outranks a price), pulls CoinDesk/Cointelegraph/Decrypt onto the wire via the relay chain, arms alerts. The ticker renders the strip **twice** for a seamless marquee — only inspect the first half when asserting order.
+- `tickerSig` includes the price digest, or the cheap in-place path skips the repaint and prices freeze.
+- **Portfolio / alerts**: localStorage only. Portfolio 24h change is **value-weighted** (each holding's own 24h move implies yesterday's value) — not the mean of the percentages; 0.5 BTC +2.31% and 10 ETH −1.42% gives **+0.41%**, not +0.45%. A user-armed alert fires even on an empty chat (unlike unsolicited news reactions, which stay suppressed).
+- **Projections**: `projVolume` (least-squares over six 10-min buckets, ±1 SE band), `projMomentum` (outlets ÷ minutes), `projDesks` (half-hour share shift), `projVol` (log-return σ, √t scaled), `projCryptoNews`. Every panel prints `Method:` — assert all five. The cone must stay **symmetric around spot** (`hi/spot × lo/spot === 1`) and the 7d band ≈ √7× the 24h band.
+- **Test fixture trap**: headlines built from a shared template all collapse into one row via `sigOf()`. Volume/momentum fixtures need genuinely distinct vocabulary.
+- **Prompt** (~10.7k chars) forbids: investment advice of any kind, prices from memory, ranking by "potential", volunteering the portfolio, and "will" instead of "projected".
+
+### Two CSS traps this board exposed
+- **Inline `style="grid-template-columns:…"` beats a media query.** Use classes (`.bgrid.twocol`, `.bcard.wide`) or the board never stacks on mobile.
+- **Grid children default to `min-width:auto`**, so `.ctable{min-width:440px}` blew its card to 486px inside a 390px viewport — clipped invisibly by `body{overflow:hidden}`. `.bgrid > *{min-width:0}` is what lets `overflow-x:auto` actually scroll. Always assert card width ≤ viewport, not just "no page scroll".
+
 ## Extra news fallbacks
 
 `fetchWires()` pulls 6 newsroom RSS feeds (BBC/AJE/NPR/DW/France24/Sky) through `viaRelay()` — allorigins → codetabs → corsproxy, reordered by `relayHealth`. Stub `**/api.allorigins.win/**` and abort the others to exercise the chain; `liveSources` gains `"Newsrooms"`.
