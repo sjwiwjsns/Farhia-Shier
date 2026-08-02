@@ -5,7 +5,7 @@ description: Build/launch/drive recipe for verifying static pages in this repo (
 
 # Verifying this repo's static apps
 
-Static site, no build step. MusaGPT (v3) is a Grok-style shell: left sidebar (chat history), centered hero on empty chats, breaking ticker, slide-over wire panel.
+Static site, no build step. MusaGPT (v5) is a Grok-style shell: left sidebar (chat history), centered hero on empty chats, breaking ticker, slide-over wire panel.
 
 ## Launch
 
@@ -62,6 +62,7 @@ Five boards in `#deck`, tabs in `#dkTabs[data-b]`, panels `#b-<name>`. Shared ru
 
 ## Crypto mode + projections (`scratchpad/drive-crypto.js`, 112 assertions)
 
+- **Header toggle** `#cryptoModeTop` is the largest control in the topbar by design and doubles as a live BTC ticker (`#btcBtnLabel` / `#btcBtnPx`) once the mode is on — it shows `no price` rather than a remembered one. Below 400px `#wireBtn`/`#deckBtn` drop their `.lbl` text to icons so it keeps its size; assert the topbar does not overflow at 320px.
 - **Price chain**: CoinGecko → CoinCap → Binance, normalised to `{id,sym,name,price,mcap,vol,ch1,ch24,ch7,spark[],rank}`. Stub each and abort the one above to walk the chain. Total failure must show "All three price sources failed" and **zero rows** — there is no cached or seeded price, ever.
 - Auxiliary panels (global / Fear&Greed / mempool fees / hashrate / block height / DefiLlama TVL) each fail independently; every one has its own honest empty state.
 - **Crypto mode** (`#cryptoModeBtn`, `#cryptoModeTop`, persisted `musagpt_cmode`): weaves a price strip into the ticker *after* the news (BREAKING outranks a price), pulls CoinDesk/Cointelegraph/Decrypt onto the wire via the relay chain, arms alerts. The ticker renders the strip **twice** for a seamless marquee — only inspect the first half when asserting order.
@@ -79,7 +80,7 @@ Five boards in `#deck`, tabs in `#dkTabs[data-b]`, panels `#b-<name>`. Shared ru
 
 `fetchWires()` pulls 6 newsroom RSS feeds (BBC/AJE/NPR/DW/France24/Sky) through `viaRelay()` — allorigins → codetabs → corsproxy, reordered by `relayHealth`. Stub `**/api.allorigins.win/**` and abort the others to exercise the chain; `liveSources` gains `"Newsrooms"`.
 
-## v3 flows worth driving
+## Core flows worth driving
 
 - **Hero/empty state**: `#chatarea.empty` on boot; hero + `#wireStrip` (`#wsSrc`, `#wsCount`) visible; first send removes `.empty`. No chat is saved until the first message (`localStorage.musagpt_chats` stays empty on boot).
 - **History**: send → chat auto-titles in `#chatList`; Ctrl/Cmd+K = new chat; clicking an item restores its messages; hover ✕ deletes; `#clearHistory` wipes (confirm() dialog); chats survive reload.

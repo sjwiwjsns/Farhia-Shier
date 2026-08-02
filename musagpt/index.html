@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>MusaGPT — Breaking News AI</title>
-<meta name="description" content="MusaGPT: a sarcastic AI news anchor with live breaking headlines, chat history, and optional Claude/GPT live modes.">
+<title>MusaGPT v5 — Breaking News AI</title>
+<meta name="description" content="MusaGPT v5: a sarcastic AI news anchor — live breaking headlines from ten sources, a war map, İstanbul prayer times, live crypto markets and honest projections. Runs in the browser.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 <style>
 /* ============================================================
-   MusaGPT v3 — Grok-inspired layout: sidebar + minimal chat
+   MusaGPT v5 — Grok-inspired layout: sidebar + minimal chat + the desk
    ============================================================ */
 :root{
   --bg:#050507;
@@ -63,7 +63,11 @@ body::before{
   background-size:200% 100%;animation:shimmer 6s ease-in-out infinite;
 }
 @keyframes shimmer{0%,100%{background-position:0% 0}50%{background-position:100% 0}}
-.sbhead .ver{font-size:10px;color:var(--txt-faint);font-family:var(--mono);margin-top:5px}
+.sbhead .ver{
+  font-size:9px;font-family:var(--mono);font-weight:700;letter-spacing:.08em;margin-top:6px;
+  color:var(--accent);border:1px solid rgba(138,180,255,.32);background:rgba(138,180,255,.08);
+  border-radius:6px;padding:2px 6px;line-height:1;
+}
 .sbactions{padding:0 12px 10px;display:flex;flex-direction:column;gap:7px}
 .sbbtn{
   display:flex;align-items:center;gap:10px;width:100%;
@@ -155,8 +159,28 @@ body::before{
 .titem .pxch{font-family:var(--mono);font-size:10px}
 .titem.pxitem{opacity:.95}
 body.cmode .breaking .tag b{letter-spacing:.1em}
-#cryptoModeTop{font-size:13px;padding:7px 11px}
-#cryptoModeTop.on{color:#f7c34a;border-color:rgba(247,195,74,.5);background:rgba(247,195,74,.1)}
+/* The crypto toggle is deliberately the largest control in the bar: it is a
+   mode switch, not a tab, and when it is on it carries a live number. */
+.btcbtn{padding:5px 14px 5px 8px;gap:9px;align-items:center}
+.btcbtn .btcmark{
+  width:28px;height:28px;flex-shrink:0;display:grid;place-items:center;border-radius:9px;
+  font-size:17px;font-weight:800;color:#f7c34a;
+  background:linear-gradient(135deg,rgba(247,195,74,.20),rgba(247,195,74,.06));
+  border:1px solid rgba(247,195,74,.3);transition:.18s;
+}
+.btcbtn .btctxt{display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;gap:1px}
+.btcbtn .btctxt b{font-size:11px;letter-spacing:.1em;font-weight:700;color:var(--txt-dim);transition:.18s}
+.btcbtn .btctxt span{font-size:9.5px;color:var(--txt-faint);font-variant-numeric:tabular-nums;transition:.18s}
+.btcbtn:hover .btcmark{border-color:rgba(247,195,74,.55);box-shadow:0 0 16px rgba(247,195,74,.22)}
+.btcbtn.on{border-color:rgba(247,195,74,.45);background:rgba(247,195,74,.08);box-shadow:0 0 20px rgba(247,195,74,.1)}
+.btcbtn.on .btcmark{
+  color:#12121a;background:linear-gradient(135deg,#f7c34a,#e0a92e);border-color:transparent;
+  box-shadow:0 0 16px rgba(247,195,74,.5);
+}
+.btcbtn.on .btctxt b{color:#f7c34a}
+.btcbtn.on .btctxt span{color:var(--txt-dim)}
+.btcbtn .btctxt span.up{color:var(--green)}
+.btcbtn .btctxt span.dn{color:#ff6b73}
 .demotag{
   flex-shrink:0;margin:0 16px;font-size:9px;font-family:var(--mono);letter-spacing:.1em;color:var(--txt-faint);
   border:1px dashed rgba(255,255,255,.18);padding:3px 7px;border-radius:6px;cursor:help;
@@ -199,6 +223,11 @@ body.cmode .breaking .tag b{letter-spacing:.1em}
 .chatarea.empty #hero{display:block}
 .chatarea.empty #msgs{display:none}
 .hero-mark{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px}
+.hero-mark .herover{
+  align-self:flex-start;margin-top:6px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;
+  color:var(--accent);border:1px solid rgba(138,180,255,.35);background:rgba(138,180,255,.09);
+  border-radius:7px;padding:3px 7px;line-height:1;
+}
 .hero-mark .bolt{width:52px;height:52px;font-size:26px;border-radius:15px}
 .hero-mark h2{
   font-size:42px;font-weight:800;letter-spacing:.03em;
@@ -313,9 +342,10 @@ textarea#input::placeholder{color:var(--txt-faint)}
 .mmitem.sel .tick{opacity:1}
 .mmdiv{height:1px;background:var(--line);margin:5px 8px}
 .disclaim{
-  text-align:center;font-size:10px;color:var(--txt-faint);font-family:var(--mono);
-  padding:9px 8px;max-width:780px;margin:0 auto;
+  text-align:center;font-size:10px;color:var(--txt-faint);font-family:var(--mono);line-height:1.7;
+  padding:9px 8px;max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:2px;
 }
+.disclaim .dsrc{font-size:9px;opacity:.72}
 .chatarea.empty .disclaim{position:absolute;bottom:6px;left:0;right:0;max-width:none}
 
 /* ================= WIRE PANEL (slide-over) ================= */
@@ -657,7 +687,9 @@ textarea#input::placeholder{color:var(--txt-faint)}
 /* focus + motion */
 .iconbtn:focus-visible,.qchip:focus-visible,.btn:focus-visible,#send:focus-visible,.sbbtn:focus-visible,
 .chatitem:focus-visible,#modelPill:focus-visible,.mmitem:focus-visible,.fitem:focus-visible,.titem a:focus-visible,
-.modal input:focus-visible,.modal select:focus-visible,textarea#input:focus-visible,.copybtn:focus-visible,.wpclose:focus-visible{
+.modal input:focus-visible,.modal select:focus-visible,textarea#input:focus-visible,.copybtn:focus-visible,.wpclose:focus-visible,
+.dktab:focus-visible,.dkclose:focus-visible,.wpb:focus-visible,.brow:focus-visible,.cform input:focus-visible,
+.cform select:focus-visible,.ctable tbody tr:focus-visible{
   outline:2px solid rgba(138,180,255,.65);outline-offset:2px;
 }
 @media (prefers-reduced-motion: reduce){
@@ -680,8 +712,30 @@ textarea#input::placeholder{color:var(--txt-faint)}
   .topbar{padding:10px 12px;gap:8px}
   .topbar .chip.hidesm{display:none}
 }
+@media (max-width:560px){
+  /* the chyron tag was taking two thirds of the banner on a phone */
+  .breaking .tag{padding:0 9px 0 11px;gap:6px}
+  .breaking .tag b{font-size:9px;letter-spacing:.08em}
+  .livedot{width:7px;height:7px}
+  .demotag{margin:0 9px;font-size:8px;padding:2px 5px}
+  .titem{padding:0 16px;font-size:12px}
+}
+@media (max-width:400px){
+  /* still the biggest control in the bar, just not at the cost of the others */
+  .btcbtn{padding:5px 10px 5px 6px;gap:7px}
+  .btcbtn .btcmark{width:25px;height:25px;font-size:15px}
+  .btcbtn .btctxt b{font-size:10px}
+  .btcbtn .btctxt span{font-size:9px}
+  #wireBtn,#deckBtn{padding:6px 9px}
+  /* below ~400px the two panel buttons drop to icons so the crypto toggle
+     keeps its size instead of everything shrinking together */
+  #wireBtn .lbl,#deckBtn .lbl{display:none}
+  .topbar{gap:5px;padding-left:9px;padding-right:9px}
+}
 @media (max-width:480px){
   .topbar{gap:6px}
+  .disclaim .dsrc{display:none}
+  .hero-mark .herover{font-size:9px;padding:2px 5px}
   .iconbtn{padding:6px 8px;font-size:10px}
   .disclaim{font-size:9px}
   #modelPill{padding:9px 9px}
@@ -697,7 +751,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
     <div class="sbhead">
       <div class="bolt">⚡</div>
       <span class="wordmark">MusaGPT</span>
-      <span class="ver">v3.0</span>
+      <span class="ver">v5</span>
     </div>
     <div class="sbactions">
       <button class="sbbtn" id="newChat">✚ New chat <span class="k">Ctrl K</span></button>
@@ -722,9 +776,12 @@ textarea#input::placeholder{color:var(--txt-faint)}
       <span class="chip hidesm"><span class="dot"></span><span id="coreChip">CORE ONLINE</span></span>
       <span class="chip hidesm" id="modelChip">engine: musa-core-2</span>
       <div class="spacer"></div>
-      <button class="iconbtn" id="cryptoModeTop" aria-label="Toggle crypto mode"><b>₿</b></button>
-      <button class="iconbtn" id="deckBtn" aria-label="Open the desk: maps, prayer times, Arabic wire, Senate 2026"><b>🧭 DESK</b></button>
-      <button class="iconbtn" id="wireBtn" aria-label="Open the last-hour news panel"><b>◉ WIRE</b> <span id="wireCount"></span></button>
+      <button class="iconbtn btcbtn" id="cryptoModeTop" aria-pressed="false" aria-label="Toggle crypto mode">
+        <span class="btcmark">₿</span>
+        <span class="btctxt"><b id="btcBtnLabel">CRYPTO</b><span id="btcBtnPx">markets off</span></span>
+      </button>
+      <button class="iconbtn" id="deckBtn" aria-label="Open the desk: maps, prayer times, Arabic wire, Senate 2026, crypto"><b>🧭<span class="lbl"> DESK</span></b></button>
+      <button class="iconbtn" id="wireBtn" aria-label="Open the last-hour news panel"><b>◉<span class="lbl"> WIRE</span></b> <span id="wireCount"></span></button>
     </header>
 
     <div class="breaking" id="brkBanner">
@@ -735,12 +792,13 @@ textarea#input::placeholder{color:var(--txt-faint)}
 
     <div class="chatarea empty" id="chatarea">
       <div id="hero">
-        <div class="hero-mark"><div class="bolt">⚡</div><h2>MusaGPT</h2></div>
-        <p class="hero-tag">Your extremely well-informed, lightly sarcastic news desk.<br>I read the last hour of the wire so you don't have to.</p>
+        <div class="hero-mark"><div class="bolt">⚡</div><h2>MusaGPT</h2><span class="herover">v5</span></div>
+        <p class="hero-tag">Your extremely well-informed, lightly sarcastic news desk.<br>I read the last hour of the wire so you don't have to — and I show my sources.</p>
         <div id="wireStrip">
           <span class="ws">⚡ wire: <b id="wsSrc">connecting…</b></span>
           <span class="ws">📰 <b id="wsCount">0</b> stories this hour</span>
           <span class="ws">↻ refreshes every 2 min</span>
+          <span class="ws" id="wsCrypto" hidden>₿ <b id="wsBtc">—</b></span>
         </div>
       </div>
 
@@ -766,7 +824,10 @@ textarea#input::placeholder{color:var(--txt-faint)}
         <button class="qchip" type="button">Show me projections</button>
         <button class="qchip" type="button">Is this news real?</button>
       </div>
-      <div class="disclaim" id="disclaim">sarcastic by design · live wire: GDELT · Reddit · HN · BBC/AJE/NPR/DW/France24/Sky · 🧭 DESK: war map · ALPR cameras · İstanbul prayer times · الجزيرة · Senate 2026 · live crypto · projections · simulated fallback always labeled</div>
+      <div class="disclaim" id="disclaim">
+  <span>sarcastic by design · every figure is live or labelled · simulated fallback always marked</span>
+  <span class="dsrc">wire: GDELT · Reddit · HN · BBC · AJE · NPR · DW · France24 · Sky &nbsp;·&nbsp; desk: war map · ALPR · prayer · الجزيرة · Senate 2026 · crypto · projections</span>
+</div>
     </div>
   </div>
 
@@ -1063,7 +1124,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 <script>
 "use strict";
 /* ================================================================
-   MusaGPT v3 — sarcastic breaking-news AI, Grok-style shell
+   MusaGPT v5 — sarcastic breaking-news AI, Grok-style shell
    - Real headlines (GDELT → Reddit → labeled simulated fallback)
    - Chat history (localStorage) + temporary chats
    - Brains: local core → site-key proxy (/api/chat) → your own key
@@ -2862,7 +2923,33 @@ async function fetchMarkets(){
 function afterMarkets(){
   checkAlerts();
   renderCrypto();
+  renderBtcButton();
   if(cryptoMode) renderTicker();
+}
+/* The header button doubles as a BTC ticker once the mode is on — same rule
+   as everywhere else: it shows a live number or it shows nothing, never a
+   remembered one. */
+function renderBtcButton(){
+  const lab = $("#btcBtnLabel"), px = $("#btcBtnPx");
+  if(!lab || !px) return;
+  const btc = coinById("bitcoin") || coinById("BTC");
+  if(!cryptoMode){
+    lab.textContent = "CRYPTO";
+    px.textContent = "markets off";
+    px.className = "";
+    const ws = $("#wsCrypto"); if(ws) ws.hidden = true;
+    return;
+  }
+  lab.textContent = "BTC";
+  if(!btc || !btc.price){
+    px.textContent = crypto.loading ? "loading…" : "no price";
+    px.className = "";
+    return;
+  }
+  px.textContent = usd(btc.price) + (typeof btc.ch24 === "number" ? "  " + pct(btc.ch24) : "");
+  px.className = pctCls(btc.ch24);
+  const ws = $("#wsCrypto"), wb = $("#wsBtc");
+  if(ws && wb){ ws.hidden = false; wb.textContent = btc.sym + " " + usd(btc.price) + " " + pct(btc.ch24); }
 }
 /* Auxiliary panels: each independent, each optional. */
 async function fetchCryptoExtras(){
@@ -3133,7 +3220,8 @@ function setCryptoMode(on){
   const btn = $("#cryptoModeBtn");
   if(btn){ btn.textContent = cryptoMode ? "₿ Crypto mode: ON" : "₿ Crypto mode: off"; btn.classList.toggle("on", cryptoMode); }
   const hb = $("#cryptoModeTop");
-  if(hb) hb.classList.toggle("on", cryptoMode);
+  if(hb){ hb.classList.toggle("on", cryptoMode); hb.setAttribute("aria-pressed", String(cryptoMode)); }
+  renderBtcButton();
   if(cryptoMode){
     if(!crypto.coins.length) fetchMarkets();
     fetchCryptoExtras();
@@ -4116,7 +4204,7 @@ function localReply(raw, _redir){
     }
     const brk = breakingNow();
     if(brk.length){
-      return `🚨 **${brk.length} story${brk.length>1?"ies":""} clearing my BREAKING bar right now** (urgent wording, fresh, and/or multiple outlets corroborating):\n\n`
+      return `🚨 **${brk.length} ${brk.length===1?"story":"stories"} clearing my BREAKING bar right now** (urgent wording, fresh, and/or multiple outlets corroborating):\n\n`
         + brk.slice(0,4).map(i=>"• "+headlineLine(i)).join("\n")
         + "\n\n" + rnd([
           "That's what I'd lead the bulletin with.",
