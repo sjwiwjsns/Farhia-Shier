@@ -89,6 +89,21 @@ Browser `SpeechSynthesis` — local, keyless, offline. Headless Chromium has **n
 - Unsupported browser: `#ttsBtn` disabled, `.speakbtn` removed entirely, picker says "not supported", `speak()` returns `false`, `stopSpeaking()` is a no-op. `syncTtsUi()` calls `renderVoicePicker()` because `loadVoices()` bails before it.
 - **Trap:** the bubble for the reply being generated is already in the DOM and empty, so "read that again" must filter to bubbles with real text or it reads nothing.
 
+## musa-core-3 (`scratchpad/drive-core3.js`, 48 assertions)
+
+The local model is now ten classical-NLP modules living in `tools/core/*.js`, merged into the app by `tools/merge-core.py`. **Fix bugs in `tools/core/`, never in the merged copy inside index.html** — the next merge reverts anything edited in place. Each module has its own node self-test (`node tools/core/qa.js`); those tests are the spec.
+
+- Merge resolves collisions: three modules independently defined `mcStem`, two defined `mcCosine`/`mcSentences`. Canonical owners keep the bare name; everyone else gets a module prefix (`mcQaTokenize`, `mcClStem`…). **The app's copy uses the renamed identifiers**, so a patch anchored on module source won't match the app.
+- `core3*` bridge functions in index.html adapt the `mc*` primitives to FEED; `core3Analyse()` caches on a feed signature because clustering is O(n²).
+- **Intent-ordering trap:** the factoid-QA intent fires on `^(who|where|when|how many…)`, which swallowed "when is the next prayer". `CORE_QA_NOT` excludes vocabulary owned by the board intents — extend it when adding a board.
+- **Follow-up trap:** pronoun resolution rewrote "read **that** again" into an entity name and broke the voice intent. `APP_CMD` skips resolution for commands aimed at the app.
+- `\bsummar\b` never matches "summarize" — the word continues past the boundary. Use `\w*`.
+- Driver `ask()` helpers must not require a minimum reply length: calculator answers are 2 characters ("12").
+
+## Guardrail posture (deliberate, do not "restore")
+
+Investment-advice refusals and boilerplate disclaimers were **removed on request** — this is a private single-user tool. `drive-crypto.js` now asserts the *inverse*: the prompt invites a real read, the portfolio informs reasoning, the safety section reads "private terminal, not a published product". What stayed, and is still asserted: never quote a price from memory, never invent a headline, and the whole simulated-story failsafe system.
+
 ## Extra news fallbacks
 
 `fetchWires()` pulls 6 newsroom RSS feeds (BBC/AJE/NPR/DW/France24/Sky) through `viaRelay()` — allorigins → codetabs → corsproxy, reordered by `relayHealth`. Stub `**/api.allorigins.win/**` and abort the others to exercise the chain; `liveSources` gains `"Newsrooms"`.
