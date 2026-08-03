@@ -76,6 +76,19 @@ Five boards in `#deck`, tabs in `#dkTabs[data-b]`, panels `#b-<name>`. Shared ru
 - **Inline `style="grid-template-columns:…"` beats a media query.** Use classes (`.bgrid.twocol`, `.bcard.wide`) or the board never stacks on mobile.
 - **Grid children default to `min-width:auto`**, so `.ctable{min-width:440px}` blew its card to 486px inside a 390px viewport — clipped invisibly by `body{overflow:hidden}`. `.bgrid > *{min-width:0}` is what lets `overflow-x:auto` actually scroll. Always assert card width ≤ viewport, not just "no page scroll".
 
+## Text to speech (`scratchpad/drive-tts.js`, 75 assertions)
+
+Browser `SpeechSynthesis` — local, keyless, offline. Headless Chromium has **no real synthesiser**, so the driver installs a recording shim via `addInitScript` before app code runs and asserts on what was *asked* to be spoken. Reuse `SHIM` in that file rather than trying to hear anything.
+
+- `speakable(md)` strips markdown, bullets, emoji, code fences and bare URLs. **The `⚠ SIMULATED` marker is converted to the spoken words "Warning: simulated"** before emoji stripping — audio has no badges, so the warning has to be said. Assert this whenever the sanitiser changes.
+- `chunkSpeech()` splits to ≤180 chars because **Chrome silently truncates an utterance after ~15s**; long briefings would lose their second half. Chunks are packed to sentence boundaries and re-joined losslessly.
+- Voices arrive **asynchronously** — `getVoices()` is empty on first call, the list comes on `voiceschanged`. The picker renders twice; the shim's `__tts.releaseVoices()` simulates the event. `pickVoice()` prefers a `localService` (offline) voice.
+- `tts.gen` invalidates in-flight `onend` callbacks so a cancelled queue can't resurrect itself; `speechSynthesis.cancel()` raises `interrupted`/`canceled` on `onerror`, which are **not** failures.
+- Stop paths that must all work: the `speak`/`stop` button per message, `#ttsBtn` while speaking (stops without disabling voice), sending a new message, `beforeunload`/`pagehide`, and the chat intent "stop talking".
+- `personaPrompt()` gains a speech-formatting paragraph **only while `tts.on`** — assert it disappears when off.
+- Unsupported browser: `#ttsBtn` disabled, `.speakbtn` removed entirely, picker says "not supported", `speak()` returns `false`, `stopSpeaking()` is a no-op. `syncTtsUi()` calls `renderVoicePicker()` because `loadVoices()` bails before it.
+- **Trap:** the bubble for the reply being generated is already in the DOM and empty, so "read that again" must filter to bubbles with real text or it reads nothing.
+
 ## Extra news fallbacks
 
 `fetchWires()` pulls 6 newsroom RSS feeds (BBC/AJE/NPR/DW/France24/Sky) through `viaRelay()` — allorigins → codetabs → corsproxy, reordered by `relayHealth`. Stub `**/api.allorigins.win/**` and abort the others to exercise the chain; `liveSources` gains `"Newsrooms"`.
