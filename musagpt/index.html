@@ -738,6 +738,70 @@ textarea#input::placeholder{color:var(--txt-faint)}
 .fitem.hasimg{display:flex;gap:10px;align-items:flex-start}
 .fitem.hasimg .fbody{flex:1;min-width:0}
 .novis{color:var(--amber)}
+/* timeline board */
+.chartbox{min-height:60px}
+.chartbox svg{width:100%;height:auto;display:block}
+.tlform{display:flex;gap:7px;margin-bottom:10px}
+.tlform input{
+  flex:1;min-width:0;background:var(--panel);border:1px solid var(--line2);color:var(--txt);
+  border-radius:9px;padding:8px 11px;font:inherit;font-size:12.5px;
+}
+.tlform input:focus{outline:none;border-color:var(--accent)}
+.tlrow{
+  display:flex;gap:9px;align-items:baseline;padding:6px 0;
+  border-bottom:1px solid var(--line);font-size:12px;line-height:1.45;
+}
+.tlrow:last-child{border-bottom:none}
+.tlrow time{
+  font-family:var(--mono);font-size:9.5px;color:var(--txt-faint);
+  flex-shrink:0;width:52px;
+}
+.tlgap{
+  font-family:var(--mono);font-size:10px;color:var(--amber);
+  padding:5px 0;border-bottom:1px solid var(--line);
+}
+.tldup{padding:7px 0;border-bottom:1px solid var(--line);font-size:11.5px;line-height:1.45}
+.tldup:last-child{border-bottom:none}
+.tldup .sim{font-family:var(--mono);font-size:9.5px;color:var(--accent)}
+.tldup del{color:#ff8a92;text-decoration:line-through;opacity:.8}
+.tldup ins{color:#7ee2a8;text-decoration:none}
+/* command palette */
+.cmdk{
+  position:fixed;inset:0;z-index:95;display:none;
+  background:rgba(4,4,7,.72);backdrop-filter:blur(6px);
+  padding:11vh 16px 16px;
+}
+.cmdk.open{display:block}
+.cmdkbox{
+  max-width:600px;margin:0 auto;background:var(--panel2,#14141c);
+  border:1px solid var(--line2);border-radius:15px;overflow:hidden;
+  box-shadow:0 28px 90px rgba(0,0,0,.66);
+}
+.cmdkbox input{
+  width:100%;background:transparent;border:none;border-bottom:1px solid var(--line);
+  color:var(--txt);font:inherit;font-size:15px;padding:15px 17px;
+}
+.cmdkbox input:focus{outline:none}
+.cmdklist{max-height:min(52vh,420px);overflow-y:auto;padding:6px}
+.cmdkitem{
+  display:flex;gap:10px;align-items:center;padding:9px 11px;border-radius:9px;
+  cursor:pointer;font-size:13px;line-height:1.35;
+}
+.cmdkitem.sel{background:rgba(138,180,255,.13)}
+.cmdkitem .ic{font-size:15px;flex-shrink:0;width:20px;text-align:center}
+.cmdkitem .tx{flex:1;min-width:0}
+.cmdkitem .hint{
+  font-family:var(--mono);font-size:9px;color:var(--txt-faint);
+  border:1px solid var(--line2);border-radius:5px;padding:2px 5px;flex-shrink:0;
+}
+.cmdkitem mark{background:transparent;color:var(--accent);font-weight:700}
+.cmdkitem .sn{display:block;font-size:10.5px;color:var(--txt-faint);margin-top:2px}
+.cmdkitem .sn mark{color:var(--amber)}
+.cmdkempty{padding:22px 17px;color:var(--txt-faint);font-size:12.5px;text-align:center}
+.cmdkfoot{
+  display:flex;gap:12px;padding:8px 14px;border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:9px;color:var(--txt-faint);flex-wrap:wrap;
+}
 /* core board */
 .tpc{border:1px solid var(--line);border-radius:11px;padding:9px 11px;margin-bottom:8px;background:rgba(255,255,255,.02)}
 .tpc .tl{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
@@ -1013,6 +1077,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
     <button class="dktab"    data-b="senate" role="tab">🗳 SENATE 2026</button>
     <button class="dktab"    data-b="crypto" role="tab">₿ CRYPTO</button>
     <button class="dktab"    data-b="proj"   role="tab">📈 PROJECTIONS</button>
+    <button class="dktab"    data-b="time"   role="tab">⏳ TIMELINE</button>
     <button class="dktab"    data-b="core"   role="tab">🧠 CORE</button>
   </div>
   <div class="dkbody">
@@ -1209,6 +1274,43 @@ textarea#input::placeholder{color:var(--txt-faint)}
 
 
     <!-- ---- MUSA CORE ---- -->
+    <!-- ---- TIMELINE ---- -->
+    <section class="board" id="b-time" role="tabpanel">
+      <div class="bnote">How the hour actually unfolded. Every chart here is drawn from the live wire in this tab — the bucket size is chosen from the span, not fixed, and a quiet stretch is measured against the median gap rather than a hardcoded threshold. Type a name to pull one story's own thread out of the noise.</div>
+      <div class="bgrid twocol">
+        <div class="bcard wide">
+          <h4>📊 ARRIVALS <span class="n" id="tlUnit">—</span></h4>
+          <div id="tlBars" class="bpad chartbox"></div>
+        </div>
+        <div class="bcard wide">
+          <h4>⚡ WIRE VELOCITY <span class="n" id="tlVel">—</span></h4>
+          <div id="tlVelBox" class="bpad chartbox"></div>
+        </div>
+        <div class="bcard wide">
+          <h4>🔎 STORY THREAD</h4>
+          <div class="bpad">
+            <form class="tlform" id="tlForm">
+              <input id="tlQ" placeholder="a name, place or org — Gaza, Fed, Trump…" aria-label="Entity to trace" autocomplete="off">
+              <button class="wpb" type="submit">Trace</button>
+            </form>
+            <div id="tlEnt"><div class="bempty">Type a name to see only the stories that mention it, on their own clock.</div></div>
+          </div>
+        </div>
+        <div class="bcard">
+          <h4>🤫 QUIET STRETCHES <span class="n" id="tlGapN">0</span></h4>
+          <div class="blist" id="tlGaps"><div class="bempty">Reading the wire…</div></div>
+        </div>
+        <div class="bcard">
+          <h4>🧬 NEAR-DUPLICATES <span class="n" id="tlDupN">0</span></h4>
+          <div class="blist" id="tlDups"><div class="bempty">Reading the wire…</div></div>
+        </div>
+        <div class="bcard wide">
+          <h4>🎛 DESK MIX <span class="n" id="tlMixN">0</span></h4>
+          <div id="tlMix" class="bpad chartbox"></div>
+        </div>
+      </div>
+    </section>
+
     <section class="board" id="b-core" role="tabpanel">
       <div class="bnote" id="coreNote"><b>musa-core-3</b> — the model that runs when no API key is set. Classical NLP, fitted in this tab on the wire as it arrives: a Porter stemmer, an n-gram language model with backoff, naive-Bayes routing, TF-IDF and BM25 retrieval, agglomerative topic clustering, TextRank summarisation, rule-based entity recognition, lexicon sentiment, and extractive QA. Zero network, zero weights downloaded.</div>
       <div class="bstats" id="coreStats" style="padding:0 0 14px"></div>
@@ -1271,6 +1373,15 @@ textarea#input::placeholder{color:var(--txt-faint)}
       </div>
     </section>
 
+  </div>
+</div>
+
+<div class="cmdk" id="cmdk" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="cmdkbox">
+    <input id="cmdkQ" placeholder="Jump to a board, run a command, or search everything you've said…"
+           aria-label="Command or search" autocomplete="off" spellcheck="false">
+    <div class="cmdklist" id="cmdkList" role="listbox"></div>
+    <div class="cmdkfoot"><span>↑↓ move</span><span>⏎ run</span><span>esc close</span><span id="cmdkMode">commands</span></div>
   </div>
 </div>
 
@@ -5584,10 +5695,11 @@ const MC_COVER_FLOOR = 0.35;
    doc can never be *returned* as the answer — see mcAnswer. */
 const MC_NO_SPAN_PENALTY = 0.25;
 
-/* Multiplier when the question's focus noun appears nowhere in the doc. This is
-   the single most important guard against answering "who is the president of
-   Mars" from a headline that merely contains the word "president". */
-const MC_NO_FOCUS_PENALTY = 0.4;
+/* Multiplier when the question's focus noun appears nowhere in the doc. Kept as
+   a nudge rather than a veto: the idf-reference normalisation already punishes a
+   query term the corpus has never seen, and a hard focus veto misfires whenever
+   the head-noun guess is wrong (focus extraction has no parser behind it). */
+const MC_NO_FOCUS_PENALTY = 0.6;
 
 /* Question types we can act on. WHO/WHERE/WHEN/HOWMANY are "hard": they demand
    a span of a specific shape and we return null when the doc has none. */
@@ -8241,6 +8353,3950 @@ function mcCalcSelfTest() {
   return state.fail === 0;
 }
 
+/* ---------- core module: imganalyse.js ---------- */
+/* ===========================================================================
+   mcImg — purely local image analysis.
+
+   Everything here runs on bytes and pixels you already have: magic-byte
+   sniffing, a hand-rolled JPEG/APP1 + TIFF/IFD EXIF reader, and a pile of
+   classical image statistics (luma moments, Sobel, Laplacian, k-means palette,
+   DCT perceptual hash). No network calls, no ML model, no dependencies.
+
+   Every top-level name is prefixed `mcImg` so this file can be pasted into a
+   single-file app that already owns the `mc*` namespace without collisions.
+
+   Design rule followed throughout: hostile input is normal input. A truncated
+   JPEG, a zero-byte file, a 1x1 GIF, a text file renamed to .png — none of
+   these throw. They return null or a zeroed result, because an image tool that
+   explodes on one bad file in a batch of 500 is worse than useless.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   0. Constants and tiny helpers
+   --------------------------------------------------------------------------- */
+
+// Deliberately far above the 64-bit maximum distance so a caller can never
+// mistake "these hashes are not comparable" for "these images differ a lot".
+const mcImgHammingSentinel = 9999;
+
+// Sizes in bytes per TIFF field type, indexed by the type code itself.
+// Index 0 is unused; unknown/oversized codes fall off the end as undefined.
+const mcImgTypeSizes = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
+
+// The tags we bother naming. Anything else is surfaced as `Tag0x____` in
+// `raw` so a UI can still show it without us pretending to understand it.
+const mcImgTagNames = {
+  0x0100: "ImageWidth", 0x0101: "ImageLength", 0x0102: "BitsPerSample",
+  0x0106: "PhotometricInterpretation", 0x010e: "ImageDescription",
+  0x010f: "Make", 0x0110: "Model", 0x0112: "Orientation",
+  0x011a: "XResolution", 0x011b: "YResolution", 0x0128: "ResolutionUnit",
+  0x0131: "Software", 0x0132: "DateTime", 0x013b: "Artist",
+  0x8298: "Copyright", 0x8769: "ExifIFDPointer", 0x8825: "GPSInfoIFDPointer",
+  0x829a: "ExposureTime", 0x829d: "FNumber", 0x8822: "ExposureProgram",
+  0x8827: "ISOSpeedRatings", 0x9000: "ExifVersion",
+  0x9003: "DateTimeOriginal", 0x9004: "DateTimeDigitized",
+  0x9201: "ShutterSpeedValue", 0x9202: "ApertureValue",
+  0x9204: "ExposureBiasValue", 0x9207: "MeteringMode", 0x9209: "Flash",
+  0x920a: "FocalLength", 0x927c: "MakerNote", 0x9286: "UserComment",
+  0xa002: "PixelXDimension", 0xa003: "PixelYDimension",
+  0xa402: "ExposureMode", 0xa403: "WhiteBalance",
+  0xa405: "FocalLengthIn35mmFilm", 0xa406: "SceneCaptureType",
+  0xa432: "LensSpecification", 0xa433: "LensMake", 0xa434: "LensModel"
+};
+
+const mcImgGpsTagNames = {
+  0x0000: "GPSVersionID", 0x0001: "GPSLatitudeRef", 0x0002: "GPSLatitude",
+  0x0003: "GPSLongitudeRef", 0x0004: "GPSLongitude", 0x0005: "GPSAltitudeRef",
+  0x0006: "GPSAltitude", 0x0007: "GPSTimeStamp", 0x0012: "GPSMapDatum",
+  0x001d: "GPSDateStamp"
+};
+
+// "1.4 MB" style. Base 1024 because that is what file managers show.
+function mcImgFmtBytes(n) {
+  const v0 = typeof n === "number" ? n : Number(n);
+  if (!isFinite(v0) || v0 <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let v = v0;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  // Whole bytes never get a fake decimal; everything above does, so that
+  // sizes line up visually in a column.
+  return i === 0 ? Math.round(v) + " B" : v.toFixed(1) + " " + units[i];
+}
+
+// mulberry32. A seeded PRNG is not a nicety here: k-means with random seeding
+// would hand the user a different palette every time they re-opened the same
+// photo, which reads as a bug even though it is "correct".
+function mcImgRng(seed) {
+  let a = (seed >>> 0) || 1;
+  return function () {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function mcImgClamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+function mcImgHex2(v) {
+  const s = Math.round(mcImgClamp(v, 0, 255)).toString(16);
+  return s.length === 1 ? "0" + s : s;
+}
+
+function mcImgRgbHex(r, g, b) { return "#" + mcImgHex2(r) + mcImgHex2(g) + mcImgHex2(b); }
+
+function mcImgRound(v, places) {
+  const p = Math.pow(10, places);
+  return Math.round(v * p) / p;
+}
+
+// Accepts ArrayBuffer, any TypedArray, DataView, Node Buffer or plain array.
+// Returns a Uint8Array view or null — never throws on junk.
+function mcImgToBytes(input) {
+  try {
+    if (!input) return null;
+    if (input instanceof Uint8Array) return input;
+    if (typeof ArrayBuffer !== "undefined" && input instanceof ArrayBuffer) return new Uint8Array(input);
+    if (ArrayBuffer.isView(input)) return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+    if (Array.isArray(input)) return new Uint8Array(input);
+    if (typeof input.byteLength === "number" && input.buffer) {
+      return new Uint8Array(input.buffer, input.byteOffset || 0, input.byteLength);
+    }
+    return null;
+  } catch (e) { return null; }
+}
+
+// ASCII compare against a byte array without allocating a string per call.
+function mcImgAsciiAt(bytes, off, text) {
+  if (!bytes || off < 0 || off + text.length > bytes.length) return false;
+  for (let i = 0; i < text.length; i++) if (bytes[off + i] !== text.charCodeAt(i)) return false;
+  return true;
+}
+
+/* ---------------------------------------------------------------------------
+   1. Format sniffing from magic bytes
+   --------------------------------------------------------------------------- */
+
+/**
+ * mcImgSniff(bytes) -> { mime, ext, ok }
+ *
+ * WHY we never trust `File.type` / the filename extension: in the browser the
+ * declared MIME type is derived from the OS extension→type table, so it is
+ * whatever the user's filesystem last guessed. It is trivially wrong (a PNG
+ * saved as `photo.jpg`), trivially spoofed (an upload form is client-side),
+ * and simply absent for files dragged from some sources. The first handful of
+ * bytes is the only thing the decoder itself will actually act on, so that is
+ * what we look at.
+ */
+function mcImgSniff(input) {
+  const miss = { mime: "", ext: "", ok: false };
+  const b = mcImgToBytes(input);
+  if (!b || b.length < 2) return miss;
+
+  // JPEG: SOI marker followed by any marker start.
+  if (b[0] === 0xff && b[1] === 0xd8 && (b.length < 3 || b[2] === 0xff)) {
+    return { mime: "image/jpeg", ext: "jpg", ok: true };
+  }
+  // PNG: the 8-byte signature is designed to also catch CR/LF mangling.
+  if (b.length >= 8 && b[0] === 0x89 && mcImgAsciiAt(b, 1, "PNG") &&
+      b[4] === 0x0d && b[5] === 0x0a && b[6] === 0x1a && b[7] === 0x0a) {
+    return { mime: "image/png", ext: "png", ok: true };
+  }
+  if (mcImgAsciiAt(b, 0, "GIF87a") || mcImgAsciiAt(b, 0, "GIF89a")) {
+    return { mime: "image/gif", ext: "gif", ok: true };
+  }
+  // WebP is a RIFF container; the form type at offset 8 is what makes it WebP.
+  if (mcImgAsciiAt(b, 0, "RIFF") && mcImgAsciiAt(b, 8, "WEBP")) {
+    return { mime: "image/webp", ext: "webp", ok: true };
+  }
+  if (b[0] === 0x42 && b[1] === 0x4d) {
+    return { mime: "image/bmp", ext: "bmp", ok: true };
+  }
+  // ISO-BMFF (`ftyp` box at offset 4). AVIF and HEIC share the container, so
+  // we read the major brand *and* the compatible-brand list; `mif1` alone is
+  // ambiguous and shows up in both, hence checking avif brands first.
+  if (b.length >= 12 && mcImgAsciiAt(b, 4, "ftyp")) {
+    const boxLen = Math.min(b.length, (b[0] << 24 | b[1] << 16 | b[2] << 8 | b[3]) >>> 0 || 16);
+    const brands = [];
+    for (let o = 8; o + 4 <= Math.max(12, boxLen) && o + 4 <= b.length; o += 4) {
+      if (o === 12) continue; // minor_version, not a brand
+      brands.push(String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]));
+    }
+    if (brands.indexOf("avif") >= 0 || brands.indexOf("avis") >= 0) {
+      return { mime: "image/avif", ext: "avif", ok: true };
+    }
+    const heicBrands = ["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"];
+    for (let i = 0; i < brands.length; i++) {
+      if (heicBrands.indexOf(brands[i]) >= 0) return { mime: "image/heic", ext: "heic", ok: true };
+    }
+  }
+  // SVG has no magic number — it is just XML. Scan a bounded prefix for the
+  // root element so we do not read a whole multi-megabyte file to say "no".
+  const probe = Math.min(b.length, 1024);
+  let text = "";
+  for (let i = 0; i < probe; i++) text += String.fromCharCode(b[i]);
+  const head = text.replace(/^\uFEFF/, "").slice(0, 1024);
+  if (/<svg[\s>]/i.test(head) || (/^\s*<\?xml/i.test(head) && /<svg/i.test(head))) {
+    return { mime: "image/svg+xml", ext: "svg", ok: true };
+  }
+  return miss;
+}
+
+/* ---------------------------------------------------------------------------
+   2. EXIF: JPEG APP1 -> TIFF header -> IFD walk
+   --------------------------------------------------------------------------- */
+
+// Read one 12-byte IFD entry. `base` is the TIFF header offset, which every
+// internal pointer in the block is relative to (not the file, not the segment).
+function mcImgTiffEntry(dv, base, le, entryOff) {
+  try {
+    if (entryOff + 12 > dv.byteLength) return null;
+    const tag = dv.getUint16(entryOff, le);
+    const type = dv.getUint16(entryOff + 2, le);
+    const count = dv.getUint32(entryOff + 4, le);
+    const size = mcImgTypeSizes[type];
+    if (!size || count === 0 || count > 0x10000) return { tag: tag, type: type, count: count, value: null };
+    const byteLen = size * count;
+    // Values of 4 bytes or fewer live inline in the value field, left-aligned.
+    const dataOff = byteLen <= 4 ? entryOff + 8 : base + dv.getUint32(entryOff + 8, le);
+    if (dataOff < 0 || dataOff + byteLen > dv.byteLength) return { tag: tag, type: type, count: count, value: null };
+
+    let value = null;
+    if (type === 2) {
+      // ASCII, NUL-terminated. Trailing junk after the first NUL is padding.
+      let s = "";
+      for (let i = 0; i < count; i++) {
+        const c = dv.getUint8(dataOff + i);
+        if (c === 0) break;
+        s += String.fromCharCode(c);
+      }
+      value = s.replace(/\s+$/, "");
+    } else if (type === 5 || type === 10) {
+      const out = [];
+      for (let i = 0; i < count; i++) {
+        const o = dataOff + i * 8;
+        const num = type === 5 ? dv.getUint32(o, le) : dv.getInt32(o, le);
+        const den = type === 5 ? dv.getUint32(o + 4, le) : dv.getInt32(o + 4, le);
+        out.push(den === 0 ? 0 : num / den);
+      }
+      value = count === 1 ? out[0] : out;
+    } else {
+      const out = [];
+      for (let i = 0; i < count; i++) {
+        const o = dataOff + i * size;
+        if (type === 1 || type === 7) out.push(dv.getUint8(o));
+        else if (type === 6) out.push(dv.getInt8(o));
+        else if (type === 3) out.push(dv.getUint16(o, le));
+        else if (type === 8) out.push(dv.getInt16(o, le));
+        else if (type === 4) out.push(dv.getUint32(o, le));
+        else if (type === 9) out.push(dv.getInt32(o, le));
+        else if (type === 11) out.push(dv.getFloat32(o, le));
+        else if (type === 12) out.push(dv.getFloat64(o, le));
+      }
+      value = count === 1 ? out[0] : out;
+    }
+    return { tag: tag, type: type, count: count, value: value };
+  } catch (e) { return null; }
+}
+
+// Walk one IFD and hand each decoded entry to `sink`. Returns nothing useful;
+// the caller keeps whatever it cares about. Entry counts are sanity-capped
+// because a corrupt count field is the classic way to make a parser spin.
+function mcImgTiffIfd(dv, base, le, ifdOff, sink) {
+  try {
+    if (ifdOff < 0 || ifdOff + 2 > dv.byteLength) return;
+    const n = dv.getUint16(ifdOff, le);
+    if (n === 0 || n > 512) return;
+    for (let i = 0; i < n; i++) {
+      const e = mcImgTiffEntry(dv, base, le, ifdOff + 2 + i * 12);
+      if (e) sink(e);
+    }
+  } catch (e) { /* truncated IFD — keep whatever we already read */ }
+}
+
+// [deg, min, sec] rationals + "N"/"S"/"E"/"W" -> signed decimal degrees.
+function mcImgGpsToDecimal(parts, ref) {
+  if (!parts) return null;
+  const a = Array.isArray(parts) ? parts : [parts];
+  const d = Number(a[0]) || 0;
+  const m = Number(a[1]) || 0;
+  const s = Number(a[2]) || 0;
+  let v = d + m / 60 + s / 3600;
+  if (!isFinite(v)) return null;
+  const r = String(ref || "").trim().toUpperCase();
+  if (r === "S" || r === "W") v = -v;
+  return v;
+}
+
+/**
+ * mcImgExif(arrayBuffer) -> {...} | null
+ *
+ * Only JPEG carries EXIF in the APP1 form we parse. PNG, GIF, BMP and plain
+ * garbage all return null rather than a half-populated object, so callers can
+ * branch on truthiness instead of checking eight fields.
+ */
+function mcImgExif(input) {
+  const b = mcImgToBytes(input);
+  if (!b || b.length < 4) return null;
+  if (b[0] !== 0xff || b[1] !== 0xd8) return null; // not a JPEG at all
+
+  try {
+    // --- locate the APP1/Exif segment ---------------------------------------
+    let pos = 2;
+    let tiffStart = -1;
+    let tiffLen = 0;
+    while (pos + 4 <= b.length) {
+      if (b[pos] !== 0xff) { pos++; continue; }          // resync over padding
+      let marker = b[pos + 1];
+      while (marker === 0xff && pos + 2 < b.length) { pos++; marker = b[pos + 1]; }
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { pos += 2; continue; }
+      if (marker === 0xda || marker === 0xd9) break;      // start of scan / EOI
+      if (pos + 4 > b.length) break;
+      const segLen = (b[pos + 2] << 8) | b[pos + 3];
+      if (segLen < 2) break;
+      if (marker === 0xe1 && mcImgAsciiAt(b, pos + 4, "Exif") && b[pos + 8] === 0 && b[pos + 9] === 0) {
+        tiffStart = pos + 10;
+        tiffLen = segLen - 8;
+        break;
+      }
+      pos += 2 + segLen;
+    }
+    if (tiffStart < 0 || tiffStart + 8 > b.length) return null;
+
+    // --- TIFF header --------------------------------------------------------
+    const end = Math.min(b.length, tiffStart + Math.max(8, tiffLen));
+    const dv = new DataView(b.buffer, b.byteOffset + tiffStart, end - tiffStart);
+    const bom = dv.getUint16(0, false);
+    // "II" = Intel = little-endian, "MM" = Motorola = big-endian. Both are in
+    // the wild (Canon writes II, plenty of scanners write MM), so we honour
+    // whichever the file declares rather than assuming.
+    let le;
+    if (bom === 0x4949) le = true;
+    else if (bom === 0x4d4d) le = false;
+    else return null;
+    if (dv.getUint16(2, le) !== 42) return null;         // TIFF magic
+    const ifd0Off = dv.getUint32(4, le);
+    if (ifd0Off < 8 || ifd0Off >= dv.byteLength) return null;
+
+    const raw = {};
+    let exifPtr = 0;
+    let gpsPtr = 0;
+    const put = function (names, e) {
+      const name = names[e.tag] || ("Tag0x" + e.tag.toString(16));
+      if (e.value !== null && e.value !== undefined) raw[name] = e.value;
+    };
+
+    const ifd0 = {};
+    mcImgTiffIfd(dv, 0, le, ifd0Off, function (e) {
+      ifd0[e.tag] = e.value;
+      if (e.tag === 0x8769) exifPtr = Number(e.value) || 0;
+      else if (e.tag === 0x8825) gpsPtr = Number(e.value) || 0;
+      else put(mcImgTagNames, e);
+    });
+
+    const ex = {};
+    if (exifPtr > 0 && exifPtr < dv.byteLength) {
+      mcImgTiffIfd(dv, 0, le, exifPtr, function (e) { ex[e.tag] = e.value; put(mcImgTagNames, e); });
+    }
+    const gp = {};
+    if (gpsPtr > 0 && gpsPtr < dv.byteLength) {
+      mcImgTiffIfd(dv, 0, le, gpsPtr, function (e) { gp[e.tag] = e.value; put(mcImgGpsTagNames, e); });
+    }
+
+    let gps = null;
+    if (gp[0x0002] !== undefined && gp[0x0004] !== undefined) {
+      const lat = mcImgGpsToDecimal(gp[0x0002], gp[0x0001]);
+      const lon = mcImgGpsToDecimal(gp[0x0004], gp[0x0003]);
+      if (lat !== null && lon !== null && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+        let alt = null;
+        if (gp[0x0006] !== undefined) {
+          alt = Number(Array.isArray(gp[0x0006]) ? gp[0x0006][0] : gp[0x0006]);
+          if (!isFinite(alt)) alt = null;
+          else if (Number(gp[0x0005]) === 1 && alt !== null) alt = -alt; // ref 1 = below sea level
+        }
+        gps = { lat: lat, lon: lon, altitude: alt };
+      }
+    }
+
+    const scalar = function (v) { return Array.isArray(v) ? v[0] : v; };
+    const num = function (v) { const n = Number(scalar(v)); return isFinite(n) ? n : null; };
+
+    // Nothing at all recognisable? Report null rather than an empty husk.
+    const anything = ifd0[0x010f] || ifd0[0x0110] || ifd0[0x0132] || ifd0[0x0112] ||
+      ifd0[0x0131] || exifPtr || gpsPtr || Object.keys(raw).length;
+    if (!anything) return null;
+
+    return {
+      make: ifd0[0x010f] || null,
+      model: ifd0[0x0110] || null,
+      // DateTimeOriginal is when the shutter fired; DateTime is when the file
+      // was last written. The former is what a human means by "when".
+      dateTime: ex[0x9003] || ex[0x9004] || ifd0[0x0132] || null,
+      orientation: num(ifd0[0x0112]) || 1,
+      gps: gps,
+      iso: num(ex[0x8827]),
+      fNumber: num(ex[0x829d]),
+      exposure: num(ex[0x829a]),
+      focalLength: num(ex[0x920a]),
+      software: ifd0[0x0131] || null,
+      raw: raw
+    };
+  } catch (e) {
+    return null; // any surprise in a hostile file is just "no EXIF"
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   3. The canvas seam
+   --------------------------------------------------------------------------- */
+
+/*  THE SEAM THAT MAKES THIS TESTABLE
+    ---------------------------------
+    Every pixel function below reaches its data through exactly one door:
+    an object exposing `{ width, height, getContext("2d") }` where the returned
+    context exposes `getImageData(x, y, w, h) -> { width, height, data }`.
+
+    That is a subset of HTMLCanvasElement/OffscreenCanvas, so real canvases
+    satisfy it for free — and a ~20 line pure-JS fake backed by a
+    Uint8ClampedArray also satisfies it. Without this, none of the statistics,
+    palette or hashing code could be exercised in headless Node, and the only
+    way to check a perceptual hash would be to eyeball a browser. Sources that
+    are *not* canvas-like (ImageBitmap, <img>, <video>) get drawn onto a real
+    scratch canvas first, which is the only branch that needs a browser.        */
+
+function mcImgMakeCanvas(w, h) {
+  try {
+    if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(w, h);
+    if (typeof document !== "undefined" && document.createElement) {
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      return c;
+    }
+  } catch (e) { /* fall through */ }
+  return null;
+}
+
+function mcImgSourceSize(source) {
+  if (!source || typeof source !== "object") return null;
+  const w = Number(source.naturalWidth || source.videoWidth || source.width || 0);
+  const h = Number(source.naturalHeight || source.videoHeight || source.height || 0);
+  if (!isFinite(w) || !isFinite(h)) return null;
+  return { w: Math.floor(w), h: Math.floor(h) };
+}
+
+function mcImgReadPixels(source, w, h) {
+  try {
+    if (typeof source.getContext !== "function") return null;
+    const ctx = source.getContext("2d");
+    if (!ctx || typeof ctx.getImageData !== "function") return null;
+    const id = ctx.getImageData(0, 0, w, h);
+    return id && id.data && id.data.length >= w * h * 4 ? id : null;
+  } catch (e) { return null; }
+}
+
+// Area-average (box) downsample. Doing this in JS rather than leaning on
+// drawImage keeps results bit-identical across browsers and in Node, which
+// matters because a perceptual hash that changes with the platform's
+// resampling filter is not a hash.
+function mcImgBoxDownsample(src, sw, sh, tw, th) {
+  const out = new Uint8ClampedArray(tw * th * 4);
+  for (let ty = 0; ty < th; ty++) {
+    const y0 = Math.floor((ty * sh) / th);
+    const y1 = Math.min(sh, Math.max(y0 + 1, Math.floor(((ty + 1) * sh) / th)));
+    for (let tx = 0; tx < tw; tx++) {
+      const x0 = Math.floor((tx * sw) / tw);
+      const x1 = Math.min(sw, Math.max(x0 + 1, Math.floor(((tx + 1) * sw) / tw)));
+      let r = 0, g = 0, bl = 0, a = 0, n = 0;
+      for (let y = y0; y < y1; y++) {
+        let i = (y * sw + x0) * 4;
+        for (let x = x0; x < x1; x++, i += 4) {
+          r += src[i]; g += src[i + 1]; bl += src[i + 2]; a += src[i + 3]; n++;
+        }
+      }
+      const o = (ty * tw + tx) * 4;
+      if (n === 0) { out[o] = out[o + 1] = out[o + 2] = 0; out[o + 3] = 255; continue; }
+      out[o] = r / n; out[o + 1] = g / n; out[o + 2] = bl / n; out[o + 3] = a / n;
+    }
+  }
+  return out;
+}
+
+/**
+ * Produce the working-resolution pixel buffer.
+ *
+ * WHY we downsample first: analysing a 48-megapixel photo pixel-by-pixel costs
+ * ~200 MB of RGBA and hundreds of milliseconds, and it buys nothing. Every
+ * statistic here — mean luma, histogram shape, palette, Sobel density,
+ * variance of Laplacian, the 32x32 DCT hash — is a summary that converges long
+ * before 256px on the long edge. Full-resolution analysis is slow and pointless
+ * in equal measure; the only thing it changes is which frame drops.
+ */
+function mcImgWorkingPixels(source, maxDim) {
+  if (!source || typeof source !== "object") return null;
+  const sz = mcImgSourceSize(source);
+  if (!sz || sz.w < 1 || sz.h < 1) return null;
+
+  const limit = Math.max(8, Math.floor(maxDim) || 256);
+  const scale = Math.min(1, limit / Math.max(sz.w, sz.h));
+  const tw = Math.max(1, Math.round(sz.w * scale));
+  const th = Math.max(1, Math.round(sz.h * scale));
+
+  // Canvas-like sources: read once, resample deterministically in JS.
+  // (For a genuinely huge canvas this reads the full RGBA buffer, which is the
+  // price of platform-independent results; images arrive as ImageBitmap in
+  // practice and take the drawImage path below.)
+  if (typeof source.getContext === "function") {
+    const id = mcImgReadPixels(source, sz.w, sz.h);
+    if (id) {
+      const data = (tw === sz.w && th === sz.h)
+        ? id.data
+        : mcImgBoxDownsample(id.data, sz.w, sz.h, tw, th);
+      return { data: data, width: tw, height: th, srcW: sz.w, srcH: sz.h };
+    }
+  }
+
+  // Everything else needs the browser to decode it for us.
+  const cv = mcImgMakeCanvas(tw, th);
+  if (!cv) return null;
+  try {
+    const ctx = cv.getContext("2d");
+    if (!ctx || typeof ctx.drawImage !== "function") return null;
+    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(source, 0, 0, tw, th);
+    const id = ctx.getImageData(0, 0, tw, th);
+    if (!id || !id.data) return null;
+    return { data: id.data, width: tw, height: th, srcW: sz.w, srcH: sz.h };
+  } catch (e) { return null; }
+}
+
+/* ---------------------------------------------------------------------------
+   4. Pixel statistics
+   --------------------------------------------------------------------------- */
+
+// Rec.709 luma. Rec.601 would weight green less; 709 matches sRGB primaries,
+// which is what browser-sourced pixels actually are.
+function mcImgLuma(r, g, b) { return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+
+function mcImgEmptyHistogram() {
+  return {
+    r: new Array(256).fill(0), g: new Array(256).fill(0),
+    b: new Array(256).fill(0), luma: new Array(256).fill(0)
+  };
+}
+
+// One pass for histograms, luma moments, HSV saturation and the two
+// Hasler-Süsstrunk opponent channels — they all want the same pixels, and
+// touching the buffer four times would be four times the cache pressure.
+function mcImgColorStats(px, w, h) {
+  const n = w * h;
+  const hist = mcImgEmptyHistogram();
+  const luma = new Float64Array(n);
+  let sumL = 0, sumL2 = 0, sumS = 0;
+  let sumRg = 0, sumRg2 = 0, sumYb = 0, sumYb2 = 0;
+  let grayish = 0;
+
+  for (let i = 0, p = 0; p < n; p++, i += 4) {
+    const r = px[i], g = px[i + 1], b = px[i + 2];
+    hist.r[r]++; hist.g[g]++; hist.b[b]++;
+
+    const l = mcImgLuma(r, g, b);
+    luma[p] = l;
+    const lb = mcImgClamp(Math.round(l), 0, 255) | 0;
+    hist.luma[lb]++;
+    const ln = l / 255;
+    sumL += ln; sumL2 += ln * ln;
+
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    sumS += mx === 0 ? 0 : (mx - mn) / mx;   // HSV S
+    if (mx - mn <= 8) grayish++;             // channel spread within noise
+
+    const rg = r - g;
+    const yb = 0.5 * (r + g) - b;
+    sumRg += rg; sumRg2 += rg * rg;
+    sumYb += yb; sumYb2 += yb * yb;
+  }
+
+  const meanL = sumL / n;
+  const varL = Math.max(0, sumL2 / n - meanL * meanL);
+  const meanRg = sumRg / n, meanYb = sumYb / n;
+  const varRg = Math.max(0, sumRg2 / n - meanRg * meanRg);
+  const varYb = Math.max(0, sumYb2 / n - meanYb * meanYb);
+
+  return {
+    hist: hist,
+    luma: luma,
+    brightness: meanL,
+    contrast: Math.sqrt(varL),
+    saturation: sumS / n,
+    // Hasler & Süsstrunk (2003) "Measuring colourfulness in natural images":
+    // sigma of the opponent channels plus 0.3x their mean magnitude. Roughly
+    // 0 = monochrome, >60 = extremely colourful. Note pure grey gives exactly
+    // 0 because rg and yb both vanish when R=G=B.
+    colorfulness: Math.sqrt(varRg + varYb) + 0.3 * Math.sqrt(meanRg * meanRg + meanYb * meanYb),
+    grayFraction: grayish / n
+  };
+}
+
+// Shannon entropy of the luma histogram, in bits. 0 = one flat tone,
+// 8 = perfectly uniform tonal spread. Photographs typically land 6.5–7.8.
+function mcImgEntropy(lumaHist, total) {
+  if (!total) return 0;
+  let e = 0;
+  for (let i = 0; i < 256; i++) {
+    const c = lumaHist[i];
+    if (!c) continue;
+    const p = c / total;
+    e -= p * Math.log2(p);
+  }
+  return e;
+}
+
+// Sobel edge density + variance of the Laplacian, sharing one neighbourhood walk.
+function mcImgEdgeStats(luma, w, h, threshold) {
+  if (w < 3 || h < 3) return { edgeDensity: 0, sharpness: 0 };
+  let edges = 0, count = 0;
+  let sum = 0, sum2 = 0;
+
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const tl = luma[i - w - 1], t = luma[i - w], tr = luma[i - w + 1];
+      const l = luma[i - 1], c = luma[i], r = luma[i + 1];
+      const bl = luma[i + w - 1], bo = luma[i + w], br = luma[i + w + 1];
+
+      // Sobel, on luma normalised to [0,1] and divided by the kernel weight so
+      // a hard black/white step yields exactly 1.0 — that makes `threshold`
+      // mean something ("edges at least this much of full contrast").
+      const gx = ((tr + 2 * r + br) - (tl + 2 * l + bl)) / 255 / 4;
+      const gy = ((bl + 2 * bo + br) - (tl + 2 * t + tr)) / 255 / 4;
+      if (Math.sqrt(gx * gx + gy * gy) >= threshold) edges++;
+
+      // 4-neighbour Laplacian, kept on the 0..255 scale so the variance is
+      // comparable to the OpenCV figures people quote.
+      const lap = t + bo + l + r - 4 * c;
+      sum += lap; sum2 += lap * lap;
+      count++;
+    }
+  }
+  const mean = sum / count;
+  return {
+    edgeDensity: edges / count,
+    // Variance of the Laplacian is the standard blur detector: a sharp image
+    // has lots of strong second-derivative response, a blurred one has almost
+    // none. LOW VARIANCE MEANS BLURRY. There is no absolute cutoff — it scales
+    // with content and resolution — but at our 256px working size, single
+    // digits are mush, hundreds are crisp.
+    sharpness: Math.max(0, sum2 / count - mean * mean)
+  };
+}
+
+/* ---------------------------------------------------------------------------
+   5. Palette (k-means++ in RGB, seeded)
+   --------------------------------------------------------------------------- */
+
+function mcImgKMeans(samples, n, k, seed) {
+  const rand = mcImgRng(seed);
+  const cent = new Float64Array(k * 3);
+
+  // --- k-means++ seeding: first centre uniform, each subsequent centre chosen
+  // with probability proportional to squared distance from the nearest centre
+  // already chosen. Plain random seeding routinely collapses two centres onto
+  // the same dominant colour and wastes a palette slot.
+  const i0 = Math.min(n - 1, Math.floor(rand() * n));
+  cent[0] = samples[i0 * 3]; cent[1] = samples[i0 * 3 + 1]; cent[2] = samples[i0 * 3 + 2];
+  const d2 = new Float64Array(n);
+  for (let i = 0; i < n; i++) d2[i] = Infinity;
+  for (let c = 1; c < k; c++) {
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      const dr = samples[i * 3] - cent[(c - 1) * 3];
+      const dg = samples[i * 3 + 1] - cent[(c - 1) * 3 + 1];
+      const db = samples[i * 3 + 2] - cent[(c - 1) * 3 + 2];
+      const d = dr * dr + dg * dg + db * db;
+      if (d < d2[i]) d2[i] = d;
+      total += d2[i];
+    }
+    let pick = n - 1;
+    if (total > 0) {
+      let target = rand() * total, acc = 0;
+      for (let i = 0; i < n; i++) { acc += d2[i]; if (acc >= target) { pick = i; break; } }
+    } else {
+      pick = Math.min(n - 1, Math.floor(rand() * n));
+    }
+    cent[c * 3] = samples[pick * 3];
+    cent[c * 3 + 1] = samples[pick * 3 + 1];
+    cent[c * 3 + 2] = samples[pick * 3 + 2];
+  }
+
+  // --- Lloyd iterations. 24 is well past the point of visible change.
+  const assign = new Int32Array(n).fill(-1);
+  const cnt = new Float64Array(k);
+  const acc = new Float64Array(k * 3);
+  for (let iter = 0; iter < 24; iter++) {
+    let moved = 0;
+    cnt.fill(0); acc.fill(0);
+    for (let i = 0; i < n; i++) {
+      const r = samples[i * 3], g = samples[i * 3 + 1], b = samples[i * 3 + 2];
+      let best = 0, bestD = Infinity;
+      for (let c = 0; c < k; c++) {
+        const dr = r - cent[c * 3], dg = g - cent[c * 3 + 1], db = b - cent[c * 3 + 2];
+        const d = dr * dr + dg * dg + db * db;
+        if (d < bestD) { bestD = d; best = c; }
+      }
+      if (assign[i] !== best) { assign[i] = best; moved++; }
+      cnt[best]++;
+      acc[best * 3] += r; acc[best * 3 + 1] += g; acc[best * 3 + 2] += b;
+    }
+    for (let c = 0; c < k; c++) {
+      if (cnt[c] === 0) continue; // empty cluster: leave it, the merge pass drops it
+      cent[c * 3] = acc[c * 3] / cnt[c];
+      cent[c * 3 + 1] = acc[c * 3 + 1] / cnt[c];
+      cent[c * 3 + 2] = acc[c * 3 + 2] / cnt[c];
+    }
+    if (moved === 0) break;
+  }
+
+  const out = [];
+  for (let c = 0; c < k; c++) {
+    if (cnt[c] === 0) continue;
+    out.push({ r: cent[c * 3], g: cent[c * 3 + 1], b: cent[c * 3 + 2], w: cnt[c] / n });
+  }
+  return out;
+}
+
+// Merge centroids that a human would call the same colour, and fold negligible
+// clusters into their nearest neighbour (dropping them would make the shares
+// stop summing to 1, which looks broken in a UI).
+function mcImgMergeClusters(list, minDist, minShare) {
+  let cl = list.slice();
+  let changed = true;
+  while (changed && cl.length > 1) {
+    changed = false;
+    let bi = -1, bj = -1, bd = minDist * minDist;
+    for (let i = 0; i < cl.length; i++) {
+      for (let j = i + 1; j < cl.length; j++) {
+        const dr = cl[i].r - cl[j].r, dg = cl[i].g - cl[j].g, db = cl[i].b - cl[j].b;
+        const d = dr * dr + dg * dg + db * db;
+        if (d < bd) { bd = d; bi = i; bj = j; }
+      }
+    }
+    if (bi >= 0) {
+      const a = cl[bi], b = cl[bj], tw = a.w + b.w;
+      cl[bi] = {
+        r: (a.r * a.w + b.r * b.w) / tw,
+        g: (a.g * a.w + b.g * b.w) / tw,
+        b: (a.b * a.w + b.b * b.w) / tw,
+        w: tw
+      };
+      cl.splice(bj, 1);
+      changed = true;
+    }
+  }
+  // fold tiny survivors into whoever is closest
+  let guard = 0;
+  while (cl.length > 1 && guard++ < 16) {
+    let smallest = -1;
+    for (let i = 0; i < cl.length; i++) if (cl[i].w < minShare && (smallest < 0 || cl[i].w < cl[smallest].w)) smallest = i;
+    if (smallest < 0) break;
+    let near = -1, nd = Infinity;
+    for (let j = 0; j < cl.length; j++) {
+      if (j === smallest) continue;
+      const dr = cl[smallest].r - cl[j].r, dg = cl[smallest].g - cl[j].g, db = cl[smallest].b - cl[j].b;
+      const d = dr * dr + dg * dg + db * db;
+      if (d < nd) { nd = d; near = j; }
+    }
+    if (near < 0) break;
+    const a = cl[near], b = cl[smallest], tw = a.w + b.w;
+    cl[near] = { r: (a.r * a.w + b.r * b.w) / tw, g: (a.g * a.w + b.g * b.w) / tw, b: (a.b * a.w + b.b * b.w) / tw, w: tw };
+    cl.splice(smallest, 1);
+  }
+  cl.sort(function (a, b) { return b.w - a.w; });
+  return cl;
+}
+
+function mcImgPalette(px, w, h, k, seed) {
+  const n = w * h;
+  const bins = new Int32Array(4096);   // 4 bits per channel
+  const exact = new Map();
+  let capped = false;
+  let maxBin = 0;
+
+  for (let i = 0, p = 0; p < n; p++, i += 4) {
+    const r = px[i], g = px[i + 1], b = px[i + 2];
+    const bi = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const c = ++bins[bi];
+    if (c > maxBin) maxBin = c;
+    if (!capped) {
+      const key = (r << 16) | (g << 8) | b;
+      const prev = exact.get(key);
+      if (prev === undefined) {
+        if (exact.size >= 4096) capped = true; else exact.set(key, 1);
+      } else exact.set(key, prev + 1);
+    }
+  }
+
+  const uniqueColors = capped ? 4096 : exact.size;
+  // "share of near-identical pixels": how much of the frame is one quantised
+  // colour. Photographs are rarely above ~0.15; UI and documents are dominated
+  // by a single flat background.
+  const flatShare = n ? maxBin / n : 0;
+
+  let clusters;
+  if (!capped && exact.size <= k) {
+    // Fewer distinct colours than requested clusters — k-means would only
+    // invent fictional in-between shades. Report the truth instead.
+    clusters = [];
+    exact.forEach(function (count, key) {
+      clusters.push({ r: (key >> 16) & 255, g: (key >> 8) & 255, b: key & 255, w: count / n });
+    });
+    clusters.sort(function (a, b) { return b.w - a.w; });
+  } else {
+    const stride = Math.max(1, Math.ceil(n / 16384)); // cap the k-means workload
+    const cnt = Math.floor((n + stride - 1) / stride);
+    const samples = new Float64Array(cnt * 3);
+    let s = 0;
+    for (let p = 0; p < n; p += stride) {
+      const i = p * 4;
+      samples[s * 3] = px[i]; samples[s * 3 + 1] = px[i + 1]; samples[s * 3 + 2] = px[i + 2];
+      s++;
+    }
+    clusters = mcImgKMeans(samples, s, Math.min(k, Math.max(1, uniqueColors)), seed);
+    clusters = mcImgMergeClusters(clusters, 18, 0.012);
+  }
+
+  const palette = clusters.slice(0, k).map(function (c) {
+    const r = Math.round(mcImgClamp(c.r, 0, 255));
+    const g = Math.round(mcImgClamp(c.g, 0, 255));
+    const b = Math.round(mcImgClamp(c.b, 0, 255));
+    return { hex: mcImgRgbHex(r, g, b), rgb: [r, g, b], share: mcImgRound(c.w, 4) };
+  });
+
+  return { palette: palette, uniqueColors: uniqueColors, flatShare: flatShare };
+}
+
+/* ---------------------------------------------------------------------------
+   6. Perceptual hash (32x32 -> DCT-II -> 8x8 -> median)
+   --------------------------------------------------------------------------- */
+
+// Box-downsample the working RGBA to an n x n grayscale grid.
+function mcImgLumaGrid(px, w, h, n) {
+  const g = new Float64Array(n * n);
+  for (let gy = 0; gy < n; gy++) {
+    const y0 = Math.floor((gy * h) / n);
+    const y1 = Math.min(h, Math.max(y0 + 1, Math.floor(((gy + 1) * h) / n)));
+    for (let gx = 0; gx < n; gx++) {
+      const x0 = Math.floor((gx * w) / n);
+      const x1 = Math.min(w, Math.max(x0 + 1, Math.floor(((gx + 1) * w) / n)));
+      let s = 0, c = 0;
+      for (let y = y0; y < y1; y++) {
+        let i = (y * w + x0) * 4;
+        for (let x = x0; x < x1; x++, i += 4) { s += mcImgLuma(px[i], px[i + 1], px[i + 2]); c++; }
+      }
+      g[gy * n + gx] = c ? s / c : 0;
+    }
+  }
+  return g;
+}
+
+/**
+ * 64-bit pHash as 16 hex chars.
+ *
+ * Separable DCT-II, hand-rolled (no FFT — at 32x32 with only 8 output
+ * frequencies the naive form is a few thousand multiplies and is easier to
+ * verify than a butterfly). We keep the top-left 8x8 low-frequency block,
+ * throw away the DC term (it encodes overall brightness, and a hash that moves
+ * when you brighten a photo is not perceptual), threshold the remaining 63
+ * coefficients at their median, and pack MSB-first. The DC bit position is
+ * fixed at 0 so the string stays a clean 64 bits.
+ *
+ * KNOWN LIMIT, inherent to DCT pHash and not specific to this code: the median
+ * is only a meaningful threshold when more than half of the 63 AC coefficients
+ * carry actual signal. Source pixels are 8-bit, so every coefficient has a
+ * quantisation noise floor under it (~0.1 luma levels at this grid size). An
+ * image with a nearly empty spectrum — a pure sinusoid, a linear ramp, a
+ * grid-aligned checkerboard — puts only a handful of coefficients above that
+ * floor, the median then falls inside the noise, and the bits it decides are
+ * rounding artefacts that flip under any perturbation. Photographs, and
+ * anything with edges or grain, fill 60+ of the 63 and hash rock-steadily.
+ * Nothing can be done about it here: an image with fourteen stable
+ * coefficients does not contain 64 stable bits, so hardening the threshold
+ * only trades the instability for a loss of discrimination. Treat a pHash of a
+ * near-featureless image as low-confidence rather than trying to repair it.
+ */
+function mcImgPHashFromLuma(g, n) {
+  const K = 8;
+  const cosT = new Float64Array(n * K);
+  for (let x = 0; x < n; x++) {
+    for (let u = 0; u < K; u++) cosT[x * K + u] = Math.cos(((2 * x + 1) * u * Math.PI) / (2 * n));
+  }
+  const c0 = Math.sqrt(1 / n), c1 = Math.sqrt(2 / n);
+
+  const tmp = new Float64Array(n * K);          // rows -> horizontal frequencies
+  for (let y = 0; y < n; y++) {
+    for (let u = 0; u < K; u++) {
+      let s = 0;
+      for (let x = 0; x < n; x++) s += g[y * n + x] * cosT[x * K + u];
+      tmp[y * K + u] = s * (u === 0 ? c0 : c1);
+    }
+  }
+  const coef = new Float64Array(K * K);          // columns -> vertical frequencies
+  for (let u = 0; u < K; u++) {
+    for (let v = 0; v < K; v++) {
+      let s = 0;
+      for (let y = 0; y < n; y++) s += tmp[y * K + u] * cosT[y * K + v];
+      coef[v * K + u] = s * (v === 0 ? c0 : c1);
+    }
+  }
+
+  const ac = [];
+  for (let i = 1; i < K * K; i++) ac.push(coef[i]);
+  ac.sort(function (a, b) { return a - b; });
+  const median = ac[(ac.length - 1) >> 1];       // 63 values -> a true middle
+
+  let hex = "";
+  for (let byte = 0; byte < 8; byte++) {
+    let v = 0;
+    for (let bit = 0; bit < 8; bit++) {
+      const idx = byte * 8 + bit;
+      const on = idx !== 0 && coef[idx] > median;
+      v = (v << 1) | (on ? 1 : 0);
+    }
+    hex += mcImgHex2(v);
+  }
+  return hex;
+}
+
+async function mcImgPHash(source, opts) {
+  const o = opts || {};
+  const work = mcImgWorkingPixels(source, o.maxDim || 256);
+  if (!work) return null;
+  return mcImgPHashFromLuma(mcImgLumaGrid(work.data, work.width, work.height, 32), 32);
+}
+
+const mcImgBitCounts = (function () {
+  const t = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) t[i] = (i & 1) + t[i >> 1];
+  return t;
+})();
+
+// Bit distance between two pHash hex strings. Anything malformed — wrong type,
+// odd length, mismatched length, non-hex — yields the sentinel instead of a
+// number that would silently pollute a "most similar" ranking.
+function mcImgHamming(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return mcImgHammingSentinel;
+  if (a.length === 0 || a.length !== b.length || a.length % 2 !== 0) return mcImgHammingSentinel;
+  if (!/^[0-9a-fA-F]+$/.test(a) || !/^[0-9a-fA-F]+$/.test(b)) return mcImgHammingSentinel;
+  let d = 0;
+  for (let i = 0; i < a.length; i += 2) {
+    const x = parseInt(a.substr(i, 2), 16) ^ parseInt(b.substr(i, 2), 16);
+    d += mcImgBitCounts[x & 255];
+  }
+  return d;
+}
+
+// 10/64 bits is the conventional "same picture" cutoff: it tolerates re-encode,
+// resize, mild crop and exposure shifts without gathering unrelated images.
+function mcImgSimilar(a, b) {
+  const d = mcImgHamming(a, b);
+  return d !== mcImgHammingSentinel && d <= 10;
+}
+
+/* ---------------------------------------------------------------------------
+   7. Content-type heuristic
+   --------------------------------------------------------------------------- */
+
+/**
+ * A HEURISTIC, NOT RECOGNITION. Nothing here looks at *what* is in the picture.
+ * It reads five cheap statistics and picks the label they most resemble; a
+ * photograph of a whiteboard will read as a document and a photorealistic
+ * render will read as a photograph, and both are the correct behaviour for
+ * what this actually measures. Treat the output as a hint for sorting, never
+ * as a fact to assert to the user.
+ *
+ * The signals:
+ *   entropy       — tonal richness. Sensor noise and continuous gradients fill
+ *                   the luma histogram (photos ~6.5–7.9 bits); flat fills and
+ *                   quantised UI colours leave it sparse.
+ *   flatShare     — largest share of near-identical pixels. Screenshots and
+ *                   documents are mostly one background colour; photographs
+ *                   essentially never are.
+ *   uniqueColors  — distinct colours present. Vector art, charts and icons are
+ *                   built from a handful; a camera produces thousands.
+ *   edgeDensity   — fraction of pixels on a strong gradient. Text and UI chrome
+ *                   are made of hard thin lines and score high for their low
+ *                   entropy; photos have soft edges spread over more pixels.
+ *   colorfulness  — separates scanned/text pages (near-monochrome) from charts
+ *                   and illustrations (saturated accents on a flat ground).
+ */
+function mcImgClassify(s) {
+  const flat = s.flatShare, ent = s.entropy, edges = s.edgeDensity;
+  const colors = s.uniqueColors, colorful = s.colorfulness;
+
+  // Very few distinct colours can only be synthetic — no sensor produces that.
+  if (colors <= 24 && ent < 5.0) return "graphic/illustration";
+
+  // Near-monochrome, dominated by one paper-white/black background, and busy
+  // with thin high-contrast strokes: that is text on a page.
+  if (colorful < 14 && flat > 0.35 && edges > 0.03 && ent < 6.4) return "text document";
+
+  // Flat ground + limited palette + coloured accents + moderate structure.
+  if (flat > 0.30 && colors <= 2048 && ent < 6.6 && colorful >= 8 && edges < 0.30) return "chart/diagram";
+
+  // Large uniform regions with crisp compositing edges, but richer than a chart.
+  if (flat > 0.16 && ent < 7.4 && edges > 0.02) return "screenshot";
+
+  // Continuous tone, no dominant flat region.
+  if (ent >= 6.2 && flat < 0.30) return "photograph";
+
+  return flat > 0.25 ? "graphic/illustration" : "photograph";
+}
+
+/* ---------------------------------------------------------------------------
+   8. mcImgAnalyse
+   --------------------------------------------------------------------------- */
+
+// A zeroed result, returned instead of throwing for null / 0x0 / unreadable
+// input. Callers get a stable shape and can render "—" everywhere.
+function mcImgEmptyResult() {
+  return {
+    width: 0, height: 0, aspect: 0, orientation: "square", megapixels: 0,
+    brightness: 0, contrast: 0, saturation: 0, colorfulness: 0, entropy: 0,
+    edgeDensity: 0, sharpness: 0,
+    palette: [], dominant: null,
+    isGrayscale: false, isDark: false, likely: "graphic/illustration",
+    phash: "0000000000000000", histogram: mcImgEmptyHistogram()
+  };
+}
+
+/**
+ * mcImgAnalyse(source, opts) -> Promise<result>
+ *
+ * `source` may be an ImageBitmap, <img>, <canvas>, OffscreenCanvas, <video>, or
+ * any object satisfying the seam described in section 3.
+ */
+async function mcImgAnalyse(source, opts) {
+  const o = opts || {};
+  const maxDim = o.maxDim || 256;
+  const k = Math.max(1, Math.min(6, o.k || 6));
+  const seed = (o.seed === undefined ? 0x9e3779b9 : o.seed) >>> 0;
+  const edgeThreshold = o.edgeThreshold === undefined ? 0.12 : o.edgeThreshold;
+
+  const sz = mcImgSourceSize(source);
+  const work = mcImgWorkingPixels(source, maxDim);
+  if (!work || work.width < 1 || work.height < 1) {
+    const empty = mcImgEmptyResult();
+    if (sz && sz.w > 0 && sz.h > 0) {
+      // We know the geometry even though we could not read pixels — report it.
+      empty.width = sz.w; empty.height = sz.h;
+      empty.aspect = mcImgRound(sz.w / sz.h, 4);
+      empty.orientation = sz.w > sz.h ? "landscape" : (sz.w < sz.h ? "portrait" : "square");
+      empty.megapixels = mcImgRound((sz.w * sz.h) / 1e6, 3);
+    }
+    return empty;
+  }
+
+  const px = work.data, w = work.width, h = work.height;
+  const total = w * h;
+
+  const stats = mcImgColorStats(px, w, h);
+  const entropy = mcImgEntropy(stats.hist.luma, total);
+  const edge = mcImgEdgeStats(stats.luma, w, h, edgeThreshold);
+  const pal = mcImgPalette(px, w, h, k, seed);
+  const phash = mcImgPHashFromLuma(mcImgLumaGrid(px, w, h, 32), 32);
+
+  const outW = work.srcW, outH = work.srcH;
+  const classifyInput = {
+    entropy: entropy,
+    edgeDensity: edge.edgeDensity,
+    flatShare: pal.flatShare,
+    uniqueColors: pal.uniqueColors,
+    colorfulness: stats.colorfulness
+  };
+
+  return {
+    width: outW,
+    height: outH,
+    aspect: outH ? mcImgRound(outW / outH, 4) : 0,
+    orientation: outW > outH ? "landscape" : (outW < outH ? "portrait" : "square"),
+    megapixels: mcImgRound((outW * outH) / 1e6, 3),
+
+    brightness: mcImgRound(stats.brightness, 4),
+    contrast: mcImgRound(stats.contrast, 4),
+    saturation: mcImgRound(stats.saturation, 4),
+    colorfulness: mcImgRound(stats.colorfulness, 3),
+    entropy: mcImgRound(entropy, 4),
+    edgeDensity: mcImgRound(edge.edgeDensity, 5),
+    sharpness: mcImgRound(edge.sharpness, 3),
+
+    palette: pal.palette,
+    dominant: pal.palette.length ? pal.palette[0] : null,
+
+    // "Grayscale" as a user means it: near-zero channel spread almost
+    // everywhere. A single stray coloured pixel should not flip this.
+    isGrayscale: stats.grayFraction >= 0.985,
+    isDark: stats.brightness < 0.35,
+    likely: mcImgClassify(classifyInput),
+
+    phash: phash,
+    histogram: stats.hist
+  };
+}
+
+/* ---------------------------------------------------------------------------
+   9. Thumbnail
+   --------------------------------------------------------------------------- */
+
+// Data-URL JPEG thumbnail. Requires a real canvas (toDataURL / convertToBlob),
+// so in a non-browser host this resolves to null rather than throwing.
+async function mcImgThumb(source, maxDim) {
+  try {
+    const sz = mcImgSourceSize(source);
+    if (!sz || sz.w < 1 || sz.h < 1) return null;
+    const limit = Math.max(8, Math.floor(maxDim) || 256);
+    const scale = Math.min(1, limit / Math.max(sz.w, sz.h));
+    const tw = Math.max(1, Math.round(sz.w * scale));
+    const th = Math.max(1, Math.round(sz.h * scale));
+
+    const cv = mcImgMakeCanvas(tw, th);
+    if (!cv) return null;
+    const ctx = cv.getContext("2d");
+    if (!ctx || typeof ctx.drawImage !== "function") return null;
+    if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+    // JPEG has no alpha, so paint a white ground first or transparency turns black.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, tw, th);
+    ctx.drawImage(source, 0, 0, tw, th);
+
+    if (typeof cv.toDataURL === "function") return cv.toDataURL("image/jpeg", 0.82);
+    if (typeof cv.convertToBlob === "function") {
+      const blob = await cv.convertToBlob({ type: "image/jpeg", quality: 0.82 });
+      return await new Promise(function (resolve) {
+        const fr = new FileReader();
+        fr.onload = function () { resolve(String(fr.result)); };
+        fr.onerror = function () { resolve(null); };
+        fr.readAsDataURL(blob);
+      });
+    }
+    return null;
+  } catch (e) { return null; }
+}
+
+/* ===========================================================================
+   SELF-TEST — node core/imganalyse.js
+   Not shipped behaviour; the guard keeps it inert in the browser.
+   =========================================================================== */
+
+/* ---------- core module: charts.js ---------- */
+/* ==========================================================================
+   mcCh* — SVG charts as strings. No canvas, no DOM, no dependencies.
+
+   Every function returns a complete <svg> string, so the caller can drop it
+   into innerHTML, a template literal, or a server response. Nothing here
+   touches document/window, which is also why the self-test at the bottom can
+   assert on the markup directly.
+
+   Conventions that the host app depends on:
+   - every top-level binding is prefixed `mcCh` (the host defines ~320 `mc*`
+     names of its own; `mcCh` is the reserved corner).
+   - the root <svg> carries viewBox + preserveAspectRatio and NO width/height
+     attribute, so CSS owns the box. In fact no element emits a `width="..."`
+     attribute at all: bars and heat cells are <path>, not <rect>, and stroke
+     widths ride in `style="stroke-width:…"`. That keeps a blunt
+     `markup.includes('width="')` check honest instead of subtly wrong.
+   - nothing emits the sequence that would close an inline script tag, because
+     mcChEsc turns every `<` into `&lt;` before it can reach the output.
+
+   Colours are the dark-surface categorical set from the design system, which
+   passes the lightness-band, chroma, CVD-separation, normal-vision and
+   contrast checks as an ordered set. The order is the safety mechanism —
+   assign slots in order, do not shuffle, do not generate new hues.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Palette & chrome
+   -------------------------------------------------------------------------- */
+
+/* Categorical slots, in fixed order. Slots are assigned by series index and
+   never re-sorted: colour follows the entity, not its rank, so filtering a
+   series out must not repaint the survivors. Past slot 8 the honest answer is
+   to fold into "Other" or facet — mcChDonut does that automatically; line/bar
+   callers with 9+ series should aggregate before calling. */
+const mcChPalette = [
+  '#3987e5', /* blue    */
+  '#d95926', /* orange  */
+  '#199e70', /* aqua    */
+  '#c98500', /* yellow  */
+  '#d55181', /* magenta */
+  '#008300', /* green   */
+  '#9085e9', /* violet  */
+  '#e66767'  /* red     */
+];
+
+/* Sequential ramp: ONE hue, stepped by lightness. Never a rainbow — a rainbow
+   ramp invents category boundaries where the data has none. Ordered dark->light
+   because these charts sit on a dark surface, so "near zero" must recede
+   toward the background rather than glow. */
+const mcChRampStops = [
+  [0x0d, 0x36, 0x6b],
+  [0x1c, 0x5c, 0xab],
+  [0x2a, 0x78, 0xd6],
+  [0x6d, 0xa7, 0xec],
+  [0xcd, 0xe2, 0xfb]
+];
+
+/* Chrome. Ink tokens are the documented values; grid/axis/ring are expressed
+   as alpha-composited white so they stay sensible if the host surface is not
+   exactly #1a1a19. Text never wears a series colour — identity comes from the
+   coloured mark beside the label. */
+const mcChInk = '#ffffff';
+const mcChInk2 = '#c3c2b7';
+const mcChMuted = '#898781';
+const mcChGridColor = 'rgba(255,255,255,0.09)';
+const mcChAxisColor = 'rgba(255,255,255,0.16)';
+const mcChSurface = '#1a1a19';
+const mcChFont = 'system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+
+function mcChRamp(t) {
+  const u = mcChClamp(mcChNum(t, 0), 0, 1);
+  const n = mcChRampStops.length - 1;
+  const i = Math.min(n - 1, Math.floor(u * n));
+  const f = u * n - i;
+  const a = mcChRampStops[i];
+  const b = mcChRampStops[i + 1];
+  let out = '#';
+  for (let k = 0; k < 3; k++) {
+    const v = mcChClamp(Math.round(a[k] + (b[k] - a[k]) * f), 0, 255);
+    out += v.toString(16).padStart(2, '0');
+  }
+  return out;
+}
+
+function mcChColorAt(i, colors) {
+  const list = (Array.isArray(colors) && colors.length) ? colors : mcChPalette;
+  const n = Math.max(0, Math.round(mcChNum(i, 0)));
+  return mcChColor(list[n % list.length], mcChPalette[n % mcChPalette.length]);
+}
+
+/* --------------------------------------------------------------------------
+   Escaping — the load-bearing part
+   -------------------------------------------------------------------------- */
+
+const mcChEscMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+/* Every label that reaches the output goes through here. This matters more in
+   this module than in ordinary templating for three compounding reasons:
+
+   1. The labels are news headlines pulled from feeds. They routinely contain
+      `&`, curly and straight quotes, and occasionally raw markup that some
+      upstream CMS failed to strip. Un-escaped, `AT&T` alone produces an
+      undefined-entity parse error.
+   2. The output is spliced into innerHTML. An SVG <text> node is a normal
+      element content position, so `<img onerror=…>` inside a headline is a
+      live XSS vector, not a cosmetic bug. Escaping `<` closes that.
+   3. The host pastes this file inside an inline <script> block. The HTML
+      tokenizer looks for the script-closing sequence *inside JS string
+      literals too* — a headline containing one would terminate the script
+      element mid-expression and dump the rest of the app as text. Escaping `<`
+      before it can be concatenated makes that structurally impossible, which
+      is why escaping happens at emit time here rather than at ingest time
+      somewhere else in the pipeline.
+
+   Attribute values are quoted with `"` everywhere, and `"` plus `'` are both
+   escaped, so a label can never break out of an attribute either. */
+function mcChEsc(v) {
+  if (v === null || v === undefined) return '';
+  return String(v).replace(/[&<>"']/g, function (c) { return mcChEscMap[c]; });
+}
+
+/* Colours arrive from caller data too (`{label, value, color}` rows are often
+   built from a feed). Rather than escape a colour — which would silently
+   produce `&quot;` inside a fill attribute — reject anything that is not a
+   recognisable CSS colour and fall back. Whitelist, not blacklist. */
+function mcChColor(c, fallback) {
+  const fb = fallback || mcChPalette[0];
+  if (typeof c !== 'string') return fb;
+  const s = c.trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
+  if (/^(rgb|hsl)a?\([-0-9.,%/\s]+\)$/.test(s)) return s;
+  if (/^[a-zA-Z]{3,20}$/.test(s)) return s;
+  return fb;
+}
+
+/* --------------------------------------------------------------------------
+   Numbers
+   -------------------------------------------------------------------------- */
+
+function mcChStr(v) {
+  return (v === null || v === undefined) ? '' : String(v);
+}
+
+function mcChNum(v, fallback) {
+  if (typeof v === 'number') return isFinite(v) ? v : fallback;
+  if (v === null || v === undefined || v === '' || typeof v === 'boolean') return fallback;
+  const n = Number(v);
+  return isFinite(n) ? n : fallback;
+}
+
+function mcChClamp(v, lo, hi) {
+  const n = mcChNum(v, lo);
+  return n < lo ? lo : (n > hi ? hi : n);
+}
+
+/* Coordinate formatter. Single choke point for every number that lands in a
+   path/attribute, which is how the "no NaN in the output" guarantee is
+   actually enforced: any non-finite value degrades to 0 instead of poisoning a
+   `d` attribute. Clamped to ±1e6 so a huge outlier can never push a coordinate
+   into exponential notation, which SVG path grammar does not accept. */
+function mcChN(v) {
+  let n = typeof v === 'number' ? v : Number(v);
+  /* NaN is meaningless as a coordinate, so it degrades to the origin. An
+     infinity, though, still carries a direction — it is an outlier that ran
+     off the end of the axis — so it clamps to the rail on the side it came
+     from rather than collapsing to 0 and drawing a spike through the chart.
+     Order matters: the NaN test has to be separate from the clamp, or the
+     infinities never reach it. */
+  if (n !== n) return '0';
+  if (n > 1e6) n = 1e6;
+  if (n < -1e6) n = -1e6;
+  const r = Math.round(n * 100) / 100;
+  return String(r === 0 ? 0 : r);
+}
+
+/* Human-readable value for a label. Thousands-grouped, compacted past 10k so
+   an axis does not turn into a wall of digits. */
+function mcChFmtVal(v, decimals) {
+  const n = mcChNum(v, null);
+  if (n === null) return '';
+  const a = Math.abs(n);
+  if (a >= 1e15) return n.toExponential(1);
+  if (a >= 1e12) return mcChTrimZeros((n / 1e12).toFixed(1)) + 'T';
+  if (a >= 1e9) return mcChTrimZeros((n / 1e9).toFixed(1)) + 'B';
+  if (a >= 1e6) return mcChTrimZeros((n / 1e6).toFixed(1)) + 'M';
+  if (a >= 1e4) return mcChTrimZeros((n / 1e3).toFixed(1)) + 'k';
+  const dec = (decimals === null || decimals === undefined)
+    ? (Number.isInteger(n) ? 0 : Math.min(3, Math.max(0, 3 - Math.floor(Math.log10(a || 1)))))
+    : mcChClamp(decimals, 0, 6);
+  return mcChGroup(mcChTrimZeros(n.toFixed(dec)));
+}
+
+function mcChTrimZeros(s) {
+  return s.indexOf('.') < 0 ? s : s.replace(/\.?0+$/, '');
+}
+
+function mcChGroup(s) {
+  const neg = s.charAt(0) === '-';
+  const body = neg ? s.slice(1) : s;
+  const dot = body.indexOf('.');
+  const intPart = dot < 0 ? body : body.slice(0, dot);
+  const rest = dot < 0 ? '' : body.slice(dot);
+  return (neg ? '-' : '') + intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + rest;
+}
+
+/* --------------------------------------------------------------------------
+   Nice ticks
+   -------------------------------------------------------------------------- */
+
+/* The classic "nice numbers" rounding: snap a magnitude to 1, 2, 5 or 10 times
+   a power of ten. `round=false` grows the value to the next nice number (used
+   for the overall range so the data always fits); `round=true` picks the
+   nearest (used for the step, where over- and under-shoot are both fine). */
+function mcChNiceNum(range, round) {
+  const r = Math.abs(mcChNum(range, 1)) || 1;
+  const exp = Math.floor(Math.log10(r));
+  const f = r / Math.pow(10, exp);
+  let nf;
+  if (round) {
+    nf = f < 1.5 ? 1 : (f < 3 ? 2 : (f < 7 ? 5 : 10));
+  } else {
+    nf = f <= 1 ? 1 : (f <= 2 ? 2 : (f <= 5 ? 5 : 10));
+  }
+  return nf * Math.pow(10, exp);
+}
+
+/* Why this exists at all: the naive axis is `min + i*(max-min)/count`, which
+   for data spanning 0..97 with 5 ticks prints 0, 23.7, 47.4, 71.1, 94.8. Every
+   one of those is a number the reader has to *decode* before they can place a
+   point on it, and none of them is a number they would ever quote back. Nice
+   ticks trade a little empty headroom for 0, 20, 40, 60, 80, 100 — an axis you
+   read by glancing, and one where gridlines land on values that mean something
+   ("half", "a quarter"). The domain is widened to the ticks, never the other
+   way round, so no datum is ever clipped by the rounding. */
+function mcChNiceTicks(min, max, count) {
+  let lo = mcChNum(min, 0);
+  let hi = mcChNum(max, 1);
+  if (lo > hi) { const t = lo; lo = hi; hi = t; }
+
+  /* Degenerate domain (single point, or every value identical). Dividing by a
+     zero span later would emit NaN into every coordinate, so widen here, once,
+     at the source. Pad relative to the magnitude so 3 -> 1..5 rather than
+     3 -> -0.5..6.5, and fall back to ±1 at exactly zero. */
+  if (hi - lo === 0) {
+    const pad = Math.abs(lo) > 0 ? Math.abs(lo) * 0.5 : 1;
+    lo -= pad;
+    hi += pad;
+  }
+
+  const want = Math.round(mcChClamp(mcChNum(count, 5), 2, 20));
+  const range = mcChNiceNum(hi - lo, false);
+  const step = mcChNiceNum(range / (want - 1), true) || 1;
+  const niceMin = Math.floor(lo / step) * step;
+  const niceMax = Math.ceil(hi / step) * step;
+
+  const dec = mcChTickDecimals(step);
+  const n = Math.min(200, Math.max(1, Math.round((niceMax - niceMin) / step)));
+  const ticks = [];
+  for (let i = 0; i <= n; i++) {
+    const raw = niceMin + i * step;
+    /* Accumulated float error makes 0.1+0.2 print as 0.30000000000000004 on an
+       axis. Snap each tick to the step's own precision. */
+    const t = Number(raw.toFixed(Math.min(12, dec + 3)));
+    ticks.push(Math.abs(t) < step * 1e-9 ? 0 : t);
+  }
+  return { ticks: ticks, niceMin: niceMin, niceMax: niceMax, step: step, decimals: dec };
+}
+
+function mcChTickDecimals(step) {
+  const s = Math.abs(mcChNum(step, 1)) || 1;
+  return mcChClamp(-Math.floor(Math.log10(s)), 0, 6);
+}
+
+function mcChScale(d0, d1, r0, r1) {
+  const span = d1 - d0;
+  if (!isFinite(span) || span === 0) {
+    const mid = (r0 + r1) / 2;
+    return function () { return mid; };
+  }
+  const k = (r1 - r0) / span;
+  return function (v) { return r0 + (mcChNum(v, d0) - d0) * k; };
+}
+
+/* --------------------------------------------------------------------------
+   Text metrics
+   -------------------------------------------------------------------------- */
+
+/* SVG offers no text measurement without a live layout: getComputedTextLength
+   and getBBox both require the element to be in a rendered document, and this
+   module never touches the DOM. So width is *approximated* from per-character
+   advance ratios for a typical UI sans. It is deliberately a little
+   pessimistic — the cost of over-estimating is an unnecessary label rotation,
+   the cost of under-estimating is overlapping text, and only one of those is
+   embarrassing. */
+function mcChAdvance(ch) {
+  if (' .,:;\'`!|iIl'.indexOf(ch) >= 0) return 0.30;
+  if ('ftjr()[]{}/\\-'.indexOf(ch) >= 0) return 0.38;
+  if ('mwMW@%'.indexOf(ch) >= 0) return 0.92;
+  if (ch >= 'A' && ch <= 'Z') return 0.68;
+  if (ch >= '0' && ch <= '9') return 0.56;
+  if (ch >= 'a' && ch <= 'z') return 0.54;
+  if (ch.charCodeAt(0) > 0x2e80) return 1.0; /* CJK & friends are full-width */
+  return 0.60;
+}
+
+function mcChTextW(s, fontSize) {
+  const str = mcChStr(s);
+  const size = mcChNum(fontSize, 9);
+  let w = 0;
+  for (let i = 0; i < str.length; i++) w += mcChAdvance(str.charAt(i));
+  return w * size;
+}
+
+/* A label that will not fit is truncated, never clipped — clipping crops the
+   glyph mid-stroke and reads as a rendering bug. */
+function mcChTruncate(s, maxPx, fontSize) {
+  const str = mcChStr(s);
+  if (!str) return '';
+  const size = mcChNum(fontSize, 9);
+  const max = mcChNum(maxPx, 0);
+  if (max <= 0) return '';
+  if (mcChTextW(str, size) <= max) return str;
+  const ellW = mcChTextW('…', size);
+  let w = 0;
+  let out = '';
+  for (let i = 0; i < str.length; i++) {
+    const a = mcChAdvance(str.charAt(i)) * size;
+    if (w + a + ellW > max) break;
+    w += a;
+    out += str.charAt(i);
+  }
+  return out.replace(/\s+$/, '') + '…';
+}
+
+/* --------------------------------------------------------------------------
+   SVG primitives
+   -------------------------------------------------------------------------- */
+
+function mcChPad(p, d) {
+  const out = { t: d.t, r: d.r, b: d.b, l: d.l };
+  if (typeof p === 'number' && isFinite(p)) {
+    out.t = out.r = out.b = out.l = p;
+  } else if (Array.isArray(p)) {
+    out.t = mcChNum(p[0], out.t);
+    out.r = mcChNum(p[1], out.r);
+    out.b = mcChNum(p[2], out.b);
+    out.l = mcChNum(p[3], out.l);
+  } else if (p && typeof p === 'object') {
+    out.t = mcChNum(p.top, mcChNum(p.t, out.t));
+    out.r = mcChNum(p.right, mcChNum(p.r, out.r));
+    out.b = mcChNum(p.bottom, mcChNum(p.b, out.b));
+    out.l = mcChNum(p.left, mcChNum(p.l, out.l));
+  }
+  out.t = mcChClamp(out.t, 0, 400);
+  out.r = mcChClamp(out.r, 0, 400);
+  out.b = mcChClamp(out.b, 0, 400);
+  out.l = mcChClamp(out.l, 0, 400);
+  return out;
+}
+
+function mcChBase(opts, defs) {
+  const src = (opts && typeof opts === 'object') ? opts : {};
+  const o = {};
+  o.src = src;
+  o.w = mcChClamp(mcChNum(src.width, defs.width), 16, 20000);
+  o.h = mcChClamp(mcChNum(src.height, defs.height), 16, 20000);
+  o.pad = mcChPad(src.pad, defs.pad);
+  o.colors = (Array.isArray(src.colors) && src.colors.length) ? src.colors : mcChPalette;
+  o.title = src.title;
+  o.yLabel = src.yLabel;
+  o.showGrid = src.showGrid !== false;
+  o.showDots = src.showDots === true;
+  o.animate = src.animate === true;
+  o.fs = mcChClamp(mcChNum(src.fontSize, defs.fontSize || 9), 4, 48);
+  o.par = typeof src.preserveAspectRatio === 'string' ? src.preserveAspectRatio : 'xMidYMid meet';
+  /* The surface colour is only used for the 2px separation gap/ring — the
+     spacer that keeps touching marks distinct without drawing a border. */
+  o.surface = mcChColor(src.surface, mcChSurface);
+  return o;
+}
+
+/* Root element. No width/height attributes: the host sizes charts with CSS and
+   viewBox + preserveAspectRatio do the scaling. role + <title> give assistive
+   tech something to announce, since an <svg> full of paths is otherwise
+   meaningless. */
+function mcChOpen(o, cls, fallbackTitle) {
+  const label = mcChEsc(o.title) || mcChEsc(fallbackTitle);
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + mcChN(o.w) + ' ' + mcChN(o.h) + '"'
+    + ' preserveAspectRatio="' + mcChEsc(o.par) + '"'
+    + ' role="img" aria-label="' + label + '"'
+    + ' class="mcch ' + mcChEsc(cls) + '" style="display:block">'
+    + '<title>' + label + '</title>';
+}
+
+function mcChClose() {
+  return '</svg>';
+}
+
+function mcChNoData(o, msg) {
+  return mcChText(o.w / 2, o.h / 2, mcChStr(msg) || 'No data', {
+    anchor: 'middle', baseline: 'middle', size: o.fs + 1, fill: mcChMuted, cls: 'mcch-empty'
+  });
+}
+
+function mcChText(x, y, str, a) {
+  const at = a || {};
+  let s = '<text x="' + mcChN(x) + '" y="' + mcChN(y) + '"';
+  if (at.anchor) s += ' text-anchor="' + mcChEsc(at.anchor) + '"';
+  if (at.baseline) s += ' dominant-baseline="' + mcChEsc(at.baseline) + '"';
+  if (at.cls) s += ' class="' + mcChEsc(at.cls) + '"';
+  if (at.rotate && isFinite(at.rotate)) {
+    s += ' transform="rotate(' + mcChN(at.rotate) + ' ' + mcChN(x) + ' ' + mcChN(y) + ')"';
+  }
+  s += ' style="font-family:' + mcChFont
+    + ';font-size:' + mcChN(mcChNum(at.size, 9)) + 'px'
+    + ';fill:' + mcChColor(at.fill, mcChMuted)
+    + (at.weight ? ';font-weight:' + mcChN(at.weight) : '')
+    + (at.tabular ? ';font-variant-numeric:tabular-nums' : '')
+    + '">' + mcChEsc(str) + '</text>';
+  return s;
+}
+
+/* stroke-width lives in `style` rather than as an attribute so the markup
+   never contains the substring `width="` — see the header note. */
+function mcChLineEl(x1, y1, x2, y2, color, sw, extra) {
+  return '<line x1="' + mcChN(x1) + '" y1="' + mcChN(y1) + '" x2="' + mcChN(x2) + '" y2="' + mcChN(y2) + '"'
+    + ' stroke="' + mcChColor(color, mcChGridColor) + '"'
+    + (extra || '')
+    + ' style="stroke-width:' + mcChN(mcChNum(sw, 1)) + '"/>';
+}
+
+function mcChCircle(cx, cy, r, fill, ring, ringColor) {
+  return '<circle cx="' + mcChN(cx) + '" cy="' + mcChN(cy) + '" r="' + mcChN(Math.max(0, mcChNum(r, 0))) + '"'
+    + ' fill="' + mcChColor(fill, mcChPalette[0]) + '"'
+    + (ring ? ' stroke="' + mcChColor(ringColor, mcChSurface) + '" style="stroke-width:' + mcChN(ring) + '"' : '')
+    + '/>';
+}
+
+function mcChPathD(pts) {
+  if (!pts.length) return '';
+  let d = 'M' + mcChN(pts[0][0]) + ' ' + mcChN(pts[0][1]);
+  for (let i = 1; i < pts.length; i++) d += 'L' + mcChN(pts[i][0]) + ' ' + mcChN(pts[i][1]);
+  return d;
+}
+
+function mcChPathLen(pts) {
+  let L = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i][0] - pts[i - 1][0];
+    const dy = pts[i][1] - pts[i - 1][1];
+    L += Math.sqrt(dx * dx + dy * dy);
+  }
+  return isFinite(L) ? L : 0;
+}
+
+/* Bars are paths, and only the data-end is rounded — the baseline end stays
+   square so every bar visually springs from the same line. `dir` names which
+   end grows away from the baseline. */
+function mcChBarPath(x, y, w, h, r, dir) {
+  const X = mcChNum(x, 0);
+  const Y = mcChNum(y, 0);
+  const W = Math.max(0, mcChNum(w, 0));
+  const H = Math.max(0, mcChNum(h, 0));
+  if (W <= 0 || H <= 0) return '';
+  const R = Math.max(0, Math.min(mcChNum(r, 0), W / 2, H / 2));
+  const n = mcChN;
+  if (R <= 0.01) {
+    return 'M' + n(X) + ' ' + n(Y) + 'L' + n(X + W) + ' ' + n(Y)
+      + 'L' + n(X + W) + ' ' + n(Y + H) + 'L' + n(X) + ' ' + n(Y + H) + 'Z';
+  }
+  if (dir === 'down') {
+    return 'M' + n(X) + ' ' + n(Y) + 'L' + n(X + W) + ' ' + n(Y)
+      + 'L' + n(X + W) + ' ' + n(Y + H - R)
+      + 'A' + n(R) + ' ' + n(R) + ' 0 0 1 ' + n(X + W - R) + ' ' + n(Y + H)
+      + 'L' + n(X + R) + ' ' + n(Y + H)
+      + 'A' + n(R) + ' ' + n(R) + ' 0 0 1 ' + n(X) + ' ' + n(Y + H - R) + 'Z';
+  }
+  if (dir === 'right') {
+    return 'M' + n(X) + ' ' + n(Y) + 'L' + n(X + W - R) + ' ' + n(Y)
+      + 'A' + n(R) + ' ' + n(R) + ' 0 0 1 ' + n(X + W) + ' ' + n(Y + R)
+      + 'L' + n(X + W) + ' ' + n(Y + H - R)
+      + 'A' + n(R) + ' ' + n(R) + ' 0 0 1 ' + n(X + W - R) + ' ' + n(Y + H)
+      + 'L' + n(X) + ' ' + n(Y + H) + 'Z';
+  }
+  if (dir === 'left') {
+    return 'M' + n(X + W) + ' ' + n(Y) + 'L' + n(X + R) + ' ' + n(Y)
+      + 'A' + n(R) + ' ' + n(R) + ' 0 0 0 ' + n(X) + ' ' + n(Y + R)
+      + 'L' + n(X) + ' ' + n(Y + H - R)
+      + 'A' + n(R) + ' ' + n(R) + ' 0 0 0 ' + n(X + R) + ' ' + n(Y + H)
+      + 'L' + n(X + W) + ' ' + n(Y + H) + 'Z';
+  }
+  /* default: 'up' — rounded top, square bottom */
+  return 'M' + n(X) + ' ' + n(Y + R)
+    + 'A' + n(R) + ' ' + n(R) + ' 0 0 1 ' + n(X + R) + ' ' + n(Y)
+    + 'L' + n(X + W - R) + ' ' + n(Y)
+    + 'A' + n(R) + ' ' + n(R) + ' 0 0 1 ' + n(X + W) + ' ' + n(Y + R)
+    + 'L' + n(X + W) + ' ' + n(Y + H)
+    + 'L' + n(X) + ' ' + n(Y + H) + 'Z';
+}
+
+/* Donut/pie wedge as a ring segment.
+
+   Two things go wrong in hand-rolled arc code, and both are handled here:
+
+   1. large-arc-flag. An SVG elliptical arc is ambiguous — two arcs connect any
+      two points on a circle. The flag picks the long one. Forget it and every
+      slice over 50% silently renders as its own complement, so a 70% share
+      draws as 30%. Hence `sweep > PI ? 1 : 0`.
+   2. The full circle. A single arc whose start and end points coincide has zero
+      length and draws nothing, so a lone 100% slice would vanish. Split it into
+      two half-circles instead, with the hole as a second subpath punched out by
+      fill-rule="evenodd". */
+function mcChArcRing(cx, cy, rOuter, rInner, a0, a1) {
+  const TAU = Math.PI * 2;
+  const rO = Math.max(0, mcChNum(rOuter, 0));
+  const rI = mcChClamp(mcChNum(rInner, 0), 0, rO);
+  const start = mcChNum(a0, 0);
+  const end = mcChNum(a1, 0);
+  const sweep = end - start;
+  if (!(rO > 0) || !isFinite(sweep) || sweep <= 1e-9) return '';
+  const n = mcChN;
+  const px = function (r, a) { return n(cx + r * Math.cos(a)) + ' ' + n(cy + r * Math.sin(a)); };
+
+  if (sweep >= TAU - 1e-6) {
+    let d = 'M' + px(rO, 0)
+      + 'A' + n(rO) + ' ' + n(rO) + ' 0 1 1 ' + px(rO, Math.PI)
+      + 'A' + n(rO) + ' ' + n(rO) + ' 0 1 1 ' + px(rO, TAU) + 'Z';
+    if (rI > 0.01) {
+      d += 'M' + px(rI, 0)
+        + 'A' + n(rI) + ' ' + n(rI) + ' 0 1 0 ' + px(rI, Math.PI)
+        + 'A' + n(rI) + ' ' + n(rI) + ' 0 1 0 ' + px(rI, TAU) + 'Z';
+    }
+    return d;
+  }
+
+  const large = sweep > Math.PI ? 1 : 0;
+  let d = 'M' + px(rO, start)
+    + 'A' + n(rO) + ' ' + n(rO) + ' 0 ' + large + ' 1 ' + px(rO, end);
+  if (rI > 0.01) {
+    d += 'L' + px(rI, end)
+      + 'A' + n(rI) + ' ' + n(rI) + ' 0 ' + large + ' 0 ' + px(rI, start) + 'Z';
+  } else {
+    d += 'L' + n(cx) + ' ' + n(cy) + 'Z';
+  }
+  return d;
+}
+
+/* --------------------------------------------------------------------------
+   Legends
+   -------------------------------------------------------------------------- */
+
+/* Laid out from (0,0) and positioned by the caller with a translate, so the
+   caller can measure the height *before* deciding how much plot area is left. */
+function mcChLegend(items, maxW, o) {
+  const fs = o.fs;
+  const rowH = fs + 5;
+  const dot = 3.2;
+  const gap = 10;
+  let cx = 0;
+  let line = 0;
+  let svg = '';
+  for (let i = 0; i < items.length; i++) {
+    const label = mcChStr(items[i].label);
+    const w = dot * 2 + 4 + mcChTextW(label, fs);
+    if (cx > 0 && cx + w > maxW) { cx = 0; line++; }
+    const cy = line * rowH + rowH / 2;
+    svg += mcChCircle(cx + dot, cy, dot, items[i].color, 0);
+    svg += mcChText(cx + dot * 2 + 4, cy, label, { baseline: 'middle', size: fs, fill: mcChInk2 });
+    cx += w + gap;
+  }
+  return { svg: svg, height: (line + 1) * rowH };
+}
+
+function mcChLegendV(items, maxW, maxH, o) {
+  const fs = o.fs;
+  const rowH = fs + 5;
+  const dot = 3.2;
+  const cap = Math.max(1, Math.floor(maxH / rowH));
+  const show = items.length > cap ? cap - 1 : items.length;
+  let svg = '';
+  for (let i = 0; i < show; i++) {
+    const cy = i * rowH + rowH / 2;
+    svg += mcChCircle(dot, cy, dot, items[i].color, 0);
+    svg += mcChText(dot * 2 + 4, cy,
+      mcChTruncate(items[i].label, maxW - dot * 2 - 4, fs),
+      { baseline: 'middle', size: fs, fill: mcChInk2 });
+  }
+  if (show < items.length) {
+    svg += mcChText(dot * 2 + 4, show * rowH + rowH / 2,
+      '+' + (items.length - show) + ' more', { baseline: 'middle', size: fs, fill: mcChMuted });
+  }
+  return { svg: svg, height: Math.min(items.length, cap) * rowH };
+}
+
+function mcChGroupAt(x, y, svg) {
+  return '<g transform="translate(' + mcChN(x) + ' ' + mcChN(y) + ')">' + svg + '</g>';
+}
+
+/* --------------------------------------------------------------------------
+   Input normalisation
+   -------------------------------------------------------------------------- */
+
+function mcChPlot(o, reservedBottom) {
+  const b = o.pad.b + Math.max(0, mcChNum(reservedBottom, 0));
+  let x0 = o.pad.l;
+  let x1 = o.w - o.pad.r;
+  let y0 = o.pad.t;
+  let y1 = o.h - b;
+  /* Padding can exceed a tiny chart. Falling back to the full box is ugly but
+     finite; a negative-width plot would produce mirrored geometry. */
+  if (x1 - x0 < 8) { x0 = 0; x1 = o.w; }
+  if (y1 - y0 < 8) { y0 = 0; y1 = o.h; }
+  return { x0: x0, x1: x1, y0: y0, y1: y1, w: x1 - x0, h: y1 - y0 };
+}
+
+function mcChNormPoints(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (let i = 0; i < raw.length; i++) {
+    const p = raw[i];
+    let x;
+    let y;
+    if (p && typeof p === 'object' && !Array.isArray(p)) {
+      x = mcChNum(p.x, i);
+      y = mcChNum(p.y, null);
+    } else if (Array.isArray(p)) {
+      x = mcChNum(p[0], i);
+      y = mcChNum(p[1], null);
+    } else {
+      x = i;
+      y = mcChNum(p, null);
+    }
+    /* A non-numeric y is dropped rather than coerced to 0 — inventing a zero
+       would draw a spike that the data never contained. */
+    if (y === null) continue;
+    out.push({ x: x, y: y });
+  }
+  return out;
+}
+
+function mcChNormSeries(series, o) {
+  const out = [];
+  if (!Array.isArray(series) || !series.length) return out;
+  const looksBare = series.every(function (s) {
+    return s === null || s === undefined || typeof s === 'number' || typeof s === 'string' || Array.isArray(s);
+  });
+  const rows = looksBare ? [{ name: '', points: series }] : series;
+  for (let i = 0; i < rows.length; i++) {
+    const s = rows[i] && typeof rows[i] === 'object' ? rows[i] : {};
+    const pts = mcChNormPoints(s.points || s.data || s.values || (Array.isArray(rows[i]) ? rows[i] : []));
+    out.push({
+      name: mcChStr(s.name) || (looksBare ? '' : 'Series ' + (i + 1)),
+      color: mcChColorAt(i, s.color ? [s.color] : o.colors),
+      pts: pts
+    });
+  }
+  return out;
+}
+
+function mcChNormItems(data, o) {
+  const out = [];
+  if (!Array.isArray(data)) return out;
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i];
+    let label;
+    let value;
+    let color;
+    if (d && typeof d === 'object' && !Array.isArray(d)) {
+      label = mcChStr(d.label !== undefined ? d.label : d.name);
+      value = mcChNum(d.value !== undefined ? d.value : d.y, 0);
+      color = d.color;
+    } else if (Array.isArray(d)) {
+      label = mcChStr(d[0]);
+      value = mcChNum(d[1], 0);
+    } else {
+      label = String(i + 1);
+      value = mcChNum(d, 0);
+    }
+    out.push({
+      label: label,
+      value: value,
+      color: color ? mcChColor(color, mcChColorAt(i, o.colors)) : mcChColorAt(i, o.colors)
+    });
+  }
+  return out;
+}
+
+/* --------------------------------------------------------------------------
+   mcChLine
+   -------------------------------------------------------------------------- */
+
+function mcChLine(series, opts) {
+  const o = mcChBase(opts, { width: 320, height: 140, pad: { t: 10, r: 10, b: 20, l: 34 } });
+  const src = o.src;
+  const head = mcChOpen(o, 'mcch-line', 'Line chart');
+  const S = mcChNormSeries(series, o);
+
+  let total = 0;
+  for (let i = 0; i < S.length; i++) total += S[i].pts.length;
+  if (!total) return head + mcChNoData(o, src.emptyText) + mcChClose();
+
+  const yLabel = mcChStr(o.yLabel);
+  if (yLabel) o.pad.l += o.fs + 3;
+
+  /* Legend for two or more series, always — colour matching alone is not an
+     identity channel. One series needs none: the title already names it. */
+  let legend = null;
+  let legendH = 0;
+  if (S.length > 1 && src.legend !== false) {
+    legend = mcChLegend(S.map(function (s) { return { label: s.name, color: s.color }; }),
+      o.w - o.pad.l - o.pad.r, o);
+    legendH = legend.height + 2;
+  }
+
+  const P = mcChPlot(o, legendH);
+
+  let xmin = Infinity;
+  let xmax = -Infinity;
+  let ymin = Infinity;
+  let ymax = -Infinity;
+  for (let i = 0; i < S.length; i++) {
+    for (let j = 0; j < S[i].pts.length; j++) {
+      const p = S[i].pts[j];
+      if (p.x < xmin) xmin = p.x;
+      if (p.x > xmax) xmax = p.x;
+      if (p.y < ymin) ymin = p.y;
+      if (p.y > ymax) ymax = p.y;
+    }
+  }
+  if (!isFinite(xmin)) { xmin = 0; xmax = 1; }
+  if (xmax === xmin) { xmin -= 0.5; xmax += 0.5; }
+
+  /* With negative data the reference line is zero, not the floor of the plot:
+     a bar or area that hangs *below* a visible zero line is the whole point,
+     and an axis that starts at the minimum hides the sign change. */
+  if (ymin > 0 && (src.includeZero === true)) ymin = 0;
+  if (ymin < 0 && ymax < 0) ymax = 0;
+  if (ymin < 0 && ymax > 0) { /* domain already straddles zero */ }
+  else if (ymin < 0) ymax = Math.max(ymax, 0);
+
+  const T = mcChNiceTicks(ymin, ymax, mcChNum(src.ticks, 4));
+  const x = mcChScale(xmin, xmax, P.x0, P.x1);
+  const y = mcChScale(T.niceMin, T.niceMax, P.y1, P.y0);
+  const zeroV = mcChClamp(0, T.niceMin, T.niceMax);
+  const zeroY = y(zeroV);
+
+  let body = '';
+
+  if (o.showGrid) {
+    for (let i = 0; i < T.ticks.length; i++) {
+      const gy = y(T.ticks[i]);
+      body += mcChLineEl(P.x0, gy, P.x1, gy, mcChGridColor, 1);
+      body += mcChText(P.x0 - 5, gy, mcChFmtVal(T.ticks[i], T.decimals),
+        { anchor: 'end', baseline: 'middle', size: o.fs - 1, fill: mcChMuted, tabular: true });
+    }
+  }
+  body += mcChLineEl(P.x0, P.y1, P.x1, P.y1, mcChAxisColor, 1);
+  if (T.niceMin < 0 && T.niceMax > 0) {
+    body += mcChLineEl(P.x0, zeroY, P.x1, zeroY, mcChAxisColor, 1,
+      ' class="mcch-zero" data-zero="' + mcChN(zeroY) + '"');
+  }
+
+  if (yLabel) {
+    body += mcChText(o.pad.l - o.fs - 22, (P.y0 + P.y1) / 2, yLabel,
+      { anchor: 'middle', baseline: 'middle', size: o.fs - 1, fill: mcChMuted, rotate: -90 });
+  }
+
+  const area = src.area === true;
+  let dots = '';
+  for (let i = 0; i < S.length; i++) {
+    const s = S[i];
+    if (!s.pts.length) continue;
+    const pts = s.pts.map(function (p) { return [x(p.x), y(p.y)]; });
+
+    /* One point is a dot, not a path: `M x y` with no line-to has zero length
+       and renders as literally nothing. */
+    if (pts.length === 1) {
+      dots += mcChCircle(pts[0][0], pts[0][1], 4, s.color, 2, o.surface);
+      continue;
+    }
+
+    if (area) {
+      const ad = mcChPathD(pts)
+        + 'L' + mcChN(pts[pts.length - 1][0]) + ' ' + mcChN(zeroY)
+        + 'L' + mcChN(pts[0][0]) + ' ' + mcChN(zeroY) + 'Z';
+      body += '<path d="' + ad + '" fill="' + s.color + '" fill-opacity="0.1" stroke="none"/>';
+    }
+
+    let path = '<path class="mcch-series" d="' + mcChPathD(pts) + '" fill="none" stroke="' + s.color + '"'
+      + ' stroke-linejoin="round" stroke-linecap="round" style="stroke-width:2';
+    if (o.animate) {
+      const L = Math.max(1, mcChPathLen(pts));
+      path += ';stroke-dasharray:' + mcChN(L) + ' ' + mcChN(L) + ';stroke-dashoffset:' + mcChN(L) + '">'
+        + '<animate attributeName="stroke-dashoffset" from="' + mcChN(L) + '" to="0" dur="0.7s" fill="freeze"/>'
+        + '</path>';
+    } else {
+      path += '"/>';
+    }
+    body += path;
+
+    if (o.showDots) {
+      for (let j = 0; j < pts.length; j++) {
+        dots += mcChCircle(pts[j][0], pts[j][1], 3.5, s.color, 2, o.surface);
+      }
+    }
+  }
+  body += dots;
+
+  /* x labels: first / middle / last only. A label under every point is noise
+     and would collide long before it was useful. */
+  const xLabels = Array.isArray(src.xLabels) ? src.xLabels : null;
+  if (xLabels && xLabels.length) {
+    const idx = xLabels.length === 1 ? [0] : [0, Math.floor((xLabels.length - 1) / 2), xLabels.length - 1];
+    const seen = {};
+    for (let i = 0; i < idx.length; i++) {
+      const k = idx[i];
+      if (seen[k]) continue;
+      seen[k] = 1;
+      const px = x(xmin + (xmax - xmin) * (xLabels.length === 1 ? 0.5 : k / (xLabels.length - 1)));
+      body += mcChText(px, P.y1 + o.fs + 2,
+        mcChTruncate(xLabels[k], P.w / 3, o.fs - 1),
+        { anchor: i === 0 ? 'start' : (i === idx.length - 1 ? 'end' : 'middle'), size: o.fs - 1, fill: mcChMuted });
+    }
+  }
+
+  if (legend) body += mcChGroupAt(o.pad.l, P.y1 + o.pad.b + 2, legend.svg);
+
+  return head + body + mcChClose();
+}
+
+/* --------------------------------------------------------------------------
+   mcChBar
+   -------------------------------------------------------------------------- */
+
+function mcChBar(data, opts) {
+  const o = mcChBase(opts, { width: 320, height: 140, pad: { t: 14, r: 8, b: 26, l: 34 } });
+  const src = o.src;
+  const head = mcChOpen(o, 'mcch-bar', 'Bar chart');
+  const items = mcChNormItems(data, o);
+  if (!items.length) return head + mcChNoData(o, src.emptyText) + mcChClose();
+
+  const yLabel = mcChStr(o.yLabel);
+  if (yLabel) o.pad.l += o.fs + 3;
+  const P = mcChPlot(o, 0);
+
+  /* Bars encode magnitude by length, so the scale must include zero — a
+     truncated bar axis exaggerates differences and is the classic chart lie. */
+  let lo = 0;
+  let hi = 0;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].value < lo) lo = items[i].value;
+    if (items[i].value > hi) hi = items[i].value;
+  }
+  const T = mcChNiceTicks(lo, hi, mcChNum(src.ticks, 4));
+  const y = mcChScale(T.niceMin, T.niceMax, P.y1, P.y0);
+  const zeroY = y(mcChClamp(0, T.niceMin, T.niceMax));
+
+  let body = '';
+  if (o.showGrid) {
+    for (let i = 0; i < T.ticks.length; i++) {
+      const gy = y(T.ticks[i]);
+      body += mcChLineEl(P.x0, gy, P.x1, gy, mcChGridColor, 1);
+      body += mcChText(P.x0 - 5, gy, mcChFmtVal(T.ticks[i], T.decimals),
+        { anchor: 'end', baseline: 'middle', size: o.fs - 1, fill: mcChMuted, tabular: true });
+    }
+  }
+
+  if (yLabel) {
+    body += mcChText(o.pad.l - o.fs - 22, (P.y0 + P.y1) / 2, yLabel,
+      { anchor: 'middle', baseline: 'middle', size: o.fs - 1, fill: mcChMuted, rotate: -90 });
+  }
+
+  const n = items.length;
+  const slot = P.w / n;
+  /* Cap the bar thickness and always leave at least a 2px surface gap: the gap
+     is what separates touching bars, not a stroke around them. */
+  const barW = Math.max(1, Math.min(slot - 2, slot * 0.68, mcChNum(src.maxBarThickness, 24)));
+
+  const labels = items.map(function (it) { return it.label; });
+  let maxLabelW = 0;
+  for (let i = 0; i < labels.length; i++) maxLabelW = Math.max(maxLabelW, mcChTextW(labels[i], o.fs - 1));
+  const rotate = maxLabelW > slot - 3;
+  /* A rotated label occupies sin(45°) of its length vertically. */
+  const rotRoom = Math.max(6, (o.pad.b - 6) / Math.SQRT1_2);
+  const labelStep = rotate
+    ? Math.max(1, Math.ceil(n / Math.max(1, Math.floor(P.w / 11))))
+    : Math.max(1, Math.ceil(n / Math.max(1, Math.floor(P.w / Math.max(8, maxLabelW + 4)))));
+
+  const showValues = src.showValues !== false && n <= mcChNum(src.maxValueLabels, 14);
+
+  for (let i = 0; i < n; i++) {
+    const it = items[i];
+    const cx = P.x0 + slot * (i + 0.5);
+    const bx = cx - barW / 2;
+    const vy = y(it.value);
+    const top = Math.min(vy, zeroY);
+    const bh = Math.abs(vy - zeroY);
+    const up = it.value >= 0;
+    const d = mcChBarPath(bx, top, barW, bh, 4, up ? 'up' : 'down');
+    if (d) {
+      body += '<path class="mcch-bar" d="' + d + '" fill="' + it.color + '"'
+        + (o.animate ? '><animate attributeName="opacity" values="0;1" dur="0.45s" fill="freeze"/></path>' : '/>');
+    } else {
+      /* Exactly zero: a hairline at the baseline still shows the category
+         exists rather than dropping it silently. */
+      body += mcChLineEl(bx, zeroY, bx + barW, zeroY, it.color, 1.5);
+    }
+
+    if (showValues) {
+      const txt = mcChFmtVal(it.value, null);
+      if (mcChTextW(txt, o.fs - 1) <= slot) {
+        body += mcChText(cx, up ? top - 3 : top + bh + o.fs, txt,
+          { anchor: 'middle', size: o.fs - 1, fill: mcChInk2, tabular: true });
+      }
+    }
+
+    if (i % labelStep === 0) {
+      if (rotate) {
+        body += mcChText(cx, P.y1 + 5, mcChTruncate(it.label, rotRoom, o.fs - 1),
+          { anchor: 'end', baseline: 'middle', size: o.fs - 1, fill: mcChMuted, rotate: -45 });
+      } else {
+        body += mcChText(cx, P.y1 + o.fs + 2, mcChTruncate(it.label, slot, o.fs - 1),
+          { anchor: 'middle', size: o.fs - 1, fill: mcChMuted });
+      }
+    }
+  }
+
+  body += mcChLineEl(P.x0, zeroY, P.x1, zeroY, mcChAxisColor, 1,
+    ' class="mcch-zero" data-zero="' + mcChN(zeroY) + '"');
+
+  return head + body + mcChClose();
+}
+
+/* --------------------------------------------------------------------------
+   mcChHBar
+   -------------------------------------------------------------------------- */
+
+function mcChHBar(data, opts) {
+  const o = mcChBase(opts, { width: 320, height: 140, pad: { t: 6, r: 30, b: 6, l: 6 } });
+  const src = o.src;
+  const head = mcChOpen(o, 'mcch-hbar', 'Horizontal bar chart');
+  const items = mcChNormItems(data, o);
+  if (!items.length) return head + mcChNoData(o, src.emptyText) + mcChClose();
+
+  const P = mcChPlot(o, 0);
+  const fs = o.fs;
+
+  /* Horizontal bars exist so long category names can be read left-to-right at
+     full size instead of rotated 45°. Give them a real gutter, but cap it at
+     45% of the plot so the bars still carry the comparison. */
+  let want = 0;
+  for (let i = 0; i < items.length; i++) want = Math.max(want, mcChTextW(items[i].label, fs));
+  const labelW = mcChClamp(mcChNum(src.labelWidth, Math.min(want, P.w * 0.45)), 0, P.w * 0.6);
+  const bx0 = P.x0 + labelW + (labelW > 0 ? 6 : 0);
+  const bx1 = P.x1;
+
+  let lo = 0;
+  let hi = 0;
+  for (let i = 0; i < items.length; i++) {
+    if (items[i].value < lo) lo = items[i].value;
+    if (items[i].value > hi) hi = items[i].value;
+  }
+  const T = mcChNiceTicks(lo, hi, mcChNum(src.ticks, 4));
+  const x = mcChScale(T.niceMin, T.niceMax, bx0, bx1);
+  const zeroX = x(mcChClamp(0, T.niceMin, T.niceMax));
+
+  let body = '';
+  if (o.showGrid) {
+    for (let i = 0; i < T.ticks.length; i++) {
+      const gx = x(T.ticks[i]);
+      body += mcChLineEl(gx, P.y0, gx, P.y1, mcChGridColor, 1);
+    }
+  }
+
+  const n = items.length;
+  const rowH = P.h / n;
+  const barH = Math.max(1, Math.min(rowH - 2, rowH * 0.7, mcChNum(src.maxBarThickness, 24)));
+  const showValues = src.showValues !== false;
+
+  for (let i = 0; i < n; i++) {
+    const it = items[i];
+    const cy = P.y0 + rowH * (i + 0.5);
+    const by = cy - barH / 2;
+    const vx = x(it.value);
+    const left = Math.min(vx, zeroX);
+    const bw = Math.abs(vx - zeroX);
+    const pos = it.value >= 0;
+    const d = mcChBarPath(left, by, bw, barH, 4, pos ? 'right' : 'left');
+    if (d) {
+      body += '<path class="mcch-bar" d="' + d + '" fill="' + it.color + '"'
+        + (o.animate ? '><animate attributeName="opacity" values="0;1" dur="0.45s" fill="freeze"/></path>' : '/>');
+    } else {
+      body += mcChLineEl(zeroX, by, zeroX, by + barH, it.color, 1.5);
+    }
+
+    if (labelW > 0) {
+      body += mcChText(P.x0 + labelW, cy, mcChTruncate(it.label, labelW, fs),
+        { anchor: 'end', baseline: 'middle', size: fs, fill: mcChInk2 });
+    }
+    if (showValues) {
+      body += mcChText(pos ? left + bw + 4 : left - 4, cy, mcChFmtVal(it.value, null),
+        { anchor: pos ? 'start' : 'end', baseline: 'middle', size: fs - 1, fill: mcChMuted, tabular: true });
+    }
+  }
+
+  body += mcChLineEl(zeroX, P.y0, zeroX, P.y1, mcChAxisColor, 1,
+    ' class="mcch-zero" data-zero="' + mcChN(zeroX) + '"');
+
+  return head + body + mcChClose();
+}
+
+/* --------------------------------------------------------------------------
+   mcChDonut
+   -------------------------------------------------------------------------- */
+
+function mcChDonut(data, opts) {
+  const o = mcChBase(opts, { width: 320, height: 140, pad: { t: 8, r: 8, b: 8, l: 8 } });
+  const src = o.src;
+  const head = mcChOpen(o, 'mcch-donut', 'Donut chart');
+  const raw = mcChNormItems(data, o);
+
+  /* A negative share of a whole is meaningless, so those rows are dropped
+     rather than folded in as absolute values (which would inflate the total
+     and quietly misstate every other slice). */
+  const kept = [];
+  let total = 0;
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i].value > 0) { kept.push(raw[i]); total += raw[i].value; }
+  }
+  if (!kept.length || !(total > 0)) return head + mcChNoData(o, src.emptyText) + mcChClose();
+
+  /* Slices below the threshold are visually indistinguishable from each other
+     and from the gaps, so collapse them — but only if there are at least two,
+     since an "Other" holding a single category just hides its name. */
+  const minPct = mcChClamp(mcChNum(src.minPct, 0.03), 0, 0.5);
+  const big = [];
+  const small = [];
+  for (let i = 0; i < kept.length; i++) {
+    (kept[i].value / total < minPct ? small : big).push(kept[i]);
+  }
+  let slices = kept;
+  if (small.length > 1) {
+    let sum = 0;
+    for (let i = 0; i < small.length; i++) sum += small[i].value;
+    slices = big.concat([{ label: mcChStr(src.otherLabel) || 'Other', value: sum, color: mcChMuted }]);
+  }
+
+  const P = mcChPlot(o, 0);
+  const showLegend = src.legend !== false && slices.length > 1;
+  const legendW = showLegend ? mcChClamp(P.w * 0.45, 0, 150) : 0;
+  const chartW = Math.max(12, P.w - legendW - (showLegend ? 8 : 0));
+  const R = Math.max(6, Math.min(chartW, P.h) / 2 - 1);
+  const cx = P.x0 + chartW / 2;
+  const cy = P.y0 + P.h / 2;
+  const rI = R * mcChClamp(mcChNum(src.inner, 0.62), 0, 0.92);
+
+  let body = '';
+  /* Start at 12 o'clock: readers parse a ring clockwise from the top. */
+  let angle = -Math.PI / 2;
+  const TAU = Math.PI * 2;
+  for (let i = 0; i < slices.length; i++) {
+    const frac = slices[i].value / total;
+    const next = i === slices.length - 1 ? -Math.PI / 2 + TAU : angle + frac * TAU;
+    const d = mcChArcRing(cx, cy, R, rI, angle, next);
+    if (d) {
+      body += '<path class="mcch-slice" d="' + d + '" fill="'
+        + mcChColor(slices[i].color, mcChColorAt(i, o.colors)) + '" fill-rule="evenodd"'
+        + ' stroke="' + o.surface + '" style="stroke-width:' + (slices.length > 1 ? 2 : 0) + '"'
+        + (o.animate ? '><animate attributeName="opacity" values="0;1" dur="0.5s" fill="freeze"/></path>' : '/>');
+    }
+    angle = next;
+  }
+
+  if (rI > 8) {
+    const centreValue = src.centerValue !== undefined ? mcChStr(src.centerValue) : mcChFmtVal(total, null);
+    const centreLabel = mcChStr(src.centerLabel);
+    const vSize = mcChClamp(rI * 0.52, 8, 26);
+    body += mcChText(cx, centreLabel ? cy - 2 : cy, centreValue,
+      { anchor: 'middle', baseline: 'middle', size: vSize, fill: mcChInk, weight: 600 });
+    if (centreLabel) {
+      body += mcChText(cx, cy + vSize * 0.62, mcChTruncate(centreLabel, rI * 1.9, o.fs - 1),
+        { anchor: 'middle', baseline: 'middle', size: o.fs - 1, fill: mcChMuted });
+    }
+  }
+
+  if (showLegend) {
+    const items = slices.map(function (s, i) {
+      const pct = Math.round((s.value / total) * 100);
+      return { label: s.label ? s.label + '  ' + pct + '%' : pct + '%', color: mcChColor(s.color, mcChColorAt(i, o.colors)) };
+    });
+    const L = mcChLegendV(items, legendW, P.h, o);
+    body += mcChGroupAt(P.x1 - legendW, cy - L.height / 2, L.svg);
+  }
+
+  return head + body + mcChClose();
+}
+
+/* --------------------------------------------------------------------------
+   mcChSpark
+   -------------------------------------------------------------------------- */
+
+/* Deliberately axis-free: a sparkline is a word-sized graphic that shows shape,
+   not values. Anything that needs a readable number needs a real chart. */
+function mcChSpark(values, opts) {
+  const o = mcChBase(opts, { width: 100, height: 24, pad: { t: 3, r: 3, b: 3, l: 3 }, fontSize: 8 });
+  const src = o.src;
+  const head = mcChOpen(o, 'mcch-spark', 'Sparkline');
+  const pts = mcChNormPoints(values);
+  const P = mcChPlot(o, 0);
+  const color = mcChColor(src.color, mcChPalette[0]);
+
+  if (!pts.length) {
+    return head + mcChLineEl(P.x0, (P.y0 + P.y1) / 2, P.x1, (P.y0 + P.y1) / 2, mcChGridColor, 1) + mcChClose();
+  }
+
+  let xmin = Infinity;
+  let xmax = -Infinity;
+  let ymin = Infinity;
+  let ymax = -Infinity;
+  for (let i = 0; i < pts.length; i++) {
+    if (pts[i].x < xmin) xmin = pts[i].x;
+    if (pts[i].x > xmax) xmax = pts[i].x;
+    if (pts[i].y < ymin) ymin = pts[i].y;
+    if (pts[i].y > ymax) ymax = pts[i].y;
+  }
+  if (xmax === xmin) { xmin -= 0.5; xmax += 0.5; }
+  if (ymax === ymin) { const p = Math.abs(ymin) * 0.5 || 1; ymin -= p; ymax += p; }
+
+  const x = mcChScale(xmin, xmax, P.x0, P.x1);
+  const y = mcChScale(ymin, ymax, P.y1, P.y0);
+  const xy = pts.map(function (p) { return [x(p.x), y(p.y)]; });
+
+  let body = '';
+  if (xy.length === 1) {
+    body += mcChCircle(xy[0][0], xy[0][1], 2.5, color, 0);
+    return head + body + mcChClose();
+  }
+
+  if (src.area === true) {
+    body += '<path d="' + mcChPathD(xy)
+      + 'L' + mcChN(xy[xy.length - 1][0]) + ' ' + mcChN(P.y1)
+      + 'L' + mcChN(xy[0][0]) + ' ' + mcChN(P.y1) + 'Z"'
+      + ' fill="' + color + '" fill-opacity="0.1" stroke="none"/>';
+  }
+  body += '<path class="mcch-series" d="' + mcChPathD(xy) + '" fill="none" stroke="' + color + '"'
+    + ' stroke-linejoin="round" stroke-linecap="round" style="stroke-width:'
+    + mcChN(mcChNum(src.strokeWidth, 1.5)) + '"/>';
+  if (src.endDot !== false) {
+    body += mcChCircle(xy[xy.length - 1][0], xy[xy.length - 1][1], 2, color, 0);
+  }
+  return head + body + mcChClose();
+}
+
+/* --------------------------------------------------------------------------
+   mcChHeat
+   -------------------------------------------------------------------------- */
+
+function mcChHeat(matrix, opts) {
+  const o = mcChBase(opts, { width: 320, height: 140, pad: { t: 6, r: 6, b: 6, l: 6 }, fontSize: 8 });
+  const src = o.src;
+  const head = mcChOpen(o, 'mcch-heat', 'Heatmap');
+
+  const rows = [];
+  if (Array.isArray(matrix)) {
+    for (let i = 0; i < matrix.length; i++) {
+      const r = matrix[i];
+      if (!Array.isArray(r)) continue;
+      const out = [];
+      for (let j = 0; j < r.length; j++) out.push(mcChNum(r[j], null));
+      rows.push(out);
+    }
+  }
+  let cols = 0;
+  for (let i = 0; i < rows.length; i++) cols = Math.max(cols, rows[i].length);
+  if (!rows.length || !cols) return head + mcChNoData(o, src.emptyText) + mcChClose();
+
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = 0; j < rows[i].length; j++) {
+      const v = rows[i][j];
+      if (v === null) continue;
+      if (v < lo) lo = v;
+      if (v > hi) hi = v;
+    }
+  }
+  if (!isFinite(lo)) { lo = 0; hi = 1; }
+  const span = hi - lo;
+
+  const P = mcChPlot(o, 0);
+  const fs = o.fs;
+  const rowLabels = Array.isArray(src.rows) ? src.rows : null;
+  const colLabels = Array.isArray(src.cols) ? src.cols : null;
+
+  let labelW = 0;
+  if (rowLabels) {
+    for (let i = 0; i < rows.length; i++) labelW = Math.max(labelW, mcChTextW(mcChStr(rowLabels[i]), fs));
+    labelW = mcChClamp(labelW, 0, P.w * 0.35);
+  }
+  const labelH = colLabels ? fs + 3 : 0;
+
+  const gx0 = P.x0 + labelW + (labelW > 0 ? 4 : 0);
+  const gy0 = P.y0 + labelH;
+  const gw = Math.max(1, P.x1 - gx0);
+  const gh = Math.max(1, P.y1 - gy0);
+  const cw = gw / cols;
+  const ch = gh / rows.length;
+  const gap = cw > 6 && ch > 6 ? 1 : 0;
+
+  let body = '';
+  if (colLabels) {
+    for (let j = 0; j < cols; j++) {
+      body += mcChText(gx0 + cw * (j + 0.5), P.y0 + fs - 1,
+        mcChTruncate(colLabels[j], cw, fs), { anchor: 'middle', size: fs, fill: mcChMuted });
+    }
+  }
+  if (rowLabels) {
+    for (let i = 0; i < rows.length; i++) {
+      body += mcChText(gx0 - 4, gy0 + ch * (i + 0.5),
+        mcChTruncate(rowLabels[i], labelW, fs),
+        { anchor: 'end', baseline: 'middle', size: fs, fill: mcChMuted });
+    }
+  }
+
+  const showValues = src.showValues === true;
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = 0; j < cols; j++) {
+      const v = (rows[i] && rows[i][j] !== undefined) ? rows[i][j] : null;
+      const cx = gx0 + cw * j + gap / 2;
+      const cy = gy0 + ch * i + gap / 2;
+      const d = mcChBarPath(cx, cy, Math.max(0.5, cw - gap), Math.max(0.5, ch - gap), 1.5, 'none');
+      if (v === null) {
+        /* Missing is not zero. Render an empty well so the grid keeps its
+           shape without asserting a value that was never measured. */
+        body += '<path class="mcch-cell" d="' + d + '" fill="none" stroke="' + mcChGridColor
+          + '" style="stroke-width:1"/>';
+        continue;
+      }
+      const t = span === 0 ? 0.5 : (v - lo) / span;
+      body += '<path class="mcch-cell" d="' + d + '" fill="' + mcChRamp(t) + '"/>';
+      if (showValues && cw > 18 && ch > 10) {
+        /* Text sitting *inside* a fill is the one place a label may take a
+           non-token colour: pick ink or white by the cell's lightness so it
+           always clears contrast. */
+        body += mcChText(cx + (cw - gap) / 2, cy + (ch - gap) / 2, mcChFmtVal(v, null),
+          { anchor: 'middle', baseline: 'middle', size: fs - 1, fill: t > 0.6 ? '#0b0b0b' : mcChInk, tabular: true });
+      }
+    }
+  }
+
+  return head + body + mcChClose();
+}
+
+/* ==========================================================================
+   Self-test. Node-only; the guard is short-circuit safe in a browser because
+   `module` is undefined there and `require` is never reached.
+   ========================================================================== */
+
+/* ---------- core module: palette.js ---------- */
+/* =====================================================================
+ * mcPal — fuzzy command-palette matcher + chat-history search index.
+ *
+ * Script-scope only: no modules, no IIFE, no bundler. Every top-level
+ * name carries the `mcPal` prefix because the host app already owns
+ * ~320 `mc*` identifiers in the same global scope; the extra three
+ * letters are the whole collision-avoidance strategy.
+ *
+ * Two independent engines live here:
+ *   1. mcPalScore / mcPalFilter / mcPalHighlight — interactive subsequence
+ *      matching for a command palette (small N, must feel instant).
+ *   2. mcPalIndex / mcPalSearch / mcPalRecent — an inverted index + BM25
+ *      over chat history (large N, built once, queried often).
+ * They share only the HTML escaper, deliberately: one escaping code path
+ * means one place an injection could ever slip in.
+ * ===================================================================== */
+
+
+/* ---------------------------------------------------------------------
+ * Tuning constants.
+ *
+ * These are ranking knobs, not physics. They were chosen so that the
+ * relationships we actually care about hold with comfortable margins:
+ *   start-of-string > word-boundary > interior character
+ *   consecutive run > scattered characters
+ *   short target    > long target (same match quality)
+ * Anything that changes them should be re-checked against the self-test
+ * at the bottom, which pins those relationships as assertions.
+ * ------------------------------------------------------------------- */
+const mcPalTuning = {
+  startBonus: 45,        // match at index 0 — the strongest signal a user can give
+  boundaryBonus: 30,     // match right after a separator, or on a camelCase hump
+  consecBonus: 25,       // match immediately after the previous match
+  caseBonus: 4,          // exact-case match: a nudge, never a decision
+  strayPenalty: 14,      // matched an interior character: cheap-looking match
+  gapPenalty: 2,         // per skipped character between two matches
+  gapPenaltyMax: 20,     // capped, so one huge gap can't dwarf everything else
+  leadPenalty: 3,        // per character before the first match
+  leadPenaltyMax: 9,     // also capped: "matched late" is bad, not fatal
+  lenWeight: 200,        // shorter-target reward: lenWeight / (len + lenBase)
+  lenBase: 8,
+  maxAnchors: 24,        // restart budget (see mcPalScore's trade-off note)
+  maxTargetLen: 512,     // palette labels are short; refuse to scan essays
+  snippetWidth: 140,     // visible characters in a search-result snippet
+  snippetSnap: 24        // how far we'll shrink a snippet to avoid cutting a word
+};
+
+/* BM25 parameters. k1/b are the textbook defaults the spec asks for.
+ * idfFloor is the negative-IDF guard: the classic Robertson IDF goes
+ * negative once a term appears in more than ~half the corpus, which
+ * would make a *more* frequent term subtract score. We clamp instead. */
+const mcPalBM25 = {
+  k1: 1.5,
+  b: 0.75,
+  idfFloor: 1e-3,
+  phraseWeight: 1.6,     // terms that participated in a satisfied phrase count for more
+  phraseBonus: 2.0       // flat-ish bonus per doc for matching the phrase at all
+};
+
+/* Characters that start a new "word" for boundary-bonus purposes. */
+const mcPalSeparatorRe = /[\s\-_./\\:,;|()[\]{}<>@#+*~'"!?=&$]/;
+
+/* One definition of "what a token is", shared by the tokenizer and the
+ * index builder so the two can never drift apart. It lives here as a
+ * source string, not a RegExp, because every use has to compile its own
+ * object: a /g/ regex carries lastIndex between uses, and sharing one
+ * across calls is a nasty, intermittent bug to chase. */
+const mcPalTokenPattern = "[\\p{L}\\p{N}][\\p{L}\\p{N}_'’]*";
+
+/* A deliberately small stoplist (classic English core). Small on purpose:
+ * an aggressive stoplist destroys phrase queries and short questions,
+ * which are exactly what people type into a chat-history search. */
+const mcPalStopwords = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in",
+  "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the",
+  "their", "then", "there", "these", "they", "this", "to", "was", "will", "with"
+]);
+
+/* The full escape map. `&` must be first in intent (the regex handles
+ * ordering for us) or we'd double-escape our own entities. */
+const mcPalEscapeMap = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+  "`": "&#96;"
+};
+
+
+/* =====================================================================
+ * HTML escaping
+ * ===================================================================== */
+
+/**
+ * mcPalEscape(text) -> string
+ *
+ * Our own escaper — no innerHTML, no DOM, no library. Backtick and
+ * single-quote are included even though this output lands in element
+ * text, because callers have a habit of eventually splicing it into an
+ * attribute, and an escaper that is only correct in one context is a
+ * trap waiting to be sprung.
+ */
+function mcPalEscape(text) {
+  if (text === null || text === undefined) return "";
+  return String(text).replace(/[&<>"'`]/g, function (ch) {
+    return mcPalEscapeMap[ch];
+  });
+}
+
+
+/* =====================================================================
+ * Fuzzy subsequence matching
+ * ===================================================================== */
+
+/**
+ * mcPalIsBoundaryAt(text, i) -> boolean
+ *
+ * True when index `i` begins a word: start of string, first character
+ * after a separator, or a camelCase / snake-to-caps hump.
+ */
+function mcPalIsBoundaryAt(text, i) {
+  if (i <= 0) return true;
+  const prev = text.charAt(i - 1);
+  const cur = text.charAt(i);
+  if (mcPalSeparatorRe.test(prev)) return true;
+  // camelCase hump: a lowercase-capable character followed by an
+  // uppercase-capable one. Comparing against toUpper/toLower is a cheap
+  // unicode-aware "has case, and it is this one" test.
+  if (prev !== prev.toUpperCase() && cur !== cur.toLowerCase()) return true;
+  // digit -> letter also reads as a new word ("v2Beta", "step3Run")
+  if (prev >= "0" && prev <= "9" && !(cur >= "0" && cur <= "9") && cur.toLowerCase() !== cur.toUpperCase()) return true;
+  return false;
+}
+
+/**
+ * mcPalScoreRun — score one already-established alignment.
+ * Split out so the anchor loop stays readable and so every bonus in the
+ * spec has exactly one line you can point at.
+ */
+function mcPalScoreRun(query, target, positions) {
+  let score = 0;
+
+  // (a) PENALTY: how much junk we had to skip before matching anything.
+  score -= Math.min(positions[0] * mcPalTuning.leadPenalty, mcPalTuning.leadPenaltyMax);
+
+  for (let k = 0; k < positions.length; k++) {
+    const i = positions[k];
+    let consecutive = false;
+
+    if (k > 0) {
+      const gap = i - positions[k - 1] - 1;
+      if (gap === 0) {
+        // (b) BONUS: consecutive run of matched characters.
+        score += mcPalTuning.consecBonus;
+        consecutive = true;
+      } else {
+        // (c) PENALTY: long unmatched gap, capped.
+        score -= Math.min(gap * mcPalTuning.gapPenalty, mcPalTuning.gapPenaltyMax);
+      }
+    }
+
+    if (i === 0) {
+      // (d) BONUS: match at the very start of the target.
+      score += mcPalTuning.startBonus;
+    } else if (mcPalIsBoundaryAt(target, i)) {
+      // (e) BONUS: word boundary (after space/-/_/./ or camelCase hump).
+      score += mcPalTuning.boundaryBonus;
+    } else if (!consecutive) {
+      // Interior character that isn't continuing a run: this is the
+      // "cow matches crypto wire" case, and it is what makes a tighter
+      // query out-rank a longer sloppier one.
+      score -= mcPalTuning.strayPenalty;
+    }
+
+    // (f) BONUS: exact-case agreement. Small, so it only breaks ties.
+    if (target.charAt(i) === query.charAt(k)) score += mcPalTuning.caseBonus;
+  }
+
+  // (g) BONUS: shorter target. Hyperbolic rather than linear so the
+  // difference between 8 and 20 characters matters and the difference
+  // between 200 and 400 does not.
+  score += Math.round(mcPalTuning.lenWeight / (target.length + mcPalTuning.lenBase));
+
+  return score;
+}
+
+/**
+ * mcPalScore(query, target) -> { score, positions } | null
+ *
+ * Case-insensitive subsequence match. Returns null when `query` is not a
+ * subsequence of `target`. `positions` are UTF-16 code-unit indices into
+ * the ORIGINAL target, strictly ascending, so mcPalHighlight can bold them.
+ *
+ * GREEDY vs OPTIMAL — the trade-off, stated plainly:
+ *   The optimal alignment needs Needleman–Wunsch-style DP, O(|q|·|t|) time
+ *   *and* O(|q|·|t|) memory, because a locally worse match can enable a
+ *   better run later. We don't do that. We take every occurrence of the
+ *   first query character as an anchor (capped at maxAnchors), run a
+ *   plain forward-greedy match from each, and keep the best-scoring one.
+ *   That fixes the failure mode people actually notice — "war" preferring
+ *   the middle of "software" over the start of "warranty" — at a cost of
+ *   O(anchors · |t|) with a tiny constant and zero allocation per anchor.
+ *   It can still miss an exotic optimum (a better run reachable only by
+ *   delaying a *middle* character). At palette scale — a few hundred
+ *   items, labels under ~60 characters, re-run on every keystroke — that
+ *   miss is invisible and the DP's allocation churn is not. If this ever
+ *   feeds a large corpus instead of a palette, revisit.
+ */
+function mcPalScore(query, target) {
+  if (query === null || query === undefined) return null;
+  if (target === null || target === undefined) return null;
+
+  const q = String(query);
+  const rawTarget = String(target);
+  // The empty query is a subsequence of everything — say so honestly
+  // rather than returning null, which callers would read as "no match".
+  if (q.length === 0) return { score: 0, positions: [] };
+
+  // Long targets are truncated for the *search*, not for the result:
+  // any position we return is still valid in the original string.
+  const t = rawTarget.length > mcPalTuning.maxTargetLen
+    ? rawTarget.slice(0, mcPalTuning.maxTargetLen)
+    : rawTarget;
+  if (t.length < q.length) return null;
+
+  // toLowerCase is locale-independent here (no toLocaleLowerCase) so a
+  // Turkish locale can't change which items match. Deliberate.
+  const lq = q.toLowerCase();
+  const lt = t.toLowerCase();
+  const first = lq.charAt(0);
+
+  let best = null;
+  let anchors = 0;
+
+  for (let start = 0; start <= t.length - q.length; start++) {
+    if (lt.charAt(start) !== first) continue;
+    if (++anchors > mcPalTuning.maxAnchors) break;
+
+    // Forward-greedy from this anchor: take the nearest occurrence of
+    // each subsequent query character.
+    const positions = [start];
+    let cursor = start + 1;
+    let ok = true;
+    for (let k = 1; k < lq.length; k++) {
+      const want = lq.charAt(k);
+      let found = -1;
+      for (let i = cursor; i < lt.length; i++) {
+        if (lt.charAt(i) === want) { found = i; break; }
+      }
+      if (found < 0) { ok = false; break; }
+      positions.push(found);
+      cursor = found + 1;
+    }
+    if (!ok) {
+      // If greedy failed from the earliest anchor it will fail from every
+      // later one too (later anchors can only see a suffix of what this
+      // one saw), so there is nothing left to try.
+      break;
+    }
+
+    const score = mcPalScoreRun(q, t, positions);
+    if (best === null || score > best.score) best = { score: score, positions: positions };
+  }
+
+  return best;
+}
+
+/**
+ * mcPalNormalizeKeys — accept ["title"] or [{name,weight}] or nothing.
+ * With nothing, fall back to every string-valued own property of the
+ * first usable item, so the function is useful before opts are wired up.
+ */
+function mcPalNormalizeKeys(keys, items) {
+  const out = [];
+  if (Array.isArray(keys)) {
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (typeof k === "string") {
+        out.push({ name: k, weight: 1 });
+      } else if (k && typeof k.name === "string") {
+        const w = (typeof k.weight === "number" && isFinite(k.weight) && k.weight > 0) ? k.weight : 1;
+        out.push({ name: k.name, weight: w });
+      }
+    }
+  }
+  if (out.length) return out;
+
+  if (Array.isArray(items)) {
+    for (let i = 0; i < items.length; i++) {
+      const probe = items[i];
+      if (!probe || typeof probe !== "object") continue;
+      for (const name in probe) {
+        if (!Object.prototype.hasOwnProperty.call(probe, name)) continue;
+        const v = probe[name];
+        if (typeof v === "string" || typeof v === "number") out.push({ name: name, weight: 1 });
+      }
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * mcPalFilter(query, items, opts) -> [{ item, score, positions, field }]
+ *
+ * opts.keys : ["title"] or [{name:"title",weight:2}, {name:"hint",weight:1}]
+ * opts.limit: optional cap on results
+ *
+ * An empty (or whitespace-only) query returns every item in its original
+ * order — a palette should show its full menu before you type.
+ *
+ * Weighting note: raw scores can legitimately be negative (a genuinely
+ * bad-but-valid match). Multiplying a negative by 2 would make a weighted
+ * field *worse*, so we multiply positives and divide negatives. Both
+ * branches are monotonically increasing in weight, which is the only
+ * property "weight" needs to mean what people expect.
+ */
+function mcPalFilter(query, items, opts) {
+  if (!Array.isArray(items)) return [];
+  const o = opts || {};
+  const keys = mcPalNormalizeKeys(o.keys, items);
+  const q = (query === null || query === undefined) ? "" : String(query);
+  const limit = (typeof o.limit === "number" && o.limit > 0) ? Math.floor(o.limit) : Infinity;
+
+  if (q.trim() === "") {
+    const all = [];
+    const field = keys.length ? keys[0].name : null;
+    for (let i = 0; i < items.length && i < limit; i++) {
+      all.push({ item: items[i], score: 0, positions: [], field: field });
+    }
+    return all;
+  }
+
+  const scored = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item === null || item === undefined) continue;
+
+    let bestScore = -Infinity;
+    let bestPositions = null;
+    let bestField = null;
+
+    for (let k = 0; k < keys.length; k++) {
+      const key = keys[k];
+      const raw = (typeof item === "object") ? item[key.name] : item;
+      if (typeof raw !== "string" && typeof raw !== "number") continue;
+
+      const hit = mcPalScore(q, String(raw));
+      if (!hit) continue;
+
+      const weighted = hit.score >= 0 ? hit.score * key.weight : hit.score / key.weight;
+      if (weighted > bestScore) {
+        bestScore = weighted;
+        bestPositions = hit.positions;
+        bestField = key.name;
+      }
+    }
+
+    if (bestPositions) {
+      scored.push({ item: item, score: bestScore, positions: bestPositions, field: bestField, _i: i });
+    }
+  }
+
+  // Explicit index tiebreak rather than trusting sort stability — it is
+  // one subtraction and it makes the ordering contract testable.
+  scored.sort(function (a, b) {
+    return (b.score - a.score) || (a._i - b._i);
+  });
+
+  const out = [];
+  for (let i = 0; i < scored.length && i < limit; i++) {
+    out.push({
+      item: scored[i].item,
+      score: scored[i].score,
+      positions: scored[i].positions,
+      field: scored[i].field
+    });
+  }
+  return out;
+}
+
+/**
+ * mcPalHighlight(text, positions) -> HTML string
+ *
+ * SECURITY: this is the one function in the file whose output is meant to
+ * be handed to innerHTML, so it is the one place an injection could slip
+ * in. The rule it enforces is: escape FIRST, per character, then insert
+ * our own <mark> tags between already-escaped characters. We never build
+ * a raw string and escape it afterwards, and we never let caller data
+ * reach the output un-escaped — `positions` are only ever used as
+ * integer indices, never interpolated. Anything a caller puts in `text`
+ * comes out as text.
+ */
+function mcPalHighlight(text, positions) {
+  if (text === null || text === undefined) return "";
+  const s = String(text);
+  if (!Array.isArray(positions) || positions.length === 0) return mcPalEscape(s);
+
+  const marked = new Uint8Array(s.length);
+  for (let i = 0; i < positions.length; i++) {
+    const p = positions[i];
+    if (typeof p !== "number" || !isFinite(p)) continue;
+    const idx = Math.floor(p);
+    if (idx < 0 || idx >= s.length) continue;
+    marked[idx] = 1;
+  }
+
+  // Never let a <mark> boundary land between the halves of a surrogate
+  // pair — that would split an astral character across two elements.
+  for (let i = 0; i < s.length - 1; i++) {
+    const c = s.charCodeAt(i);
+    if (c >= 0xd800 && c <= 0xdbff) {
+      const n = s.charCodeAt(i + 1);
+      if (n >= 0xdc00 && n <= 0xdfff && (marked[i] || marked[i + 1])) {
+        marked[i] = 1;
+        marked[i + 1] = 1;
+      }
+    }
+  }
+
+  let out = "";
+  let open = false;
+  for (let i = 0; i < s.length; i++) {
+    if (marked[i] && !open) { out += "<mark>"; open = true; }
+    else if (!marked[i] && open) { out += "</" + "mark>"; open = false; }
+    const ch = s.charAt(i);
+    const esc = mcPalEscapeMap[ch];
+    out += (esc === undefined) ? ch : esc;
+  }
+  if (open) out += "</" + "mark>";
+  return out;
+}
+
+
+/* =====================================================================
+ * Chat-history search: tokenizer, inverted index, BM25
+ * ===================================================================== */
+
+/**
+ * mcPalTokenize(text) -> [{ t, i, s, e }]
+ *   t = lowercased term
+ *   i = token ordinal within the document (counts EVERY token, including
+ *       stopwords — phrase adjacency depends on that being unbroken)
+ *   s,e = character offsets into the ORIGINAL text (for snippets)
+ *
+ * Unicode-aware via \p{L}\p{N}: "café", "münchen" and "日本語" all
+ * tokenize sensibly. Lowercasing can change a string's length for some
+ * scripts, which is exactly why offsets come from the pre-lowercase match.
+ */
+function mcPalTokenize(text) {
+  const out = [];
+  if (text === null || text === undefined) return out;
+  const s = String(text);
+  if (!s) return out;
+
+  // Fresh regex per call: a shared /g/ regex carries lastIndex between
+  // calls and that is a nasty, intermittent bug to chase.
+  const re = new RegExp(mcPalTokenPattern, "gu");
+  let m;
+  let ordinal = 0;
+  while ((m = re.exec(s)) !== null) {
+    out.push({ t: m[0].toLowerCase(), i: ordinal++, s: m.index, e: m.index + m[0].length });
+    if (re.lastIndex === m.index) re.lastIndex++; // paranoia against zero-width matches
+  }
+  return out;
+}
+
+/**
+ * mcPalIndex(messages) -> inverted index
+ *
+ * messages: [{ id, role, content, ts }]
+ * Shape:
+ *   { N, avgdl, totalLen, docs: [{id, role, ts, content, len, ntok}],
+ *     postings: Map<term, Map<docIndex, {tf, occ[]}>> }
+ *
+ * Map-of-Maps rather than array postings: phrase matching needs a
+ * (term, doc) lookup, and a linear scan of a posting list there is what
+ * turns a 5000-message search from "instant" into "noticeable".
+ * Map also sidesteps the __proto__ / constructor key hazards of a plain
+ * object used as a dictionary of user-supplied strings.
+ *
+ * `occ` is one flat array of (ordinal, startOffset, endOffset) triples in
+ * ascending ordinal order: occ[3k] is the k-th occurrence's token ordinal
+ * within the document, occ[3k+1] and occ[3k+2] its character offsets into
+ * the original content. It holds exactly what three parallel pos/off/end
+ * arrays used to hold, in one object instead of three, for one blunt
+ * reason: a 5000-message index carries ~120k postings entries, so three
+ * arrays apiece meant ~360k array objects — 79 MB retained and enough GC
+ * churn to more than double the build time. One array apiece measured
+ * 36 MB and roughly 2.4x faster with identical numbers in it.
+ * mcPalHasPos indexes this array by triple, not by slot.
+ *
+ * The tokenizer is inlined into this loop rather than calling
+ * mcPalTokenize, which is the other half of the same problem: 5000
+ * messages materialised ~150k throwaway {t,i,s,e} objects, ~80ms of pure
+ * allocation for data consumed immediately and never referenced again.
+ * mcPalTokenize stays the readable entry point for the query path, where
+ * N is a handful of terms and clarity is worth more than allocations.
+ */
+function mcPalIndex(messages) {
+  const idx = {
+    N: 0,
+    avgdl: 0,
+    totalLen: 0,
+    docs: [],
+    postings: new Map()
+  };
+  if (!Array.isArray(messages)) return idx;
+
+  // One regex for the whole build. It never escapes this call, so the
+  // cross-call lastIndex hazard mcPalTokenize guards against cannot arise;
+  // we still reset per document because we drive it document by document.
+  const re = new RegExp(mcPalTokenPattern, "gu");
+
+  for (let m = 0; m < messages.length; m++) {
+    const msg = messages[m];
+    if (msg === null || msg === undefined) continue;
+
+    const content = (msg.content === null || msg.content === undefined) ? "" : String(msg.content);
+    const d = idx.docs.length;
+
+    // One pass: scan, drop stopwords, post straight into the index. No
+    // intermediate token list and no per-document staging Map — the
+    // (term, doc) entry is the only thing that outlives the iteration.
+    let indexed = 0;
+    let ordinal = 0;
+    let tok;
+    re.lastIndex = 0;
+    while ((tok = re.exec(content)) !== null) {
+      const raw = tok[0];
+      const start = tok.index;
+      if (re.lastIndex === start) re.lastIndex++; // paranoia against zero-width matches
+      const term = raw.toLowerCase();
+      const at = ordinal++;                   // counts EVERY token, stopwords included,
+      if (mcPalStopwords.has(term)) continue; // so phrase adjacency stays unbroken
+      indexed++;
+
+      let pl = idx.postings.get(term);
+      if (pl === undefined) { pl = new Map(); idx.postings.set(term, pl); }
+      let e = pl.get(d);
+      if (e === undefined) { e = { tf: 0, occ: [] }; pl.set(d, e); }
+      e.tf++;
+      e.occ.push(at, start, start + raw.length);
+    }
+
+    idx.docs.push({
+      id: (msg.id === null || msg.id === undefined) ? d : msg.id,
+      role: (msg.role === null || msg.role === undefined) ? "" : String(msg.role),
+      ts: msg.ts,
+      content: content,
+      len: indexed,
+      ntok: ordinal
+    });
+    idx.totalLen += indexed;
+  }
+
+  idx.N = idx.docs.length;
+  idx.avgdl = idx.N ? (idx.totalLen / idx.N) : 0;
+  return idx;
+}
+
+/**
+ * mcPalParseQuery(query) -> { terms, phrases, excluded, excludedPhrases }
+ *
+ * Hand-rolled because the grammar is three rules wide:
+ *   "exact phrase"   all terms adjacent, in order (AND constraint)
+ *   -excluded        drop any doc containing it
+ *   bare terms       OR, scored by BM25
+ * A `-"quoted phrase"` excludes on the phrase. Unterminated quotes
+ * degrade to bare terms rather than swallowing the rest of the line.
+ *
+ * Phrase terms keep their slot index from BEFORE stopword removal, so
+ * `"state of the art"` still matches: we require the surviving terms to
+ * sit at exactly the relative offsets they had in the query, and the
+ * document's token ordinals also count stopwords. The two line up.
+ */
+function mcPalParseQuery(query) {
+  const out = { terms: [], phrases: [], excluded: [], excludedPhrases: [] };
+  if (query === null || query === undefined) return out;
+  const s = String(query);
+  if (!s.trim()) return out;
+
+  const re = /(-?)"([^"]*)"|(-?)([^\s"]+)/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    const quoted = m[2] !== undefined;
+    const negated = (quoted ? m[1] : m[3]) === "-";
+    const body = quoted ? m[2] : m[4];
+    if (!body) continue;
+
+    const tokens = mcPalTokenize(body);
+    if (!tokens.length) continue;
+
+    if (quoted) {
+      const phraseTerms = [];
+      for (let i = 0; i < tokens.length; i++) {
+        if (mcPalStopwords.has(tokens[i].t)) continue;
+        phraseTerms.push({ t: tokens[i].t, i: tokens[i].i });
+      }
+      if (!phraseTerms.length) continue;
+      const phrase = { raw: body, terms: phraseTerms };
+      if (negated) out.excludedPhrases.push(phrase);
+      else if (phraseTerms.length === 1) {
+        // A one-word "phrase" is just a term; don't pay for adjacency logic.
+        out.terms.push(phraseTerms[0].t);
+      } else {
+        out.phrases.push(phrase);
+      }
+    } else {
+      for (let i = 0; i < tokens.length; i++) {
+        const t = tokens[i].t;
+        if (mcPalStopwords.has(t)) continue; // stopwords aren't in the index; asking for them is a no-op
+        if (negated) out.excluded.push(t);
+        else out.terms.push(t);
+      }
+    }
+  }
+
+  // De-dupe: repeating a term shouldn't double its weight.
+  out.terms = Array.from(new Set(out.terms));
+  out.excluded = Array.from(new Set(out.excluded));
+  return out;
+}
+
+/**
+ * Binary search for a token ordinal in an `occ` triple array (see
+ * mcPalIndex). Returns the TRIPLE index k — so the offsets that go with
+ * the hit are occ[k*3+1] and occ[k*3+2] — or -1. Ordinals live at every
+ * third slot and ascend, so this is the same search as over a plain
+ * position array, just striding.
+ */
+function mcPalHasPos(occ, want) {
+  let lo = 0;
+  let hi = (occ.length / 3) - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const v = occ[mid * 3];
+    if (v === want) return mid;
+    if (v < want) lo = mid + 1; else hi = mid - 1;
+  }
+  return -1;
+}
+
+/**
+ * mcPalPhraseHits(index, phrase) -> Map<docIndex, [{s,e}]>
+ *
+ * Drives from the rarest term's posting list so we touch as few documents
+ * as possible, then verifies that every other term sits at exactly the
+ * ordinal offset the query demands.
+ */
+function mcPalPhraseHits(index, phrase) {
+  const res = new Map();
+  const terms = phrase.terms;
+  if (!terms.length) return res;
+
+  let driver = 0;
+  let smallest = Infinity;
+  for (let i = 0; i < terms.length; i++) {
+    const pl = index.postings.get(terms[i].t);
+    if (!pl) return res; // a missing term can never form the phrase
+    if (pl.size < smallest) { smallest = pl.size; driver = i; }
+  }
+
+  const driverPl = index.postings.get(terms[driver].t);
+  const lists = [];
+  for (let i = 0; i < terms.length; i++) lists.push(index.postings.get(terms[i].t));
+
+  driverPl.forEach(function (driverEntry, d) {
+    const entries = [];
+    for (let k = 0; k < terms.length; k++) {
+      const e = (k === driver) ? driverEntry : lists[k].get(d);
+      if (!e) return; // this doc lacks one of the terms entirely
+      entries.push(e);
+    }
+
+    const found = [];
+    for (let pi = 0; pi < driverEntry.occ.length; pi += 3) {
+      const base = driverEntry.occ[pi] - terms[driver].i; // implied ordinal of phrase slot 0
+      let ok = true;
+      let startOff = -1;
+      let endOff = -1;
+      for (let k = 0; k < terms.length; k++) {
+        const at = mcPalHasPos(entries[k].occ, base + terms[k].i);
+        if (at < 0) { ok = false; break; }
+        if (k === 0) startOff = entries[k].occ[at * 3 + 1];
+        if (k === terms.length - 1) endOff = entries[k].occ[at * 3 + 2];
+      }
+      if (ok && startOff >= 0) found.push({ s: startOff, e: endOff });
+    }
+    if (found.length) res.set(d, found);
+  });
+
+  return res;
+}
+
+/**
+ * mcPalIdf(N, df) — Robertson/Sparck-Jones IDF with +0.5 smoothing.
+ * Goes negative once df > (N-1)/2; we clamp to a small positive floor so
+ * an over-common term contributes ~nothing instead of actively subtracting
+ * (which would rank a doc that *lacks* your word above one that has it).
+ */
+function mcPalIdf(N, df) {
+  const idf = Math.log((N - df + 0.5) / (df + 0.5));
+  return (isFinite(idf) && idf > mcPalBM25.idfFloor) ? idf : mcPalBM25.idfFloor;
+}
+
+/** BM25 term-frequency saturation with document-length normalization. */
+function mcPalTfNorm(tf, dl, avgdl) {
+  const k1 = mcPalBM25.k1;
+  const b = mcPalBM25.b;
+  return (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (dl / avgdl)));
+}
+
+/**
+ * mcPalSnippet(text, ranges, width) -> escaped HTML with <mark>
+ *
+ * Picks the densest cluster of hit ranges that fits in `width`, centres a
+ * window on it, shrinks the edges inward to whitespace so we don't cut a
+ * word in half, and adds a real ellipsis where truncated.
+ *
+ * Edges only ever move INWARD, so the visible window is <= width and the
+ * whole snippet is <= width + 2 (the two ellipsis characters). Escaping
+ * and marking both go through mcPalHighlight — same single safe path.
+ */
+function mcPalSnippet(text, ranges, width) {
+  if (text === null || text === undefined) return "";
+  const s = String(text);
+  const w = (typeof width === "number" && width > 0) ? Math.floor(width) : mcPalTuning.snippetWidth;
+
+  if (!Array.isArray(ranges) || ranges.length === 0) {
+    if (s.length <= w) return mcPalEscape(s);
+    return mcPalEscape(s.slice(0, w)) + "…";
+  }
+
+  const rs = ranges.slice().sort(function (a, b) { return a.s - b.s; });
+
+  // Sliding window over hit ranges: maximise hits inside `w` characters,
+  // break ties toward the tighter cluster.
+  let bestI = 0;
+  let bestJ = 0;
+  let bestCount = 0;
+  let bestSpan = Infinity;
+  let j = 0;
+  for (let i = 0; i < rs.length; i++) {
+    if (j < i) j = i;
+    while (j + 1 < rs.length && rs[j + 1].e - rs[i].s <= w) j++;
+    const count = j - i + 1;
+    const span = rs[j].e - rs[i].s;
+    if (count > bestCount || (count === bestCount && span < bestSpan)) {
+      bestCount = count; bestSpan = span; bestI = i; bestJ = j;
+    }
+  }
+
+  const centre = (rs[bestI].s + rs[bestJ].e) / 2;
+  let start = Math.round(centre - w / 2);
+  if (start + w > s.length) start = s.length - w;
+  if (start < 0) start = 0;
+  let end = Math.min(s.length, start + w);
+
+  // Shrink inward to whitespace, but never past the hit we're showing.
+  if (start > 0) {
+    const limit = Math.min(start + mcPalTuning.snippetSnap, rs[bestI].s);
+    let k = start;
+    while (k < limit && !/\s/.test(s.charAt(k - 1))) k++;
+    if (k < limit || (k === limit && k > start && /\s/.test(s.charAt(k - 1)))) start = k;
+  }
+  if (end < s.length) {
+    const limit = Math.max(end - mcPalTuning.snippetSnap, rs[bestJ].e);
+    let k = end;
+    while (k > limit && !/\s/.test(s.charAt(k))) k--;
+    if (k > limit) end = k;
+  }
+  if (end <= start) end = Math.min(s.length, start + w); // degenerate guard
+
+  const win = s.slice(start, end);
+  const positions = [];
+  for (let i = 0; i < rs.length; i++) {
+    const a = Math.max(rs[i].s, start);
+    const bnd = Math.min(rs[i].e, end);
+    for (let k = a; k < bnd; k++) positions.push(k - start);
+  }
+
+  return (start > 0 ? "…" : "") + mcPalHighlight(win, positions) + (end < s.length ? "…" : "");
+}
+
+/**
+ * mcPalSearch(index, query, opts) -> [{ id, score, snippet, hits }]
+ *
+ * opts.limit — cap on returned rows.
+ *
+ * Semantics: phrases are AND constraints (they define the candidate set),
+ * bare terms are OR and contribute BM25, `-term` removes documents
+ * outright. A query that parses to nothing returns [] rather than the
+ * whole corpus — "search for nothing" should not mean "match everything".
+ */
+function mcPalSearch(index, query, opts) {
+  const out = [];
+  if (!index || !index.postings || typeof index.postings.get !== "function") return out;
+  if (!index.N || !Array.isArray(index.docs)) return out;
+
+  const parsed = mcPalParseQuery(query);
+  if (!parsed.terms.length && !parsed.phrases.length) return out;
+
+  const o = opts || {};
+  const limit = (typeof o.limit === "number" && o.limit > 0) ? Math.floor(o.limit) : Infinity;
+  const N = index.N;
+  const avgdl = index.avgdl > 0 ? index.avgdl : 1;
+
+  // --- 1. Phrases are AND constraints, so resolve them first. -----------
+  let allowed = null; // null == unconstrained
+  const phraseHits = [];
+  for (let p = 0; p < parsed.phrases.length; p++) {
+    const hits = mcPalPhraseHits(index, parsed.phrases[p]);
+    phraseHits.push(hits);
+    const next = new Set();
+    const prev = allowed;
+    hits.forEach(function (v, d) {
+      if (prev === null || prev.has(d)) next.add(d);
+    });
+    allowed = next;
+    if (allowed.size === 0) return out; // no doc satisfies every phrase
+  }
+
+  const scores = new Map();
+  const hitsByDoc = new Map();
+
+  function mcPalAddScore(d, delta) {
+    scores.set(d, (scores.get(d) || 0) + delta);
+  }
+  function mcPalAddHits(d, term, count, offsets) {
+    let list = hitsByDoc.get(d);
+    if (!list) { list = []; hitsByDoc.set(d, list); }
+    list.push({ term: term, count: count, offsets: offsets });
+  }
+  function mcPalOffsetsOf(entry) {
+    const occ = entry.occ;
+    const offs = [];
+    for (let i = 0; i < occ.length; i += 3) offs.push({ s: occ[i + 1], e: occ[i + 2] });
+    return offs;
+  }
+
+  // --- 2. Bare terms: OR, plain BM25. ----------------------------------
+  for (let i = 0; i < parsed.terms.length; i++) {
+    const term = parsed.terms[i];
+    const pl = index.postings.get(term);
+    if (!pl) continue;
+    const idf = mcPalIdf(N, pl.size);
+    pl.forEach(function (entry, d) {
+      if (allowed !== null && !allowed.has(d)) return;
+      mcPalAddScore(d, idf * mcPalTfNorm(entry.tf, index.docs[d].len, avgdl));
+      mcPalAddHits(d, term, entry.tf, mcPalOffsetsOf(entry));
+    });
+  }
+
+  // --- 3. Phrase contributions, only for docs that satisfy the phrase. --
+  for (let p = 0; p < parsed.phrases.length; p++) {
+    const phrase = parsed.phrases[p];
+    const hits = phraseHits[p];
+    for (let ti = 0; ti < phrase.terms.length; ti++) {
+      const pl = index.postings.get(phrase.terms[ti].t);
+      if (!pl) continue;
+      const idf = mcPalIdf(N, pl.size);
+      hits.forEach(function (ranges, d) {
+        if (!allowed.has(d)) return;
+        const entry = pl.get(d);
+        if (!entry) return;
+        mcPalAddScore(d, idf * mcPalTfNorm(entry.tf, index.docs[d].len, avgdl) * mcPalBM25.phraseWeight);
+      });
+    }
+    hits.forEach(function (ranges, d) {
+      if (!allowed.has(d)) return;
+      // Diminishing returns on repeat occurrences, same spirit as BM25's k1.
+      mcPalAddScore(d, mcPalBM25.phraseBonus * Math.log(1 + ranges.length));
+      mcPalAddHits(d, phrase.raw, ranges.length, ranges);
+    });
+  }
+
+  // --- 4. Exclusions. --------------------------------------------------
+  const banned = new Set();
+  for (let i = 0; i < parsed.excluded.length; i++) {
+    const pl = index.postings.get(parsed.excluded[i]);
+    if (!pl) continue;
+    pl.forEach(function (entry, d) { banned.add(d); });
+  }
+  for (let i = 0; i < parsed.excludedPhrases.length; i++) {
+    mcPalPhraseHits(index, parsed.excludedPhrases[i]).forEach(function (v, d) { banned.add(d); });
+  }
+
+  // --- 5. Materialise, rank, snippet. ----------------------------------
+  const rows = [];
+  scores.forEach(function (score, d) {
+    if (banned.has(d)) return;
+    const doc = index.docs[d];
+    const hits = hitsByDoc.get(d) || [];
+    let ranges = [];
+    for (let i = 0; i < hits.length; i++) ranges = ranges.concat(hits[i].offsets);
+    rows.push({ d: d, id: doc.id, score: score, hits: hits, ranges: ranges });
+  });
+
+  rows.sort(function (a, b) { return (b.score - a.score) || (a.d - b.d); });
+
+  for (let i = 0; i < rows.length && i < limit; i++) {
+    const r = rows[i];
+    out.push({
+      id: r.id,
+      score: r.score,
+      snippet: mcPalSnippet(index.docs[r.d].content, r.ranges, mcPalTuning.snippetWidth),
+      hits: r.hits
+    });
+  }
+  return out;
+}
+
+/** Coerce a ts (number | Date | ISO string) to a comparable number. */
+function mcPalTsOf(item) {
+  if (!item || typeof item !== "object") return NaN;
+  const ts = item.ts;
+  if (typeof ts === "number") return isFinite(ts) ? ts : NaN;
+  if (ts instanceof Date) return ts.getTime();
+  if (typeof ts === "string") {
+    const parsed = Date.parse(ts);
+    return isNaN(parsed) ? NaN : parsed;
+  }
+  return NaN;
+}
+
+/**
+ * mcPalRecent(items, n) -> most-recent-first slice.
+ *
+ * Stable for equal timestamps (explicit index tiebreak, not a trusted
+ * sort). Items with a missing or unparseable ts sink to the bottom rather
+ * than poisoning comparisons with NaN — NaN in a comparator silently
+ * corrupts the whole ordering, which is a miserable bug to find.
+ */
+function mcPalRecent(items, n) {
+  if (!Array.isArray(items)) return [];
+  const count = (typeof n === "number" && isFinite(n)) ? Math.floor(n) : items.length;
+  if (count <= 0) return [];
+
+  const decorated = [];
+  for (let i = 0; i < items.length; i++) {
+    decorated.push({ item: items[i], i: i, ts: mcPalTsOf(items[i]) });
+  }
+  decorated.sort(function (a, b) {
+    const av = a.ts;
+    const bv = b.ts;
+    const aBad = isNaN(av);
+    const bBad = isNaN(bv);
+    if (aBad !== bBad) return aBad ? 1 : -1;
+    if (!aBad) {
+      if (av > bv) return -1;
+      if (av < bv) return 1;
+    }
+    return a.i - b.i;
+  });
+
+  const out = [];
+  for (let i = 0; i < decorated.length && i < count; i++) out.push(decorated[i].item);
+  return out;
+}
+
+/**
+ * mcPalVisibleLength(html) -> number of characters a reader actually sees.
+ * Used by the self-test to size-check snippets: markup and entities are
+ * bytes on the wire, not characters on the screen.
+ */
+function mcPalVisibleLength(html) {
+  if (html === null || html === undefined) return 0;
+  let s = String(html).replace(/<\/?mark>/g, "");
+  s = s.replace(/&(?:amp|lt|gt|quot|#39|#96);/g, "x");
+  return s.length;
+}
+
+
+/* =====================================================================
+ * Self-test. Node only — `typeof module` is undefined in the browser, so
+ * this block is dead code once pasted into the host page.
+ * ===================================================================== */
+
+/* ---------- core module: timeline.js ---------- */
+// mcTl* — text diffing + event-timeline construction for the news app.
+// Plain script scope: paste straight into the single-file host. Every top-level
+// name is prefixed mcTl so it cannot collide with the ~320 existing mc* globals.
+// ES2020, zero dependencies, no module system.
+
+// ---------------------------------------------------------------------------
+// Shared constants
+// ---------------------------------------------------------------------------
+
+const mcTlUnitMs = { second: 1000, minute: 60000, hour: 3600000, day: 86400000 };
+
+// Step ladders per unit. We only ever pick a "round" multiple so the axis reads
+// like something a human would draw (5/10/15/30 min, 1/2/3/6 h, 1/2/7 d).
+const mcTlUnitSteps = {
+  second: [1, 5, 10, 15, 30],
+  minute: [1, 2, 5, 10, 15, 30],
+  hour: [1, 2, 3, 6, 12],
+  day: [1, 2, 7, 14, 30]
+};
+
+// Myers is O(ND); D is the edit distance. Two genuinely unrelated articles have
+// D ~ N+M, and the edit-script trace we keep is O(D^2) ints. Cap it: past this
+// point a token-level diff is unreadable anyway, so we degrade to a wholesale
+// "replace" instead of burning hundreds of MB proving the obvious.
+const mcTlDiffMaxD = 1600;
+
+// ---------------------------------------------------------------------------
+// Part 1 — diff
+// ---------------------------------------------------------------------------
+
+// Wire copy is not trusted. Agency feeds carry raw ampersands, angle brackets in
+// quoted markup, smart-quote mojibake, and occasionally somebody's HTML snippet.
+// If we interpolate that into innerHTML we get script injection at best and a
+// silently broken layout at worst — so everything is escaped BEFORE we add our
+// own <ins>/<del> wrappers, never after.
+function mcTlEscapeHtml(s) {
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/[&<>"']/g, function (ch) {
+    if (ch === "&") return "&amp;";
+    if (ch === "<") return "&lt;";
+    if (ch === ">") return "&gt;";
+    if (ch === '"') return "&quot;";
+    return "&#39;";
+  });
+}
+
+// Lossless word tokenizer: each token is a run of non-whitespace plus the
+// whitespace that follows it, and any leading whitespace is glued to the first
+// token. tokens.join("") === input, which is what makes the diff reconstructible
+// (same+del must rebuild `a` byte for byte). Punctuation stays attached to the
+// word on purpose: "rates." and "rates" are a real editorial change and the
+// reader must see it.
+function mcTlTokenizeWords(s) {
+  if (typeof s !== "string" || s.length === 0) return [];
+  const out = [];
+  const re = /\S+\s*/g;
+  let m;
+  while ((m = re.exec(s)) !== null) out.push(m[0]);
+  const lead = /^\s+/.exec(s);
+  if (lead) {
+    if (out.length) out[0] = lead[0] + out[0];
+    else out.push(lead[0]);
+  }
+  return out;
+}
+
+// Array.from, not split(""), so an emoji or an accented pair is one token rather
+// than two broken halves rendered as garbage inside a <del>.
+function mcTlTokenizeChars(s) {
+  if (typeof s !== "string" || s.length === 0) return [];
+  return Array.from(s);
+}
+
+// Myers' O(ND) greedy diff (the 1986 paper's algorithm 1) with an edit-script
+// trace and backtrack.
+//
+// Why O(ND) and not the textbook LCS matrix: the matrix is O(N*M) time AND
+// space. Two 4000-token articles is 16M cells — ~64MB and hundreds of ms, for a
+// pair of documents that typically differ in a couple of dozen tokens. Myers
+// costs O((N+M)*D), so the *actual* edit distance sets the price: a corrections
+// update to a wire story diffs in a millisecond, and only genuinely unrelated
+// texts approach the matrix's cost (where the budget above cuts us off).
+function mcTlMyers(A, B) {
+  const N = A.length;
+  const M = B.length;
+  if (N === 0 && M === 0) return [];
+  if (N === 0) return B.map(function (t) { return { type: "add", text: t }; });
+  if (M === 0) return A.map(function (t) { return { type: "del", text: t }; });
+
+  const max = N + M;
+  const limit = Math.min(max, mcTlDiffMaxD);
+  const off = max + 1; // +1 so the trace window below never slices at a negative index
+  const V = new Int32Array(2 * max + 4);
+  const trace = [];
+  V[off + 1] = 0;
+  let found = -1;
+
+  for (let d = 0; d <= limit; d++) {
+    // Snapshot the frontier as it stood *before* round d, keeping only the
+    // k-window the backtrack can read. Full copies would be O(D*(N+M)).
+    trace.push(V.slice(off - d - 1, off + d + 2));
+    for (let k = -d; k <= d; k += 2) {
+      let x;
+      // Short-circuit order matters: at k === d the k+1 slot is unwritten, at
+      // k === -d the k-1 slot is. Neither is read.
+      if (k === -d || (k !== d && V[off + k - 1] < V[off + k + 1])) x = V[off + k + 1];
+      else x = V[off + k - 1] + 1;
+      let y = x - k;
+      while (x < N && y < M && A[x] === B[y]) { x++; y++; } // follow the snake
+      V[off + k] = x;
+      if (x >= N && y >= M) { found = d; break; }
+    }
+    if (found >= 0) break;
+  }
+
+  if (found < 0) {
+    // Budget blown: the texts share almost nothing. Report it as a replace.
+    const out = [];
+    for (let i = 0; i < N; i++) out.push({ type: "del", text: A[i] });
+    for (let j = 0; j < M; j++) out.push({ type: "add", text: B[j] });
+    return out;
+  }
+
+  const rev = [];
+  let x = N;
+  let y = M;
+  for (let d = trace.length - 1; d >= 0; d--) {
+    const v = trace[d];
+    const base = d + 1; // index of k in the stored window is k + base
+    const k = x - y;
+    let prevK;
+    if (k === -d || (k !== d && v[k - 1 + base] < v[k + 1 + base])) prevK = k + 1;
+    else prevK = k - 1;
+    const prevX = v[prevK + base];
+    const prevY = prevX - prevK;
+    while (x > prevX && y > prevY) { rev.push({ type: "same", text: A[x - 1] }); x--; y--; }
+    if (d > 0) {
+      if (x === prevX) rev.push({ type: "add", text: B[prevY] });
+      else rev.push({ type: "del", text: A[prevX] });
+    }
+    x = prevX;
+    y = prevY;
+  }
+  rev.reverse();
+  return rev;
+}
+
+// Trim the shared head and tail before calling Myers. A wire correction usually
+// touches one clause in paragraph six; this drops D and the working set to the
+// changed region and costs a single linear scan.
+function mcTlDiffCore(A, B) {
+  const ops = [];
+  let lo = 0;
+  while (lo < A.length && lo < B.length && A[lo] === B[lo]) lo++;
+  let hiA = A.length;
+  let hiB = B.length;
+  while (hiA > lo && hiB > lo && A[hiA - 1] === B[hiB - 1]) { hiA--; hiB--; }
+  for (let i = 0; i < lo; i++) ops.push({ type: "same", text: A[i] });
+  const mid = mcTlMyers(A.slice(lo, hiA), B.slice(lo, hiB));
+  for (let i = 0; i < mid.length; i++) ops.push(mid[i]);
+  for (let i = hiA; i < A.length; i++) ops.push({ type: "same", text: A[i] });
+  return ops;
+}
+
+// One entry per run, not per token — the renderer wants a single <del> around a
+// deleted sentence, not forty of them.
+function mcTlCoalesce(ops) {
+  const out = [];
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i];
+    if (out.length && out[out.length - 1].type === op.type) out[out.length - 1].text += op.text;
+    else out.push({ type: op.type, text: op.text });
+  }
+  return out;
+}
+
+function mcTlDiffWords(a, b) {
+  const sa = typeof a === "string" ? a : (a === null || a === undefined ? "" : String(a));
+  const sb = typeof b === "string" ? b : (b === null || b === undefined ? "" : String(b));
+  return mcTlCoalesce(mcTlDiffCore(mcTlTokenizeWords(sa), mcTlTokenizeWords(sb)));
+}
+
+// Character granularity: same shape, for headlines and short fields where word
+// granularity would flag a whole word for a one-letter typo fix.
+function mcTlDiffChars(a, b) {
+  const sa = typeof a === "string" ? a : (a === null || a === undefined ? "" : String(a));
+  const sb = typeof b === "string" ? b : (b === null || b === undefined ? "" : String(b));
+  return mcTlCoalesce(mcTlDiffCore(mcTlTokenizeChars(sa), mcTlTokenizeChars(sb)));
+}
+
+// Counts are in characters of op text so the number means the same thing whether
+// the ops came from mcTlDiffWords or mcTlDiffChars. similarity is the Dice
+// coefficient over the two reconstructed strings: 2*same / (len(a) + len(b)).
+function mcTlDiffStats(ops) {
+  let added = 0;
+  let removed = 0;
+  let same = 0;
+  if (Array.isArray(ops)) {
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      if (!op || typeof op.text !== "string") continue;
+      if (op.type === "add") added += op.text.length;
+      else if (op.type === "del") removed += op.text.length;
+      else same += op.text.length;
+    }
+  }
+  const total = 2 * same + added + removed;
+  // Two empty strings are identical, not undefined.
+  const similarity = total === 0 ? 1 : (2 * same) / total;
+  return { added: added, removed: removed, same: same, similarity: similarity };
+}
+
+function mcTlDiffHtml(ops) {
+  if (!Array.isArray(ops)) return "";
+  const parts = [];
+  for (let i = 0; i < ops.length; i++) {
+    const op = ops[i];
+    if (!op || typeof op.text !== "string") continue;
+    const safe = mcTlEscapeHtml(op.text);
+    if (op.type === "add") parts.push('<ins class="mcTlAdd">' + safe + "</ins>");
+    else if (op.type === "del") parts.push('<del class="mcTlDel">' + safe + "</del>");
+    else parts.push('<span class="mcTlSame">' + safe + "</span>");
+  }
+  return parts.join("");
+}
+
+// Lowercased, whitespace-stripped word k-grams. Short inputs fall back to plain
+// token sets so a three-word headline still produces something to compare.
+function mcTlShingles(s, k) {
+  const size = typeof k === "number" && k > 0 ? k : 3;
+  const toks = mcTlTokenizeWords(String(s === null || s === undefined ? "" : s))
+    .map(function (t) { return t.trim().toLowerCase(); })
+    .filter(function (t) { return t.length > 0; });
+  const set = new Set();
+  if (toks.length === 0) return set;
+  if (toks.length < size) { for (let i = 0; i < toks.length; i++) set.add(toks[i]); return set; }
+  for (let i = 0; i + size <= toks.length; i++) set.add(toks.slice(i, i + size).join(" "));
+  return set;
+}
+
+function mcTlJaccard(setA, setB) {
+  if (!setA.size && !setB.size) return 1;
+  if (!setA.size || !setB.size) return 0;
+  let inter = 0;
+  const small = setA.size <= setB.size ? setA : setB;
+  const large = small === setA ? setB : setA;
+  small.forEach(function (v) { if (large.has(v)) inter++; });
+  return inter / (setA.size + setB.size - inter);
+}
+
+// De-duping a feed is an O(n^2) pairwise problem, so the per-pair cost is what
+// matters. Two cheap rejects run first:
+//   1. length ratio — Dice similarity can never exceed 2*min/(min+max), so if
+//      that bound is already under the threshold we stop without tokenising much.
+//   2. shingle Jaccard — Dice S and Jaccard J relate as S = 2J/(1+J), so a target
+//      S needs J >= S/(2-S). Shingles are coarser than tokens (one changed word
+//      kills k shingles), so we apply that bound with 0.5 slack: it must only
+//      reject pairs that *cannot* pass, never borderline ones.
+// Only survivors pay for Myers.
+function mcTlNearDuplicate(a, b, threshold) {
+  const t = typeof threshold === "number" && isFinite(threshold) ? threshold : 0.8;
+  const A = a === null || a === undefined ? "" : String(a);
+  const B = b === null || b === undefined ? "" : String(b);
+  if (A === B) return true;
+  if (!A.length || !B.length) return false;
+
+  const lo = Math.min(A.length, B.length);
+  const hi = Math.max(A.length, B.length);
+  if ((2 * lo) / (lo + hi) < t) return false;
+
+  const needJ = t / (2 - t);
+  if (mcTlJaccard(mcTlShingles(A, 3), mcTlShingles(B, 3)) < needJ * 0.5) return false;
+
+  return mcTlDiffStats(mcTlDiffWords(A, B)).similarity >= t;
+}
+
+// ---------------------------------------------------------------------------
+// Part 2 — timeline
+// ---------------------------------------------------------------------------
+
+// Two components max — a timeline label has no room for "1d 4h 12m 6s".
+function mcTlHuman(ms) {
+  const n = typeof ms === "number" && isFinite(ms) ? ms : 0;
+  if (n < 0) return "-" + mcTlHuman(-n);
+  const s = Math.floor(n / 1000);
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  if (m < 60) { const rs = s % 60; return rs ? m + "m " + rs + "s" : m + "m"; }
+  const h = Math.floor(m / 60);
+  if (h < 24) { const rm = m % 60; return rm ? h + "h " + rm + "m" : h + "h"; }
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh ? d + "d " + rh + "h" : d + "d";
+}
+
+// Feeds hand us epoch millis, Date objects, or ISO strings depending on the
+// ingest path. Anything we cannot turn into a finite number is NaN and gets
+// dropped upstream rather than poisoning the span arithmetic.
+function mcTlCoerceTime(v) {
+  if (v === null || v === undefined) return NaN;
+  if (typeof v === "number") return isFinite(v) ? v : NaN;
+  if (v instanceof Date) { const n = v.getTime(); return isFinite(n) ? n : NaN; }
+  if (typeof v === "string") { const n = Date.parse(v); return isFinite(n) ? n : NaN; }
+  return NaN;
+}
+
+// Drop unusable docs, sort ascending, keep the original index as a stable
+// tie-break so identical timestamps come back in ingest order.
+function mcTlNormalizeDocs(docs) {
+  if (!Array.isArray(docs)) return [];
+  const out = [];
+  for (let i = 0; i < docs.length; i++) {
+    const d = docs[i];
+    if (!d || typeof d !== "object") continue;
+    const t = mcTlCoerceTime(d.t);
+    if (!isFinite(t)) continue; // null/NaN/garbage timestamps: silently skipped
+    const rec = {
+      text: typeof d.text === "string" ? d.text : (d.text === null || d.text === undefined ? "" : String(d.text)),
+      t: t,
+      src: d.src === undefined ? null : d.src,
+      _i: i
+    };
+    if (d.lane !== undefined) rec.lane = d.lane;
+    out.push(rec);
+  }
+  out.sort(function (p, q) { return p.t - q.t || p._i - q._i; });
+  return out;
+}
+
+function mcTlMedian(nums) {
+  if (!nums.length) return 0;
+  const s = nums.slice().sort(function (a, b) { return a - b; });
+  const mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+// Pick the bucket unit from the span's magnitude first, then a step inside that
+// unit that lands in [minB, maxB] buckets. Unit before count is deliberate: a
+// five-day story wants day columns even though that is only ~6 of them, and
+// nobody reads a 12-hour column. Within a unit we take the finest step that fits
+// the band; if none fits we take the finest step available and accept fewer
+// buckets rather than mislabelling the axis.
+// Thresholds are set so each unit's finest step normally clears the low end
+// (8 min -> minute, 8 h -> hour, 4 d -> day).
+function mcTlPickBucket(fromT, toT, opts) {
+  const o = opts || {};
+  const minB = typeof o.minBuckets === "number" ? o.minBuckets : 8;
+  const maxB = typeof o.maxBuckets === "number" ? o.maxBuckets : 20;
+  const span = Math.max(0, (isFinite(toT) ? toT : 0) - (isFinite(fromT) ? fromT : 0));
+
+  let unit;
+  if (o.unit && mcTlUnitSteps[o.unit]) unit = o.unit;
+  else if (span >= 4 * mcTlUnitMs.day) unit = "day";
+  else if (span >= 8 * mcTlUnitMs.hour) unit = "hour";
+  else if (span >= 8 * mcTlUnitMs.minute) unit = "minute";
+  else unit = "second"; // includes the zero-span case: one bucket, no division
+
+  const base = mcTlUnitMs[unit];
+  const steps = mcTlUnitSteps[unit];
+  // Count with the epoch alignment we will actually use, so the chosen step
+  // really does respect the cap once boundaries are snapped.
+  const countFor = function (size) {
+    const start0 = Math.floor(fromT / size) * size;
+    return Math.floor((toT - start0) / size) + 1;
+  };
+
+  let size = steps[0] * base;
+  let count = countFor(size);
+  let fallback = -1;
+  for (let i = 0; i < steps.length; i++) {
+    const cand = steps[i] * base;
+    const n = countFor(cand);
+    if (n <= maxB && fallback < 0) { fallback = cand; }
+    if (n >= minB && n <= maxB) { size = cand; count = n; return { unit: unit, size: size, count: count }; }
+    if (n < minB) break; // steps only get coarser; nothing later will fit
+  }
+  if (fallback > 0) { size = fallback; count = countFor(size); }
+  else {
+    // Span is huge relative to the coarsest step (e.g. years of archive):
+    // stretch the last step so we never allocate an unbounded bin array.
+    size = steps[steps.length - 1] * base;
+    let n = countFor(size);
+    while (n > maxB) { size *= 2; n = countFor(size); }
+    count = n;
+  }
+  return { unit: unit, size: size, count: count };
+}
+
+function mcTlBuild(docs, opts) {
+  const o = opts || {};
+  const norm = mcTlNormalizeDocs(docs);
+  const n = norm.length;
+
+  const events = [];
+  for (let i = 0; i < n; i++) {
+    const d = norm[i];
+    const ev = {
+      text: d.text,
+      t: d.t,
+      src: d.src,
+      gapBefore: i === 0 ? 0 : d.t - norm[i - 1].t, // 0, not null: callers do arithmetic on it
+      isFirst: i === 0,
+      isLast: i === n - 1
+    };
+    if (d.lane !== undefined) ev.lane = d.lane;
+    events.push(ev);
+  }
+
+  if (n === 0) {
+    return {
+      events: [],
+      span: { from: null, to: null, ms: 0, human: mcTlHuman(0) },
+      buckets: [],
+      bucketUnit: null,
+      bucketMs: 0,
+      gaps: []
+    };
+  }
+
+  const fromT = norm[0].t;
+  const toT = norm[n - 1].t;
+  const span = { from: fromT, to: toT, ms: toT - fromT, human: mcTlHuman(toT - fromT) };
+
+  const pick = mcTlPickBucket(fromT, toT, o);
+  const size = pick.size;
+  const start0 = Math.floor(fromT / size) * size;
+  const bins = [];
+  const nBins = Math.max(1, pick.count);
+  for (let i = 0; i < nBins; i++) {
+    const s = start0 + i * size;
+    bins.push({
+      start: s,
+      end: s + size,
+      count: 0,
+      unit: pick.unit,
+      size: size,
+      label: new Date(s).toISOString()
+    });
+  }
+  for (let i = 0; i < n; i++) {
+    let idx = Math.floor((norm[i].t - start0) / size);
+    if (idx < 0) idx = 0;
+    if (idx >= nBins) idx = nBins - 1;
+    bins[idx].count++;
+  }
+
+  // "The story went quiet, then restarted." Median x factor, not mean: one
+  // overnight pause would drag a mean up far enough to hide every other lull.
+  const gapFactor = typeof o.gapFactor === "number" && o.gapFactor > 0 ? o.gapFactor : 3;
+  const gapList = [];
+  for (let i = 1; i < n; i++) gapList.push(events[i].gapBefore);
+  const gaps = [];
+  if (gapList.length >= 2) {
+    let ref = mcTlMedian(gapList);
+    if (ref <= 0) {
+      // Burst-heavy series (many docs on the same second): fall back to the mean
+      // so we do not flag literally every non-zero gap.
+      let sum = 0;
+      for (let i = 0; i < gapList.length; i++) sum += gapList[i];
+      ref = sum / gapList.length;
+    }
+    if (ref > 0) {
+      const threshold = ref * gapFactor;
+      for (let i = 1; i < n; i++) {
+        const g = events[i].gapBefore;
+        if (g > threshold) {
+          gaps.push({
+            index: i, // index of the event that *ends* the quiet period
+            afterIndex: i - 1,
+            from: events[i - 1].t,
+            to: events[i].t,
+            ms: g,
+            human: mcTlHuman(g),
+            ratio: g / ref
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    events: events,
+    span: span,
+    buckets: bins,
+    bucketUnit: pick.unit,
+    bucketMs: size,
+    gaps: gaps
+  };
+}
+
+// Word-boundary, case-insensitive. Deliberate choice: "Gaza" does NOT match
+// "Gazan" — a demonym is a different entity for tagging purposes and the false
+// positives ("Israel"/"Israeli", "China"/"Chinese") swamp an entity timeline.
+// Punctuation and quotes still count as boundaries, so "Gaza." matches.
+// \p{L}\p{N} rather than \b because \b is ASCII-only and half the names in a
+// foreign desk feed are not.
+function mcTlEntityRegex(entity) {
+  const raw = entity === null || entity === undefined ? "" : String(entity).trim();
+  if (!raw) return null;
+  const esc = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  try {
+    return new RegExp("(?:^|[^\\p{L}\\p{N}_])" + esc + "(?![\\p{L}\\p{N}_])", "iu");
+  } catch (e) {
+    return new RegExp("(?:^|[^A-Za-z0-9_])" + esc + "(?![A-Za-z0-9_])", "i");
+  }
+}
+
+function mcTlEntityTimeline(docs, entity, opts) {
+  const re = mcTlEntityRegex(entity);
+  if (!re || !Array.isArray(docs)) return mcTlBuild([], opts);
+  const hit = [];
+  for (let i = 0; i < docs.length; i++) {
+    const d = docs[i];
+    if (!d || typeof d !== "object") continue;
+    const text = typeof d.text === "string" ? d.text : String(d.text === null || d.text === undefined ? "" : d.text);
+    if (re.test(text)) hit.push(d);
+  }
+  return mcTlBuild(hit, opts);
+}
+
+// Sliding-window arrival rate sampled at each document's own timestamp. This is
+// the honest acceleration curve: no smoothing, no interpolation between beats,
+// just "how many stories landed in the trailing window when this one landed".
+// rate is normalised to items/hour so windows of different sizes compare.
+function mcTlVelocity(docs, windowMs) {
+  const w = typeof windowMs === "number" && isFinite(windowMs) && windowMs > 0 ? windowMs : mcTlUnitMs.hour;
+  const norm = mcTlNormalizeDocs(docs);
+  const out = [];
+  let lo = 0;
+  for (let i = 0; i < norm.length; i++) {
+    const t = norm[i].t;
+    while (lo < i && norm[lo].t <= t - w) lo++; // half-open window (t-w, t]
+    const count = i - lo + 1;
+    out.push({ t: t, count: count, rate: count / (w / mcTlUnitMs.hour) });
+  }
+  return out;
+}
+
+// Two stories on one axis. lane is "a"/"b" so the renderer can stack or colour
+// them; everything else is a normal build, gaps and buckets included.
+function mcTlMerge(docsA, docsB, opts) {
+  const tag = function (list, lane) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    for (let i = 0; i < list.length; i++) {
+      const d = list[i];
+      if (!d || typeof d !== "object") continue;
+      out.push({ text: d.text, t: d.t, src: d.src, lane: lane });
+    }
+    return out;
+  };
+  const merged = tag(docsA, "a").concat(tag(docsB, "b"));
+  const res = mcTlBuild(merged, opts);
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < res.events.length; i++) {
+    if (res.events[i].lane === "a") na++;
+    else nb++;
+  }
+  res.lanes = { a: na, b: nb };
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// Self-test (node only; the browser never sees this branch)
+// ---------------------------------------------------------------------------
+
 /* ================================================================
    MUSA-CORE-3 — the bridge.
 
@@ -10511,6 +14567,234 @@ function projCryptoNews(){
     method: "Count of crypto-tagged stories on the hour's wire, shown beside BTC's move. Two numbers side by side — I am not claiming one caused the other." };
 }
 
+/* ================================================================
+   TIMELINE — the hour, reconstructed from arrival times.
+
+   Everything here is drawn from the live wire. Simulated stories are
+   filtered out before a single pixel is computed: a chart is exactly
+   the kind of thing that launders a fake headline into a fact, so the
+   failsafe sits at the top of the function, not near the renderer.
+   ================================================================ */
+const TL_COLORS = ["#8ab4ff","#ffb454","#3ddc84","#ff3b47","#b39ddb","#5b8cff"];
+const tlState = { entity:"" };
+
+function tlReal(){ return FEED.filter(i=>!isSim(i)); }
+
+/* Bucket labels follow the unit the timeline chose for itself, so an
+   hour of wire reads as clock time and a week reads as dates. */
+function tlLabel(ms, unit){
+  const d = new Date(ms);
+  const two = n=>String(n).padStart(2,"0");
+  if(unit === "day" || unit === "week")
+    return d.toLocaleDateString([], { month:"short", day:"numeric" });
+  return two(d.getHours()) + ":" + two(d.getMinutes());
+}
+
+function renderTimeline(){
+  if(!$("#tlBars")) return;
+  const real = tlReal();
+
+  /* ---- arrivals ---- */
+  const tl = mcTlBuild(real, {});
+  $("#tlUnit").textContent = tl.events.length
+    ? `${tl.events.length} stories · ${tl.bucketUnit} buckets` : "—";
+  $("#tlBars").innerHTML = tl.buckets.length
+    ? mcChBar(tl.buckets.map(b=>({ label: tlLabel(b.start, b.unit), value: b.count })),
+              { width:520, height:190, colors:TL_COLORS, yLabel:"stories" })
+    : `<div class="bempty">Nothing on the wire yet.</div>`;
+
+  /* ---- velocity ---- */
+  const vel = mcTlVelocity(real, 20*60*1000);
+  if(vel.length >= 2){
+    const last = vel[vel.length-1];
+    $("#tlVel").textContent = `${last.rate.toFixed(0)}/hr now`;
+    $("#tlVelBox").innerHTML = mcChLine(
+      [{ name:"stories/hr", points: vel.map(v=>[v.t, v.rate]) }],
+      { width:520, height:180, colors:TL_COLORS, yLabel:"stories/hr",
+        xLabels: vel.map(v=>tlLabel(v.t, tl.bucketUnit)) });
+  }else{
+    $("#tlVel").textContent = "—";
+    $("#tlVelBox").innerHTML = `<div class="bempty">Two stories are needed before there's a rate to plot.</div>`;
+  }
+
+  /* ---- quiet stretches ---- */
+  $("#tlGapN").textContent = tl.gaps.length;
+  $("#tlGaps").innerHTML = tl.gaps.length
+    ? tl.gaps.slice(-8).reverse().map(g=>`<div class="tlgap">${tlLabel(g.from, tl.bucketUnit)} → ${tlLabel(g.to, tl.bucketUnit)} · <b>${esc(g.human)}</b> of silence (${g.ratio.toFixed(1)}× the median gap)</div>`).join("")
+    : `<div class="bempty">No unusual silences — stories have been arriving at a steady clip.</div>`;
+
+  /* ---- desk mix ---- */
+  const mix = new Map();
+  for(const it of real) mix.set(it.cat, (mix.get(it.cat)||0) + 1);
+  const mixRows = [...mix.entries()].sort((x,y)=>y[1]-x[1]).slice(0,7);
+  $("#tlMixN").textContent = mix.size;
+  $("#tlMix").innerHTML = mixRows.length
+    ? mcChDonut(mixRows.map(([cat,n])=>({ label:cat, value:n })),
+                { width:520, height:210, colors:TL_COLORS })
+    : `<div class="bempty">Nothing on the wire to break down.</div>`;
+
+  /* ---- near-duplicates ---- */
+  renderTlDups(real);
+  if(tlState.entity) renderTlEntity(tlState.entity);
+}
+
+/* Stories that cleared clustering as separate but read as the same event.
+   Capped because this is O(n²) on strings and it runs on the UI thread. */
+function renderTlDups(real){
+  const cap = real.slice(0, 60), pairs = [];
+  for(let i=0;i<cap.length && pairs.length<6;i++){
+    for(let j=i+1;j<cap.length;j++){
+      if(cap[i].sig === cap[j].sig) continue;
+      if(mcTlNearDuplicate(cap[i].text, cap[j].text, 0.62)){
+        pairs.push([cap[i], cap[j]]); break;
+      }
+    }
+  }
+  $("#tlDupN").textContent = pairs.length;
+  $("#tlDups").innerHTML = pairs.length
+    ? pairs.map(([a,b])=>{
+        const ops = mcTlDiffWords(b.text, a.text);
+        const st  = mcTlDiffStats(ops);
+        return `<div class="tldup">
+          <span class="sim">${(st.similarity*100).toFixed(0)}% identical</span>
+          · ${esc(a.src||"?")} vs ${esc(b.src||"?")}<br>${mcTlDiffHtml(ops)}
+        </div>`;
+      }).join("")
+    : `<div class="bempty">Nothing on the wire is a near-copy of anything else right now.</div>`;
+}
+
+function renderTlEntity(name){
+  tlState.entity = name;
+  const box = $("#tlEnt"); if(!box) return;
+  const t = mcTlEntityTimeline(tlReal(), name, {});
+  if(!t.events.length){
+    box.innerHTML = `<div class="bempty">Nothing on the wire mentions <b>${esc(name)}</b>. That's an answer, not an error — I'm not going to pad it out with loosely-related stories.</div>`;
+    return;
+  }
+  const bars = t.buckets.length > 1
+    ? mcChSpark(t.buckets.map(b=>b.count), { width:520, height:44, colors:TL_COLORS })
+    : "";
+  box.innerHTML = `<div class="cnote" style="margin-bottom:8px"><b>${t.events.length}</b> ${t.events.length===1?"story":"stories"} over ${esc(mcTlHuman(t.span))}</div>
+    ${bars ? `<div class="chartbox" style="margin-bottom:9px">${bars}</div>` : ""}
+    ${t.events.slice().reverse().slice(0,14).map(e=>`
+      <div class="tlrow"><time>${tlLabel(e.t, t.bucketUnit)}</time>
+      <span>${esc(e.text)}${e.src?` <span style="color:var(--txt-faint)">· ${esc(e.src)}</span>`:""}</span></div>`).join("")}`;
+}
+
+/* ================================================================
+   COMMAND PALETTE — ⌘⇧P / Ctrl-Shift-P, or ⌘/ .
+
+   Not ⌘K: that has opened a new chat since v2 and retraining a
+   reflex is a worse trade than an unfamiliar chord.
+
+   Two modes in one box. A bare query fuzzy-matches commands; a query
+   that finds nothing, or one prefixed with `?`, falls through to a
+   BM25 search over everything said in this conversation.
+   ================================================================ */
+const cmdkState = { open:false, sel:0, rows:[], idx:null, idxAt:0 };
+function cmdkMsgs(){ return (mem && Array.isArray(mem.history)) ? mem.history : []; }
+
+function cmdkCommands(){
+  const boards = [
+    ["war","🗺","War map"], ["flock","📹","Flock cams"], ["pray","🕌","Prayer times"],
+    ["arab","🌍","Al Jazeera Arabic"], ["senate","🗳","Senate 2026"],
+    ["crypto","₿","Crypto markets"], ["proj","📈","Projections"],
+    ["time","⏳","Timeline"], ["core","🧠","Core model"],
+  ];
+  const out = boards.map(([b,ic,name])=>({
+    title:"Open " + name, hint:"board", ic,
+    run:()=>{ openDeck(b); },
+  }));
+  out.push(
+    { title:"Refresh the wire now", hint:"wire", ic:"↻", run:()=>{ refreshNews(); } },
+    { title:"Read the last reply aloud", hint:"voice", ic:"🔊", run:()=>{
+      const prev = [...document.querySelectorAll(".msg.ai .bubble")]
+        .filter(b=>!b.classList.contains("typing") && b.innerText.trim().length > 2);
+      if(prev.length) speak(prev[prev.length-1].innerText);
+    } },
+    { title:"Stop speaking", hint:"voice", ic:"🔇", run:()=>{ try{ speechSynthesis.cancel(); }catch(e){} } },
+    { title:"Attach an image", hint:"image", ic:"🖼", run:()=>{ const f=$("#imgFile"); if(f) f.click(); } },
+    { title:"Open settings", hint:"app", ic:"⚙", run:()=>{ openSettings(); } },
+  );
+  return out;
+}
+
+/* The chat index is rebuilt only when the transcript has actually grown —
+   BM25 indexing is linear in total text and this runs on every keystroke. */
+function cmdkIndex(){
+  const msgs = cmdkMsgs();
+  if(cmdkState.idx && cmdkState.idxAt === msgs.length) return cmdkState.idx;
+  cmdkState.idx = mcPalIndex(msgs.map((m,i)=>({ id:i, content:m.content, role:m.role })));
+  cmdkState.idxAt = msgs.length;
+  return cmdkState.idx;
+}
+
+function cmdkRender(q){
+  const list = $("#cmdkList"); if(!list) return;
+  const searchMode = q.charAt(0) === "?";
+  const query = searchMode ? q.slice(1).trim() : q.trim();
+  let rows = [];
+
+  if(!searchMode){
+    /* `hint` is a key too, so "board" reaches all nine boards and "voice"
+       reaches the speech commands — the category is often what you remember. */
+    rows = mcPalFilter(query, cmdkCommands(), { keys:["title","hint"], limit:9 })
+      .map(r=>({ kind:"cmd", cmd:r.item, positions:r.positions }));
+  }
+  /* Nothing matched a command? The user probably meant to search. */
+  if(searchMode || (!rows.length && query.length >= 2)){
+    const msgs = cmdkMsgs();
+    const hits = mcPalSearch(cmdkIndex(), query, { limit:8 });
+    rows = rows.concat(hits.map(h=>({ kind:"msg", hit:h, msg:msgs[h.id] })));
+  }
+
+  cmdkState.rows = rows;
+  if(cmdkState.sel >= rows.length) cmdkState.sel = Math.max(0, rows.length-1);
+  $("#cmdkMode").textContent = searchMode ? "searching this chat"
+    : rows.some(r=>r.kind==="msg") ? "no command matched — searching chat" : "commands";
+
+  list.innerHTML = rows.length ? rows.map((r,i)=>{
+    const sel = i === cmdkState.sel ? " sel" : "";
+    if(r.kind === "cmd")
+      return `<div class="cmdkitem${sel}" data-i="${i}" role="option"><span class="ic">${r.cmd.ic}</span>
+        <span class="tx">${mcPalHighlight(r.cmd.title, r.positions)}</span>
+        <span class="hint">${esc(r.cmd.hint)}</span></div>`;
+    /* snippet comes back from the search already escaped and marked —
+       mcPalSnippet and mcPalHighlight share one safe path. */
+    const snip = r.hit.snippet || "";
+    return `<div class="cmdkitem${sel}" data-i="${i}" role="option"><span class="ic">${r.msg && r.msg.role === "user" ? "🧑" : "🤖"}</span>
+      <span class="tx">${snip}<span class="sn">jump to this message</span></span>
+      <span class="hint">chat</span></div>`;
+  }).join("") : `<div class="cmdkempty">${query ? "Nothing matched." : "Type to search boards, commands, or anything you've said."}</div>`;
+}
+
+function cmdkOpen(){
+  cmdkState.open = true; cmdkState.sel = 0;
+  $("#cmdk").classList.add("open");
+  const inp = $("#cmdkQ"); inp.value = ""; cmdkRender("");
+  setTimeout(()=>inp.focus(), 10);
+}
+function cmdkClose(){
+  cmdkState.open = false;
+  $("#cmdk").classList.remove("open");
+}
+function cmdkRun(i){
+  const r = cmdkState.rows[i]; if(!r) return;
+  cmdkClose();
+  if(r.kind === "cmd"){ try{ r.cmd.run(); }catch(e){ console.warn("[cmdk]", e); } return; }
+  /* Jump to the message: find its bubble and bring it into view. */
+  const text = (r.msg && r.msg.content) || "";
+  const bubbles = [...document.querySelectorAll(".bubble")];
+  const hit = bubbles.find(b=>b.textContent.trim().slice(0,60) === text.trim().slice(0,60));
+  if(hit){
+    hit.scrollIntoView({ behavior:"smooth", block:"center" });
+    hit.style.transition = "background .18s";
+    const was = hit.style.background;
+    hit.style.background = "rgba(138,180,255,.15)";
+    setTimeout(()=>{ hit.style.background = was; }, 900);
+  }
+}
+
 function renderProjections(){
   if(!$("#pvBox")) return;
   /* wire volume */
@@ -10753,6 +15037,7 @@ const BOARD_SUB = {
   senate:"structural map + live coverage · no polls, no X feed, no guesses",
   crypto:"live markets, on-chain and sentiment · three price sources, no stale fallback",
   proj:  "arithmetic on live data, with the method and error printed under every number",
+  time:  "the hour reconstructed from arrival times · buckets and gaps both measured, not fixed",
   core:  "musa-core-3 · classical NLP fitted in this tab, on this wire, with no network",
 };
 function openDeck(board){
@@ -10780,6 +15065,7 @@ function showBoard(b){
     if(!crypto.coins.length && !crypto.loading) fetchMarkets();
     if(!crypto.global) fetchCryptoExtras();
   }
+  if(b === "time")   renderTimeline();
   if(b === "proj"){
     renderProjections();
     if(!crypto.coins.length && !crypto.loading) fetchMarkets();
@@ -10794,6 +15080,7 @@ function deckTick(){
   if(deckBoard === "senate"&& deckSecs % 30 === 0) renderSenate();
   if(deckBoard === "crypto"&& deckSecs % 45 === 0) fetchMarkets();
   if(deckBoard === "proj"  && deckSecs % 20 === 0) renderProjections();
+  if(deckBoard === "time"  && deckSecs % 20 === 0) renderTimeline();
   if(deckBoard === "core"  && deckSecs % 25 === 0) renderCoreBoard();
 }
 $("#deckBtn").addEventListener("click", ()=>openDeck());
@@ -11265,6 +15552,19 @@ function renderImgTray(){
       ${i.w?`<span class="sz">${i.w}×${i.h}</span>`:""}
     </div>`).join("");
 }
+/* Variance of the Laplacian is unbounded and enormously skewed: a flat fill
+   is 0, a smooth gradient ~5, a 6px-blurred checkerboard ~65, a crisp one
+   ~29000. A single cutoff near zero therefore calls a visibly blurred picture
+   "sharp" — the old `< 40` test did exactly that. Bands, measured against
+   rendered fixtures, and hedged language because this is one statistic and
+   not a focus judgement. */
+function imgSharpLabel(v){
+  const n = typeof v === "number" && isFinite(v) ? v : 0;
+  return n < 20   ? "very soft — likely out of focus"
+       : n < 150  ? "soft"
+       : n < 1500 ? "reasonably sharp"
+       : "sharp";
+}
 /* A compact, honest description of what the local pass actually measured. */
 function imgMetaHtml(entry){
   const a = entry.analysis;
@@ -11275,7 +15575,7 @@ function imgMetaHtml(entry){
     <b>${entry.natW||entry.w}×${entry.natH||entry.h}</b> · ${esc(a.likely||"image")} · ${mcImgFmtBytes(entry.bytes||0)}
     ${sw?`<span class="swatches">${sw}</span>`:""}<br>
     brightness ${(a.brightness*100).toFixed(0)}% · contrast ${(a.contrast*100).toFixed(0)}% · saturation ${(a.saturation*100).toFixed(0)}%
-    · ${a.sharpness < 40 ? "looks soft/blurry" : "sharp"} · entropy ${(a.entropy||0).toFixed(1)} bits<br>
+    · ${esc(imgSharpLabel(a.sharpness))} · entropy ${(a.entropy||0).toFixed(1)} bits<br>
     ${ex && (ex.make||ex.model) ? `shot on ${esc([ex.make,ex.model].filter(Boolean).join(" "))}${ex.dateTime?` · ${esc(ex.dateTime)}`:""}${ex.gps?` · ${ex.gps.lat.toFixed(4)}, ${ex.gps.lon.toFixed(4)}`:""}<br>` : ""}
     <span style="opacity:.75">phash <code>${esc((a.phash||"").slice(0,16))}</code> — measured locally, nothing uploaded.</span>
   </div>`;
@@ -11288,7 +15588,7 @@ function imgLocalNote(imgs){
     if(!a) return `**Image ${n+1}** — ${i.w}×${i.h}, couldn't analyse the pixels.`;
     const pal = (a.palette||[]).slice(0,4).map(c=>c.hex).join(", ");
     return `**Image ${n+1}** — ${i.natW||i.w}×${i.natH||i.h}, ${mcImgFmtBytes(i.bytes||0)}, reads as a **${a.likely}**.\n`
-      + `  Brightness ${(a.brightness*100).toFixed(0)}%, contrast ${(a.contrast*100).toFixed(0)}%, saturation ${(a.saturation*100).toFixed(0)}%, entropy ${(a.entropy||0).toFixed(1)} bits, ${a.sharpness < 40 ? "soft or blurry" : "sharp"}.\n`
+      + `  Brightness ${(a.brightness*100).toFixed(0)}%, contrast ${(a.contrast*100).toFixed(0)}%, saturation ${(a.saturation*100).toFixed(0)}%, entropy ${(a.entropy||0).toFixed(1)} bits, ${imgSharpLabel(a.sharpness)}.\n`
       + (pal ? `  Dominant colours: ${pal}.\n` : "")
       + (i.exif && (i.exif.make || i.exif.model) ? `  EXIF: ${[i.exif.make, i.exif.model].filter(Boolean).join(" ")}${i.exif.dateTime?`, ${i.exif.dateTime}`:""}${i.exif.gps?`, at ${i.exif.gps.lat.toFixed(4)}, ${i.exif.gps.lon.toFixed(4)}`:""}.\n` : "");
   }).join("\n");
@@ -12961,6 +17261,38 @@ document.addEventListener("keydown", e=>{
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k"){ e.preventDefault(); newChat(false); }
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b"){ e.preventDefault(); handleSend("give me a briefing"); }
   if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d"){ e.preventDefault(); $("#deck").classList.contains("open") ? closeDeck() : openDeck(); }
+  if((e.ctrlKey || e.metaKey) && (e.key === "/" || (e.shiftKey && e.key.toLowerCase() === "p"))){
+    e.preventDefault(); cmdkState.open ? cmdkClose() : cmdkOpen();
+  }
+});
+
+/* ---- command palette wiring ---- */
+$("#cmdkQ").addEventListener("input", e=>{ cmdkState.sel = 0; cmdkRender(e.target.value); });
+$("#cmdkQ").addEventListener("keydown", e=>{
+  if(e.key === "Escape"){ e.preventDefault(); cmdkClose(); return; }
+  if(e.key === "ArrowDown" || e.key === "ArrowUp"){
+    e.preventDefault();
+    const n = cmdkState.rows.length; if(!n) return;
+    cmdkState.sel = (cmdkState.sel + (e.key === "ArrowDown" ? 1 : n-1)) % n;
+    cmdkRender(e.target.value);
+    const el = $("#cmdkList").children[cmdkState.sel];
+    if(el && el.scrollIntoView) el.scrollIntoView({ block:"nearest" });
+    return;
+  }
+  if(e.key === "Enter"){ e.preventDefault(); cmdkRun(cmdkState.sel); }
+});
+$("#cmdkList").addEventListener("click", e=>{
+  const row = e.target.closest(".cmdkitem");
+  if(row) cmdkRun(parseInt(row.getAttribute("data-i"), 10));
+});
+/* Click the backdrop — but not the box — to dismiss. */
+$("#cmdk").addEventListener("mousedown", e=>{ if(e.target.id === "cmdk") cmdkClose(); });
+
+/* ---- timeline board wiring ---- */
+$("#tlForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const v = $("#tlQ").value.trim();
+  if(v) renderTlEntity(v);
 });
 $("#briefBtn").addEventListener("click", ()=>{ handleSend("give me a briefing"); closeSidebarMobile(); });
 $("#exportBtn").addEventListener("click", ()=>{

@@ -20,7 +20,10 @@ GUARD = 'if (typeof module !== "undefined" && require.main === module)'
 
 # order matters: earlier files own the canonical names
 ORDER = ["stem.js", "metrics.js", "sentiment.js", "ner.js", "summarize.js",
-         "cluster.js", "lm.js", "qa.js", "dialog.js", "calc.js"]
+         "cluster.js", "lm.js", "qa.js", "dialog.js", "calc.js",
+         # second wave. These four kept strict module prefixes (mcImg/mcCh/
+         # mcPal/mcTl) and collide with nothing, so they need no RENAME entry.
+         "imganalyse.js", "charts.js", "palette.js", "timeline.js"]
 
 # per-file renames, applied only inside that file
 RENAME = {
@@ -44,7 +47,12 @@ RENAME = {
 }
 
 def topnames(src):
-    return set(re.findall(r'^(?:function|const|let|var)\s+(\w+)', src, re.M))
+    # `async function` and `class` count too. Missing them was a live hole:
+    # the collision check is the only thing standing between two modules that
+    # both define e.g. an async mcHash and a silent shadowing bug in the tab,
+    # and it would have waved them straight through.
+    return set(re.findall(r'^(?:async\s+)?(?:function|const|let|var|class)\s+(\w+)',
+                          src, re.M))
 
 def strip_tests(src):
     i = src.find(GUARD)

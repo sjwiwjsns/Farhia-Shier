@@ -100,6 +100,23 @@ The local model is now ten classical-NLP modules living in `tools/core/*.js`, me
 - `\bsummar\b` never matches "summarize" — the word continues past the boundary. Use `\w*`.
 - Driver `ask()` helpers must not require a minimum reply length: calculator answers are 2 characters ("12").
 
+## Timeline board + command palette (`scratchpad/drive-tl.js`)
+
+Four more modules joined the core: `imganalyse.js`, `charts.js`, `palette.js`, `timeline.js`. All four kept strict prefixes (`mcImg` / `mcCh` / `mcPal` / `mcTl`) and collide with nothing, so they need no `RENAME` entry — just an `ORDER` line.
+
+- **`topnames()` in merge-core.py used to miss `async function` and `class`.** That was a live hole: the collision check is the only thing between two modules defining the same async name and a silent shadowing bug in the tab. It now matches both.
+- **⌘K was already taken** by `newChat` since v2. The palette is ⌘⇧P / ⌘/ . A driver must assert *both* that the palette opens on its own chord and that Ctrl-K still starts a new chat — taking a bound key is the easy regression here.
+- **Simulated stories are filtered at the top of `renderTimeline()`, not near the renderer.** A chart is exactly the thing that launders a fake headline into a fact, so the failsafe sits before any pixel is computed. `drive-tl.js` pushes a `sim:true` item onto FEED and asserts it reaches neither the charts nor the board HTML.
+- **Fixture trap (again):** headlines built from one template collapse into a single cluster via `sigOf()` and the whole board renders one row. `drive-tl.js` uses ten genuinely distinct headlines, with a deliberate 20-minute hole for the gap detector and one deliberate near-copy pair for the diff.
+- `mcChLine` takes **`xLabels`** (an array, of which it draws first/middle/last) — there is no `xFormat` callback. Charts are `viewBox`-only with no width/height attributes; the host sizes them with CSS (`.chartbox svg{width:100%;height:auto}`).
+- `mcTlEntityTimeline` matches on word boundaries via `\p{L}\p{N}`, so **"Gaza" deliberately does not match "Gazan"** — demonyms swamp an entity timeline otherwise. Assert the negative.
+- Every chart is checked for `NaN`/`undefined`/exponential notation in its emitted SVG. `mcChN` is the single choke point that guarantees it: NaN degrades to `0`, but **an infinity clamps to ±1e6** rather than collapsing to the origin, because it still carries a direction. Those two cases need separate tests — a combined `isFinite` guard silently swallows the second.
+- **`mcPalSearch` returns `{id, score, snippet, hits}`** — it builds the snippet itself, already escaped and `<mark>`ed via the same path as `mcPalHighlight`. There is no `doc`/`ranges` field; don't re-derive the snippet.
+- **Near-duplicate fixtures must survive `sigOf()` first.** It clusters on the 5 alphabetically-first content words, so two rewrites of one headline usually merge into a single item with two sources — and the panel correctly finds nothing. To exercise the diff, the differing word has to land *inside* that alphabetical window ("Ceasefire talks in Doha…" vs "Negotiations in Doha…"). This panel exists to catch what clustering missed, not to re-find what it caught.
+- **`sharpness` is variance of Laplacian — unbounded and hugely skewed** (flat 0, smooth gradient ~5, 6px-blurred checkerboard ~65, crisp checkerboard ~29000, noise ~56000). The original `< 40` cutoff sat so close to zero it labelled a visibly blurred picture "sharp". `imgSharpLabel()` now bands it. Any threshold on this statistic needs fixtures rendered through a real canvas, not intuition.
+- The BM25 chat index is rebuilt only when `mem.history` grows (`cmdkState.idxAt`); it runs on every keystroke otherwise.
+- Chat snippets in the palette are hostile text — assert `<img src=x onerror=...>` is escaped, no live `img` lands in the list, and nothing executes.
+
 ## Guardrail posture (deliberate, do not "restore")
 
 Investment-advice refusals and boilerplate disclaimers were **removed on request** — this is a private single-user tool. `drive-crypto.js` now asserts the *inverse*: the prompt invites a real read, the portfolio informs reasoning, the safety section reads "private terminal, not a published product". What stayed, and is still asserted: never quote a price from memory, never invent a headline, and the whole simulated-story failsafe system.
@@ -108,7 +125,7 @@ Investment-advice refusals and boilerplate disclaimers were **removed on request
 
 Three layers, all real: feed thumbnails, local canvas analysis, and provider vision.
 - **Vision routing** — `modelSeesImages()` gates it. Claude / GPT-4o+5 / Gemini get the picture in their own shape (`source.base64` / `image_url` / `inline_data`); DeepSeek and the local core get an honest "text-only, I answered from the local read" instead of a silent text-only send. The site-key proxy forwards text only and says so.
-- `mcImgAnalyse`/`mcImgExif`/`mcImgFmtBytes` are **optional** — guarded shims at the top of the image block mean a missing module degrades to "picture without measurements", never a ReferenceError.
+- `mcImgAnalyse`/`mcImgExif`/`mcImgFmtBytes` are **optional** — guarded shims at the top of the image block mean a missing module degrades to "picture without measurements", never a ReferenceError. `imganalyse.js` now ships in the merged core, so the shims no longer fire; keep them anyway, and assert the real module is live (`phash` is 16 hex chars and *not* the `0000000000000000` empty-result sentinel) rather than assuming it.
 - Attach paths: button, clipboard paste, drag-drop anywhere. Images are downscaled to 1568px and re-encoded (PNG if smaller than JPEG — a screenshot must not be JPEG'd) before upload.
 - Feed art is parsed from `media:thumbnail`, `media:content`, `enclosure`, then an `<img>` inside `description`, in that order.
 
