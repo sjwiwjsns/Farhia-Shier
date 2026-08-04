@@ -104,6 +104,23 @@ The local model is now ten classical-NLP modules living in `tools/core/*.js`, me
 
 Investment-advice refusals and boilerplate disclaimers were **removed on request** — this is a private single-user tool. `drive-crypto.js` now asserts the *inverse*: the prompt invites a real read, the portfolio informs reasoning, the safety section reads "private terminal, not a published product". What stayed, and is still asserted: never quote a price from memory, never invent a headline, and the whole simulated-story failsafe system.
 
+## Images (`scratchpad/drive-img.js`, 29 assertions)
+
+Three layers, all real: feed thumbnails, local canvas analysis, and provider vision.
+- **Vision routing** — `modelSeesImages()` gates it. Claude / GPT-4o+5 / Gemini get the picture in their own shape (`source.base64` / `image_url` / `inline_data`); DeepSeek and the local core get an honest "text-only, I answered from the local read" instead of a silent text-only send. The site-key proxy forwards text only and says so.
+- `mcImgAnalyse`/`mcImgExif`/`mcImgFmtBytes` are **optional** — guarded shims at the top of the image block mean a missing module degrades to "picture without measurements", never a ReferenceError.
+- Attach paths: button, clipboard paste, drag-drop anywhere. Images are downscaled to 1568px and re-encoded (PNG if smaller than JPEG — a screenshot must not be JPEG'd) before upload.
+- Feed art is parsed from `media:thumbnail`, `media:content`, `enclosure`, then an `<img>` inside `description`, in that order.
+
+## Al Jazeera Arabic on the wire (`scratchpad/drive-aj.js`, 22 assertions)
+
+Translated AJ headlines join the **main wire and the war map**, not just their own board.
+- **Retention is per item**: `maxAgeFor(it)` gives translated copy `AJ_WINDOW` (5h) and everything else `HOUR`. Both `addItems` and `pruneFeed` must use it — a global HOUR drops translations before they land, because translating takes a pass per headline.
+- **Only a real MT goes on the wire.** A key-term gloss is not a sentence; it stays on the board.
+- **Dedupe precedence:** a `translated` item *replaces* an untranslated one with the same key rather than losing to it. AJ publishes the same URL on its Arabic and English feeds and whichever arrived first would otherwise win by accident.
+- Fixture trap: stub the Arabic feed for `aljazeera.net` only — matching `/aljazeera/` also catches the English feed in `RSS_WIRES` and Arabic titles land on the wire raw.
+- `WAR_KIND` needed `arm(y|ies)`, `seiz*`, `captur*` etc. — translated copy uses different vocabulary than English-desk copy, and "Sudanese army seized positions" was not conflict-shaped without them.
+
 ## Extra news fallbacks
 
 `fetchWires()` pulls 6 newsroom RSS feeds (BBC/AJE/NPR/DW/France24/Sky) through `viaRelay()` — allorigins → codetabs → corsproxy, reordered by `relayHealth`. Stub `**/api.allorigins.win/**` and abort the others to exercise the chain; `liveSources` gains `"Newsrooms"`.

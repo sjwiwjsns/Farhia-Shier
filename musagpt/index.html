@@ -205,6 +205,12 @@ body.cmode .breaking .tag b{letter-spacing:.1em}
   color:#12121a;background:var(--amber);padding:2px 7px;border-radius:4px;font-weight:800;
   letter-spacing:.1em;box-shadow:none;animation:none;
 }
+.trtag{
+  font-family:var(--mono);font-size:8.5px;letter-spacing:.05em;color:#7fd6a0;font-weight:700;
+  border:1px solid rgba(61,220,132,.4);border-radius:4px;padding:1px 5px;background:rgba(61,220,132,.09);
+  white-space:nowrap;cursor:help;
+}
+.mk .core.tr{stroke:#3ddc84;stroke-width:.8}
 .simtag{
   font-family:var(--mono);font-size:9px;letter-spacing:.06em;color:var(--amber);font-weight:700;
   border:1px solid rgba(255,180,84,.5);border-radius:4px;padding:1px 5px;background:rgba(255,180,84,.1);white-space:nowrap;
@@ -279,6 +285,14 @@ body.cmode .breaking .tag b{letter-spacing:.1em}
 /* while this message is the one being read, keep its button visible */
 .speakbtn.busy{opacity:1;color:var(--green);border-color:rgba(61,220,132,.45);background:rgba(61,220,132,.1)}
 .msg.ai:has(.speakbtn.busy) .msgacts{opacity:1}
+#imgBtn{
+  flex-shrink:0;background:var(--panel);border:1px solid var(--line);color:var(--txt-dim);
+  border-radius:12px;padding:9px 11px;font-size:13px;cursor:pointer;transition:.18s;line-height:1;
+  filter:grayscale(1) opacity(.62);
+}
+#imgBtn:hover{border-color:rgba(138,180,255,.4);filter:none}
+#imgBtn.novis{filter:grayscale(1) opacity(.45)}
+#imgBtn.novis:hover{border-color:rgba(255,180,84,.4)}
 /* matches #regenBtn so the composer reads as one row of controls */
 #ttsBtn{
   flex-shrink:0;background:var(--panel);border:1px solid var(--line);color:var(--txt-dim);
@@ -678,6 +692,52 @@ textarea#input::placeholder{color:var(--txt-faint)}
 .gauge i{position:absolute;top:-3px;width:3px;height:14px;background:#fff;border-radius:2px;box-shadow:0 0 8px rgba(255,255,255,.85)}
 .bigstat{font-size:30px;font-weight:800;line-height:1;margin-bottom:2px}
 .tvlbar{height:5px;border-radius:99px;background:var(--accent);opacity:.55;margin-top:3px}
+/* images */
+#imgTray{display:flex;flex-wrap:wrap;gap:8px;padding:0 4px 9px}
+#imgTray:empty{display:none}
+.imgchip{
+  position:relative;width:74px;height:74px;border-radius:11px;overflow:hidden;
+  border:1px solid var(--line2);background:var(--panel);flex-shrink:0;
+}
+.imgchip img{width:100%;height:100%;object-fit:cover;display:block}
+.imgchip .rm{
+  position:absolute;top:2px;right:2px;width:19px;height:19px;border:none;border-radius:50%;
+  background:rgba(8,8,12,.85);color:#fff;cursor:pointer;font-size:11px;line-height:1;padding:0;
+}
+.imgchip .rm:hover{background:var(--red)}
+.imgchip .sz{
+  position:absolute;bottom:0;left:0;right:0;font-family:var(--mono);font-size:7.5px;
+  background:rgba(8,8,12,.8);color:var(--txt-dim);text-align:center;padding:2px 0;
+}
+.imgchip.busy::after{
+  content:"";position:absolute;inset:0;background:rgba(8,8,12,.55);
+  backdrop-filter:blur(1px);
+}
+.bubble .attimg{
+  max-width:min(340px,100%);border-radius:12px;border:1px solid var(--line);
+  display:block;margin:4px 0 8px;cursor:zoom-in;
+}
+.imgmeta{
+  font-family:var(--mono);font-size:9.5px;line-height:1.7;color:var(--txt-faint);
+  border-left:2px solid var(--accent);padding:7px 10px;margin:0 0 9px;
+  background:rgba(138,180,255,.04);border-radius:0 8px 8px 0;
+}
+.imgmeta b{color:var(--txt-dim)}
+.swatches{display:inline-flex;gap:3px;vertical-align:-2px;margin-left:4px}
+.swatch{width:11px;height:11px;border-radius:3px;border:1px solid rgba(255,255,255,.18)}
+.lightbox{
+  position:fixed;inset:0;z-index:90;display:none;place-items:center;padding:24px;
+  background:rgba(4,4,7,.93);backdrop-filter:blur(8px);cursor:zoom-out;
+}
+.lightbox.open{display:grid}
+.lightbox img{max-width:100%;max-height:100%;border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.7)}
+.fthumb{
+  width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0;
+  border:1px solid var(--line);background:var(--panel);
+}
+.fitem.hasimg{display:flex;gap:10px;align-items:flex-start}
+.fitem.hasimg .fbody{flex:1;min-width:0}
+.novis{color:var(--amber)}
 /* core board */
 .tpc{border:1px solid var(--line);border-radius:11px;padding:9px 11px;margin-bottom:8px;background:rgba(255,255,255,.02)}
 .tpc .tl{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
@@ -864,8 +924,11 @@ textarea#input::placeholder{color:var(--txt-faint)}
       <div class="tempnote">👻 temporary chat — nothing here is saved</div>
       <form class="composer" id="composer" autocomplete="off">
         <div id="modelMenu" role="menu"></div>
+        <div id="imgTray" hidden></div>
         <div class="inputwrap">
           <textarea id="input" rows="1" placeholder="Ask MusaGPT about the news… light teasing included"></textarea>
+          <button type="button" id="imgBtn" title="Attach an image — analysed locally, and sent to the model if it can see" aria-label="Attach an image">🖼</button>
+          <input type="file" id="imgFile" accept="image/*" multiple hidden>
           <button type="button" id="ttsBtn" aria-pressed="false" title="Read replies aloud" aria-label="Read replies aloud: off">🔊</button>
           <button type="button" id="regenBtn" title="Regenerate the last reply" aria-label="Regenerate last reply">↻</button>
           <button type="button" id="modelPill" aria-haspopup="menu" aria-label="Choose model"><span id="modelPillName">core</span> <span class="caret">▾</span></button>
@@ -884,7 +947,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
       </div>
       <div class="disclaim" id="disclaim">
   <span>sarcastic by design · every figure is live or labelled · simulated fallback always marked</span>
-  <span class="dsrc">wire: GDELT · Reddit · HN · BBC · AJE · NPR · DW · France24 · Sky &nbsp;·&nbsp; desk: war map · ALPR · prayer · الجزيرة · Senate 2026 · crypto · projections</span>
+  <span class="dsrc">wire: GDELT · Reddit · HN · BBC · AJE · NPR · DW · France24 · Sky &nbsp;·&nbsp; desk: war map · ALPR · prayer · الجزيرة · Senate 2026 · crypto · projections · core · images</span>
 </div>
     </div>
   </div>
@@ -966,6 +1029,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
             <span><i style="background:#ffb454"></i>unrest / security</span>
             <span><i style="background:#8ab4ff"></i>diplomacy / talks</span>
             <span><i style="background:#3ddc84"></i>aid / ceasefire</span>
+            <span><i style="background:transparent;border:1px solid #3ddc84"></i>translated from الجزيرة</span>
             <span style="margin-left:auto">◎ ring = multiple outlets</span>
           </div>
         </div>
@@ -1040,7 +1104,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 
     <!-- ---- AL JAZEERA ARABIC ---- -->
     <section class="board" id="b-arab" role="tabpanel">
-      <div class="bnote" id="arabNote">الجزيرة live, rendered right-to-left with English under each line. Machine translation, labelled by engine; where none is reachable the Arabic stands alone.</div>
+      <div class="bnote" id="arabNote">الجزيرة live, rendered right-to-left with English under each line. Machine translation, labelled by engine; where none is reachable the Arabic stands alone. <b>Translated headlines from the last 5 hours also join the main wire and the war map</b>, badged <span style="color:#7fd6a0">ع→en</span> — a key-term gloss never does, since that isn't a sentence.</div>
       <div class="bcard">
         <h4>🌍 الجزيرة · AL JAZEERA ARABIC <span class="n" id="arabCount">—</span></h4>
         <div class="blist" id="arabList" style="max-height:none"><div class="bempty">Not loaded yet.</div></div>
@@ -1209,6 +1273,8 @@ textarea#input::placeholder{color:var(--txt-faint)}
 
   </div>
 </div>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-label="Image viewer"><img id="lightboxImg" alt=""></div>
 
 <!-- ============ SETTINGS MODAL ============ -->
 <div class="overlay" id="settingsModal">
@@ -8342,6 +8408,12 @@ function coreReadout(){
    NEWS ENGINE — GDELT → Reddit → simulated fallback (labeled)
    ================================================================ */
 const HOUR = 60*60*1000;
+/* Al Jazeera Arabic is translated before it reaches the wire, which takes a
+   pass per headline — so it arrives late and would fall straight out of a
+   one-hour window. Translated copy is kept for five hours instead; every
+   other source keeps the hour. */
+const AJ_WINDOW = 5*60*60*1000;
+function maxAgeFor(it){ return it && it.translated ? AJ_WINDOW : HOUR; }
 let FEED = [];
 let idSeq = 1;
 let srcMode = "connecting";
@@ -8403,7 +8475,7 @@ function sevFor(it){
 function refreshSevs(){ for(const it of FEED) it.sev = sevFor(it); }
 function pruneFeed(){
   const keep = [], dropped = [];
-  for(const it of FEED) (now()-it.t < HOUR && it.t <= now()+60000 ? keep : dropped).push(it);
+  for(const it of FEED) (now()-it.t < maxAgeFor(it) && it.t <= now()+60000 ? keep : dropped).push(it);
   for(const it of dropped){ seenKeys.delete(keyOf(it.text, it.url)); clusters.delete(it.sig); }
   FEED = keep;
 }
@@ -8451,9 +8523,21 @@ function addItems(list){
   let fresh = [];
   for(const raw of list){
     if(!raw.title || !raw.t) continue;
-    if(now()-raw.t >= HOUR || raw.t > now()+60000) continue;
+    if(now()-raw.t >= maxAgeFor(raw) || raw.t > now()+60000) continue;
     const k = keyOf(raw.title, raw.url);
-    if(seenKeys.has(k)) continue;
+    if(seenKeys.has(k)){
+      /* A translated headline is strictly better than the untranslated copy
+         of the same story, so it replaces it rather than being dropped by the
+         dedupe. Al Jazeera publishes the same URL on its Arabic and English
+         feeds, and whichever arrived first would otherwise win by accident. */
+      if(raw.translated){
+        const prev = FEED.find(x=>keyOf(x.text, x.url) === k && !x.translated);
+        if(prev){
+          clusters.delete(prev.sig);
+          FEED = FEED.filter(x=>x !== prev);
+        }else continue;
+      }else continue;
+    }
     seenKeys.add(k);
 
     /* same event already on the wire from another outlet? merge instead of duplicate.
@@ -8471,7 +8555,9 @@ function addItems(list){
     }
     const item = { id:idSeq++, t:raw.t, cat:categorize(raw.title, raw.hint),
                    text:raw.title, url:safeUrl(raw.url), src:raw.src||null,
-                   sim:!!raw.sim, sig, sources:[raw.src||"unknown"] };
+                   sim:!!raw.sim, sig, img: raw.img || null,
+                   translated: !!raw.translated, ar: raw.ar || null, mt: raw.mt || null,
+                   sources:[raw.src||"unknown"] };
     item.sev = sevFor(item);
     clusters.set(sig, item);
     fresh.push(item);
@@ -8547,8 +8633,26 @@ function parseFeedXml(xml, srcName){
     const when = pick(n,"pubDate") || pick(n,"published") || pick(n,"updated") || pick(n,"dc:date") || pick(n,"date");
     let link = pick(n,"link");
     if(!link){ const a = n.getElementsByTagName("link")[0]; link = a ? a.getAttribute("href") : ""; }
+    /* Newsroom feeds carry art in three different places depending on the CMS;
+       take whichever is present rather than guessing a URL. */
+    let img = "";
+    const mt = n.getElementsByTagName("media:thumbnail")[0] || n.getElementsByTagName("thumbnail")[0];
+    if(mt) img = mt.getAttribute("url") || "";
+    if(!img){
+      const mc = n.getElementsByTagName("media:content")[0] || n.getElementsByTagName("content")[0];
+      if(mc && /^image\//.test(mc.getAttribute("type") || "image/")) img = mc.getAttribute("url") || "";
+    }
+    if(!img){
+      const en = n.getElementsByTagName("enclosure")[0];
+      if(en && /^image\//.test(en.getAttribute("type") || "")) img = en.getAttribute("url") || "";
+    }
+    if(!img){
+      const desc = pick(n,"description") || pick(n,"summary") || "";
+      const m = /<img[^>]+src=["\']([^"\']+)["\']/i.exec(desc);
+      if(m) img = m[1];
+    }
     const t = when ? Date.parse(when) : NaN;
-    return { title, t: isNaN(t) ? null : t, url: link || null, src: srcName };
+    return { title, t: isNaN(t) ? null : t, url: link || null, src: srcName, img: safeUrl(img) || null };
   }).filter(x=>x.title);
 }
 /* extra newsroom wires — each is independent, so one dead feed costs nothing */
@@ -8866,17 +8970,23 @@ function renderFeed(newId){
       <div class="fmeta">
         <span class="fcat${catClass(it)}">${sim ? "DEMO" : it.sev} · ${it.cat}</span>
         ${sim?`<span class="simtag" title="${esc(SIM_WARN)}">⚠ SIMULATED</span>`:""}
+        ${it.translated?`<span class="trtag" title="Machine-translated from Arabic by ${esc(it.mt||"MT")}. Original: ${esc(it.ar||"")}">ع→en</span>`:""}
         ${n>1&&!sim?`<span class="nsrc" title="${esc(it.sources.join(", "))}">◈ ${n}</span>`:""}
         ${hits.length&&!sim?`<span class="whit" title="matches your watchlist">👁 ${esc(hits[0])}</span>`:""}
         <span class="fage">${ago(it.t)}</span>
       </div>
       <p>${esc(it.text)}</p>
+      ${!sim && it.img ? `<img class="fthumb" src="${esc(it.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
       ${sim ? `<span class="fsrc simsrc">generated locally · not a real event</span>`
             : it.src ? `<span class="fsrc">${esc(n>1 ? it.sources.slice(0,3).join(" · ") : it.src)}</span>` : ""}
     </${tag}>`;
   }).join("");
   setFeedCounts(label);
 }
+/* The Arabic desk feeds the main wire, so it is fetched on the same schedule
+   as everything else rather than only when its board is opened. */
+setTimeout(()=>{ if(!arabState.loaded && !arabState.loading) fetchArab(); }, 4000);
+setInterval(()=>{ if(!document.hidden && !arabState.loading) fetchArab(); }, 6*60000);
 setInterval(()=>onFeedChanged(), 20000);
 setInterval(()=>refreshNews(false), 120000);
 
@@ -9100,7 +9210,7 @@ function placeOf(text){
    naive-Bayes router ("market" vs "markets"); it is the single easiest way to
    write a regex that silently matches nothing. */
 const WAR_KIND = [
-  ["strike",   /\b(air ?strikes?|airstrikes?|missiles?|drones?|shelling|bombard\w*|artiller\w*|offensives?|incursions?|invasions?|troops?|soldiers?|militar\w*|warplanes?|combat|front ?lines?|battalions?|casualt\w*|killed in|war\b|wars\b|warfare|fighting|clashes?|militants?|insurgent\w*|rebels?|junta|sieges?|occupied|paramilitar\w*)\b/i],
+  ["strike",   /\b(air ?strikes?|airstrikes?|missiles?|drones?|shelling|bombard\w*|artiller\w*|offensives?|incursions?|invasions?|troops?|soldiers?|militar\w*|warplanes?|combat|front ?lines?|battalions?|casualt\w*|killed in|war\b|wars\b|warfare|fighting|clashes?|militants?|insurgent\w*|rebels?|junta|sieges?|occupied|paramilitar\w*|arm(?:y|ies)|navy|air force|seiz\w*|captur\w*|recaptur\w*|retak\w*|advanc\w*|ambush\w*|sniper|mortar|artillery|checkpoint|frontline)\b/i],
   ["unrest",   /\b(protest\w*|riot\w*|unrest|crackdowns?|coups?|martial law|curfews?|state of emergency|detain\w*|arrest\w*|police|security forces|borders?|migrant\w*|refugee\w*|displace\w*|evacuat\w*|hostages?|kidnap\w*|terror\w*|bomb\w*|shootings?|explosions?|blasts?|unrest)\b/i],
   ["talks",    /\b(talks?|negotiat\w*|summits?|diplomat\w*|envoys?|delegations?|treaty|treaties|accords?|resolutions?|sanction\w*|embass(?:y|ies)|ambassadors?|un security council|nato|foreign ministers?|peace plans?)\b/i],
   ["relief",   /\b(ceasefires?|truces?|aid|humanitarian|convoys?|corridors?|relief|hostages? released|prisoner (?:swaps?|exchanges?)|withdraw\w*|peace deals?|de-?escalat\w*)\b/i],
@@ -9165,7 +9275,7 @@ function renderWarMap(){
     const sel = warSelected === p.key ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r+4.5).toFixed(1)}" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width=".6"/>` : "";
     return `<g class="mk" data-p="${esc(p.key)}" tabindex="0" role="button" aria-label="${esc(p.key)}: ${n} stories">
       ${pulse}${ring}${sel}
-      <circle class="core" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="${col}" fill-opacity=".82"/>
+      <circle class="core ${p.items.some(i=>i.translated)?"tr":""}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="${col}" fill-opacity=".82"/>
       ${clear?`<text class="mklab" x="${(x+r+2).toFixed(1)}" y="${(y+2).toFixed(1)}">${esc(p.key.toUpperCase().slice(0,16))}</text>`:""}
     </g>`;
   }).join("");
@@ -9189,6 +9299,7 @@ function renderWarList(pts, unplaced){
         <div class="bm">
           <span class="btag ${sim?"sim":it.sev==="BREAKING"?"hot":p.kind==="strike"?"hot":p.kind==="unrest"?"warm":"cool"}">${sim?"⚠ SIMULATED":WAR_LABEL[warKind(it.text)]||"SECURITY"}</span>
           <span class="btag">📍 ${esc(p.key)}</span>
+          ${it.translated?`<span class="btag" style="color:#7fd6a0;border-color:rgba(61,220,132,.4)">ع→en</span>`:""}
           ${!sim && (it.sources||[]).length>1?`<span class="btag cool">◈ ${it.sources.length}</span>`:""}
           <span class="btag">${ago(it.t)}</span>
         </div>
@@ -9711,11 +9822,23 @@ async function fetchArab(){
   arabState.loaded = true; arabState.at = now(); arabState.loading = false;
   renderArab();
   /* translate sequentially so we don't get rate-limited into the fallback */
+  const forWire = [];
   for(const it of arabState.items){
     it.trying = true;
     try{ it.tr = await translateAr(it.title); }catch(e){ it.tr = null; }
     it.trying = false;
     renderArab();
+    /* Only a real machine translation goes on the wire. A key-term gloss is
+       not a headline — putting "Gaza · strike · aid" in the ticker as if it
+       were a sentence would be worse than leaving it on its own board. */
+    if(it.tr && it.tr.mt && it.tr.en && it.t && now() - it.t < AJ_WINDOW){
+      forWire.push({ title: it.tr.en, t: it.t, url: it.url, src: "aljazeera (ar→en)",
+                     translated: true, ar: it.title, mt: it.tr.eng, hint: "WORLD" });
+    }
+  }
+  if(forWire.length){
+    const fresh = addItems(forWire);
+    if(fresh.length){ onFeedChanged(fresh[0] && fresh[0].id); }
   }
 }
 function renderArab(){
@@ -10723,6 +10846,47 @@ $("#coreTopK").addEventListener("input", function(){ $("#coreTopKV").textContent
 $("#coreInspect").addEventListener("click", renderCoreInspect);
 $("#coreIn").addEventListener("keydown", e=>{ if(e.key === "Enter") renderCoreInspect(); });
 
+/* ---------- images ---------- */
+$("#imgBtn").addEventListener("click", ()=>$("#imgFile").click());
+$("#imgFile").addEventListener("change", function(){ addImages(this.files); this.value = ""; });
+$("#imgTray").addEventListener("click", e=>{
+  const b = e.target.closest("[data-rmimg]");
+  if(!b) return;
+  pendingImgs = pendingImgs.filter(i=>i.id !== b.getAttribute("data-rmimg"));
+  renderImgTray();
+});
+/* Paste is how people actually attach a screenshot. */
+$("#input").addEventListener("paste", e=>{
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  const files = [];
+  for(const it of items) if(it.kind === "file" && /^image\//.test(it.type)){ const f = it.getAsFile(); if(f) files.push(f); }
+  if(files.length){ e.preventDefault(); addImages(files); }
+});
+/* Drag-and-drop anywhere over the chat column. */
+["dragover","drop"].forEach(ev=>{
+  document.addEventListener(ev, e=>{
+    if(!e.dataTransfer || !Array.from(e.dataTransfer.types||[]).includes("Files")) return;
+    e.preventDefault();
+    if(ev === "drop") addImages(e.dataTransfer.files);
+  });
+});
+$("#msgs").addEventListener("click", e=>{
+  const img = e.target.closest(".attimg, .fthumb");
+  if(!img) return;
+  $("#lightboxImg").src = img.src;
+  $("#lightbox").classList.add("open");
+});
+$("#lightbox").addEventListener("click", ()=>$("#lightbox").classList.remove("open"));
+function syncImgBtn(){
+  const b = $("#imgBtn");
+  if(!b) return;
+  const vis = visionAvailable();
+  b.classList.toggle("novis", !vis);
+  b.title = vis
+    ? "Attach an image — analysed locally and sent to " + shortName(effectiveModel())
+    : "Attach an image — analysed locally. " + shortName(effectiveModel()) + " can't see images, so it'll answer from that read.";
+}
+
 /* ---------- text to speech ---------- */
 if(ttsSupported()){
   loadVoices();
@@ -10989,6 +11153,159 @@ function updateStats(){
   $("#patVal").textContent  = pat+"%";  $("#patFill").style.width  = pat+"%";
   const ts = $("#trainStat");
   if(ts) ts.textContent = "core-2 trained in-browser · "+trainStats.examples+" examples · "+trainStats.tokens+" tokens · vocab "+nb.vocab.size;
+}
+
+/* ================================================================
+   IMAGES — three honest layers.
+
+   1. LOCAL. Anything attached is analysed here in the tab with canvas:
+      size, palette, brightness, contrast, sharpness, a perceptual hash.
+      No network, no model, works offline. It measures pixels; it does
+      not recognise anything, and the UI says so.
+   2. VISION. If a key is set and the chosen model can see, the image
+      goes to it in that provider's own format. Claude, GPT-4o/5 and
+      Gemini all accept base64; the local core cannot, and says so
+      rather than pretending the picture was considered.
+   3. FEED. Thumbnails that arrive with a story are shown as they came.
+   ================================================================ */
+/* The analysis module is optional. If it isn't present the attachment still
+   works — you just get the picture without the measurements, rather than a
+   ReferenceError halfway through building the message. */
+if(typeof mcImgFmtBytes !== "function"){
+  window.mcImgFmtBytes = function(n){
+    if(!n) return "—";
+    const u = ["B","KB","MB","GB"]; let i = 0, v = n;
+    while(v >= 1024 && i < u.length-1){ v /= 1024; i++; }
+    return v.toFixed(v < 10 && i ? 1 : 0) + " " + u[i];
+  };
+}
+if(typeof mcImgAnalyse !== "function") window.mcImgAnalyse = function(){ return Promise.resolve(null); };
+if(typeof mcImgExif !== "function") window.mcImgExif = function(){ return Promise.resolve(null); };
+
+const MAX_IMG_BYTES = 4.5 * 1024 * 1024;   /* provider limits sit near 5MB */
+const MAX_IMG_DIM   = 1568;                /* larger buys nothing and costs tokens */
+let pendingImgs = [];
+
+/* Which models can actually look at a picture. Anything not listed gets
+   an honest "I can't see it" rather than a silent text-only send. */
+function modelSeesImages(model){
+  const m = String(model || "");
+  if(/^claude/.test(m)) return true;
+  if(/^gpt-4o|^gpt-5/.test(m)) return true;
+  if(/^gemini/.test(m)) return true;
+  return false;                            /* musa-core-3, deepseek: text only */
+}
+function visionAvailable(){ return !!liveMode() && modelSeesImages(effectiveModel()); }
+
+/* Downscale before anything else: a 12MP phone photo is 30x the useful
+   size, blows the request limit, and costs tokens for detail no model
+   uses at this resolution. */
+function shrinkImage(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const scale = Math.min(1, MAX_IMG_DIM / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        /* PNG for graphics with few colours, JPEG for photographs — a
+           screenshot re-encoded as JPEG looks terrible and gets bigger. */
+        let mime = "image/jpeg", data = c.toDataURL("image/jpeg", 0.85);
+        const png = c.toDataURL("image/png");
+        if(png.length < data.length){ mime = "image/png"; data = png; }
+        URL.revokeObjectURL(url);
+        resolve({ dataUrl:data, mime, w, h, natW:img.width, natH:img.height, canvas:c });
+      }catch(e){ URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("not a readable image")); };
+    img.src = url;
+  });
+}
+async function addImages(files){
+  for(const f of Array.from(files || [])){
+    if(!/^image\//.test(f.type)) continue;
+    if(pendingImgs.length >= 4){ toastImg("Four images is the limit per message."); break; }
+    const id = "img" + Math.random().toString(36).slice(2,9);
+    const entry = { id, name:f.name || "pasted image", bytes:f.size, busy:true };
+    pendingImgs.push(entry);
+    renderImgTray();
+    try{
+      const shrunk = await shrinkImage(f);
+      Object.assign(entry, shrunk, { busy:false });
+      entry.approxBytes = Math.round(shrunk.dataUrl.length * 0.75);
+      if(entry.approxBytes > MAX_IMG_BYTES){
+        pendingImgs = pendingImgs.filter(x=>x.id !== id);
+        toastImg("That image is still over the size limit after downscaling.");
+      }else{
+        try{ entry.analysis = await mcImgAnalyse(shrunk.canvas, {}); }catch(e){ entry.analysis = null; }
+        try{ entry.exif = await mcImgExif(await f.arrayBuffer()); }catch(e){ entry.exif = null; }
+      }
+    }catch(e){
+      pendingImgs = pendingImgs.filter(x=>x.id !== id);
+      toastImg("Couldn't read that file as an image.");
+    }
+    renderImgTray();
+  }
+}
+function toastImg(msg){
+  if(activeChat) addMsg("ai", fmt("🖼 " + msg), true);
+}
+function renderImgTray(){
+  const tray = $("#imgTray");
+  if(!tray) return;
+  tray.hidden = !pendingImgs.length;
+  tray.innerHTML = pendingImgs.map(i=>`
+    <div class="imgchip ${i.busy?"busy":""}" data-img="${esc(i.id)}">
+      ${i.dataUrl?`<img src="${i.dataUrl}" alt="${esc(i.name)}">`:""}
+      <button class="rm" data-rmimg="${esc(i.id)}" aria-label="Remove image">✕</button>
+      ${i.w?`<span class="sz">${i.w}×${i.h}</span>`:""}
+    </div>`).join("");
+}
+/* A compact, honest description of what the local pass actually measured. */
+function imgMetaHtml(entry){
+  const a = entry.analysis;
+  if(!a) return `<div class="imgmeta">${entry.w}×${entry.h} · local analysis unavailable for this file.</div>`;
+  const sw = (a.palette||[]).slice(0,6).map(c=>`<i class="swatch" style="background:${esc(c.hex)}"></i>`).join("");
+  const ex = entry.exif;
+  return `<div class="imgmeta">
+    <b>${entry.natW||entry.w}×${entry.natH||entry.h}</b> · ${esc(a.likely||"image")} · ${mcImgFmtBytes(entry.bytes||0)}
+    ${sw?`<span class="swatches">${sw}</span>`:""}<br>
+    brightness ${(a.brightness*100).toFixed(0)}% · contrast ${(a.contrast*100).toFixed(0)}% · saturation ${(a.saturation*100).toFixed(0)}%
+    · ${a.sharpness < 40 ? "looks soft/blurry" : "sharp"} · entropy ${(a.entropy||0).toFixed(1)} bits<br>
+    ${ex && (ex.make||ex.model) ? `shot on ${esc([ex.make,ex.model].filter(Boolean).join(" "))}${ex.dateTime?` · ${esc(ex.dateTime)}`:""}${ex.gps?` · ${ex.gps.lat.toFixed(4)}, ${ex.gps.lon.toFixed(4)}`:""}<br>` : ""}
+    <span style="opacity:.75">phash <code>${esc((a.phash||"").slice(0,16))}</code> — measured locally, nothing uploaded.</span>
+  </div>`;
+}
+/* What the local pass can honestly say about an attachment. It measured
+   pixels; it did not recognise anything, and it says which is which. */
+function imgLocalNote(imgs){
+  const lines = imgs.map((i, n)=>{
+    const a = i.analysis;
+    if(!a) return `**Image ${n+1}** — ${i.w}×${i.h}, couldn't analyse the pixels.`;
+    const pal = (a.palette||[]).slice(0,4).map(c=>c.hex).join(", ");
+    return `**Image ${n+1}** — ${i.natW||i.w}×${i.natH||i.h}, ${mcImgFmtBytes(i.bytes||0)}, reads as a **${a.likely}**.\n`
+      + `  Brightness ${(a.brightness*100).toFixed(0)}%, contrast ${(a.contrast*100).toFixed(0)}%, saturation ${(a.saturation*100).toFixed(0)}%, entropy ${(a.entropy||0).toFixed(1)} bits, ${a.sharpness < 40 ? "soft or blurry" : "sharp"}.\n`
+      + (pal ? `  Dominant colours: ${pal}.\n` : "")
+      + (i.exif && (i.exif.make || i.exif.model) ? `  EXIF: ${[i.exif.make, i.exif.model].filter(Boolean).join(" ")}${i.exif.dateTime?`, ${i.exif.dateTime}`:""}${i.exif.gps?`, at ${i.exif.gps.lat.toFixed(4)}, ${i.exif.gps.lon.toFixed(4)}`:""}.\n` : "");
+  }).join("\n");
+  return `🖼 **Local read** (measured in your browser, nothing uploaded):\n\n${lines}\n`
+    + `_That is pixel statistics, not recognition — no OCR, no object or face detection. I can tell you it looks like a photograph and what colours dominate; I cannot tell you what is in it without a model that can see._`;
+}
+
+/* Provider-specific image parts. Each API takes base64 in its own shape. */
+function imageParts(provider, imgs){
+  return imgs.filter(i=>i.dataUrl).map(i=>{
+    const b64 = i.dataUrl.split(",")[1];
+    if(provider === "anthropic")
+      return { type:"image", source:{ type:"base64", media_type:i.mime, data:b64 } };
+    if(provider === "google")
+      return { inline_data:{ mime_type:i.mime, data:b64 } };
+    return { type:"image_url", image_url:{ url:i.dataUrl } };   /* openai shape */
+  });
 }
 
 /* ================================================================
@@ -11553,6 +11870,17 @@ function localReply(raw, _redir){
     return `📰 “${esc(g)}”\n\n**Synthetic — not a real story.** That's an n-gram sample from ${st.lm.tokens.toLocaleString()} tokens of live wire copy: trigram where the context was seen enough, backing off to bigram then unigram, temperature 0.9 with top-k 8. Turn the knobs yourself on 🧭 DESK → 🧠 CORE.`;
   }
 
+  /* ---- images ---- */
+  if(/\b(image|picture|photo|screenshot|attach|upload|vision|see this|look at)\b/.test(l) && !/\bimage of\b/.test(l)){
+    const vis = visionAvailable();
+    return "🖼 **Images work here.** Click the 🖼 in the composer, paste from your clipboard, or drop a file anywhere on the page.\n\n"
+      + "**What always happens, offline:** I measure it in your browser with canvas — dimensions, dominant palette, brightness, contrast, saturation, sharpness, entropy, EXIF (camera, timestamp, GPS if present) and a perceptual hash. Nothing is uploaded for that.\n\n"
+      + (vis
+          ? `**And right now the picture also goes to ${shortName(effectiveModel())}**, which can actually see it — so ask me what's in it.`
+          : `**But ${shortName(effectiveModel())} can't see images**, so it'd answer from the local numbers only. Paste a Claude, GPT-4o/5 or Gemini key in ⚙ Settings for real vision.`)
+      + "\n\n_Straight about the limits: the local pass is statistics, not recognition. No OCR, no object or face detection — that needs a model, and I'm not going to pretend otherwise._";
+  }
+
   /* ---- voice ---- */
   if(/\b(read (that|this|it)( again| aloud| out loud| to me)?|say that again|speak|out loud|aloud|voice|text.?to.?speech|tts|stop talking|shut up|be quiet|mute)\b/.test(l)){
     if(!ttsSupported()){
@@ -11743,6 +12071,7 @@ function localReply(raw, _redir){
       + "• 🗳 **SENATE 2026** — which seats are up plus live coverage per race. No polls, and I'll tell you exactly why.\n"
       + "• ₿ **CRYPTO** — live markets from three sources, on-chain data, Fear & Greed, chain TVL, portfolio and price alerts. Crypto mode puts prices in the banner and crypto desks on the wire.\n"
       + "• 📈 **PROJECTIONS** — wire volume, story momentum, desk shift and a volatility cone. Every number shows its formula and its error.\n\n"
+      + "• 🖼 **Images** — attach, paste or drop one. It's measured locally (size, palette, brightness, sharpness, EXIF, perceptual hash) and sent to the model too if the model can see.\n\n"
       + (ttsSupported() ? "I can also **read replies aloud** — 🔊 in the composer, or just say *read that aloud*. Browser speech engine, no key, works offline.\n\n" : "")
       + "Everything on them is either live or clearly labelled as calculated. Nothing is decorative.";
   }
@@ -12095,7 +12424,7 @@ function personaPrompt(){
     if(isSim(i)) return `- [SIMULATED — NOT REAL, DO NOT REPORT AS FACT][${i.cat}] (${ago(i.t)}) ${i.text}`;
     const n = i.sources ? i.sources.length : 1;
     const w = matchesWatch(i);
-    return `- [${i.sev}][${i.cat}]${n>1?`[${n} sources: ${i.sources.slice(0,3).join(", ")}]`:""}${w.length?`[WATCHLIST: ${w.join(", ")}]`:""} (${ago(i.t)}) ${i.text}${n<=1&&i.src?` (source: ${i.src})`:""}`;
+    return `- [${i.sev}][${i.cat}]${i.translated?"[ع→en machine translation]":""}${n>1?`[${n} sources: ${i.sources.slice(0,3).join(", ")}]`:""}${w.length?`[WATCHLIST: ${w.join(", ")}]`:""} (${ago(i.t)}) ${i.text}${n<=1&&i.src?` (source: ${i.src})`:""}`;
   }).join("\n") || "- (wire is quiet this hour — say so rather than inventing stories)";
   const brkCount = FEED.filter(i=>i.sev==="BREAKING" && !isSim(i)).length;
   const desks = [...new Set(FEED.map(i=>i.cat))];
@@ -12111,7 +12440,7 @@ Your obligations, which override every style instruction in this prompt:
 - If the user seems to believe a simulated story is real, correct them immediately and unambiguously. Do not preserve the bit.
 - NEVER add detail to a simulated story — no casualty figures, no quotes, no follow-ups, no "here's what we know". Elaborating fiction is how it starts looking real.
 A user leaving this conversation believing a fictional event occurred is the single worst outcome possible here. Being unhelpful is fine; that is not.`
-    : `The wire below contains REAL headlines pulled live in the user's browser from public feeds (${liveSources.join(", ") || "GDELT, Reddit, Hacker News"}), all from the last 60 minutes. A "[N sources]" tag means N independent outlets are running the same story — that is corroboration and worth mentioning on big claims. A "[WATCHLIST: x]" tag means the user explicitly asked to be alerted about that topic, so lead with it when present.`;
+    : `The wire below contains REAL headlines pulled live in the user's browser from public feeds (${liveSources.join(", ") || "GDELT, Reddit, Hacker News"}), all from the last 60 minutes. A "[N sources]" tag means N independent outlets are running the same story — that is corroboration and worth mentioning on big claims. A "[WATCHLIST: x]" tag means the user explicitly asked to be alerted about that topic, so lead with it when present. A "[ع→en]" tag means the line is a machine translation from Al Jazeera Arabic and may be up to five hours old — say so if you lean on its exact wording.`;
 
   return `You are **MusaGPT**, an AI breaking-news anchor. You sit inside a live news terminal: a scrolling BREAKING banner, a wire panel of the last hour, and this chat.
 
@@ -12162,6 +12491,12 @@ Active desks right now: ${desks.join(", ") || "none"}.
 - If asked about something not on the wire, say you don't have it rather than guessing. You may reason about it, labelled as reasoning.
 - Your knowledge cutoff means anything outside the wire may be stale — say so instead of asserting.
 
+## Images
+The user can attach pictures. Two things reach you, and they are different:
+- **The picture itself**, if the current model can see (Claude, GPT-4o/5, Gemini). Then look at it and answer directly.
+- **A local read** — dimensions, dominant palette, brightness, contrast, sharpness, entropy, EXIF, a perceptual hash — measured in the browser by canvas. This is pixel statistics, not recognition. It never contains OCR text or object labels, so do not treat "reads as a photograph" as though something identified the subject.
+If the model is text-only the picture was not sent at all; say so plainly rather than describing an image you did not receive. Never invent image contents from the local numbers.
+
 ## Safety
 No slurs, no hate, no demeaning real named individuals — mock institutions, market logic, and the user (gently) instead. If asked to attack a specific real person, decline lightly and pivot to a story. Keep it PG-13.
 
@@ -12187,14 +12522,33 @@ ${coreRead}
 ${wire}`;
 }
 
-async function liveReply(userText, bubble){
+async function liveReply(userText, bubble, imgs){
   const key = getKey();
   const model = effectiveModel();
+  const pics = (imgs || []).filter(i=>i.dataUrl);
+  /* An image sent to a model that can't see it would silently vanish. Better
+     to answer from the local pass and say plainly that the picture wasn't
+     looked at. */
+  if(pics.length && !modelSeesImages(model)){
+    const note = imgLocalNote(pics) + "\n\n_" + shortName(model) + " is text-only, so I answered from the local read above rather than pretending to have looked._";
+    const rest = localReply(userText || "what is this?");
+    const out = note + "\n\n" + rest;
+    await streamText(bubble, out.replace(/\*\*/g,"").replace(/`/g,""));
+    bubble.innerHTML = fmt(out);
+    return out;
+  }
   const history = mem.history.slice(-16);
   let url, headers, body, extract;
   const state = { refusal:false };
 
   if(liveMode() === "proxy"){
+    if(pics.length){
+      const note = imgLocalNote(pics) + "\n\n_The site-key proxy forwards text only, so the image wasn't sent upstream. Paste your own key in ⚙ Settings for vision._";
+      const rest = localReply(userText || "what is this?");
+      const out = note + "\n\n" + rest;
+      await streamText(bubble, out.replace(/\*\*/g,"").replace(/`/g,""));
+      bubble.innerHTML = fmt(out); return out;
+    }
     const res = await fetch("/api/chat", {
       method:"POST",
       headers:{ "content-type":"application/json" },
@@ -12218,7 +12572,10 @@ async function liveReply(userText, bubble){
     body = {
       model,
       stream:true,
-      messages:[{role:"system", content:personaPrompt()}, ...history, {role:"user", content:userText}]
+      messages:[{role:"system", content:personaPrompt()}, ...history,
+        { role:"user", content: pics.length
+          ? [...imageParts("openai", pics), { type:"text", text:userText || "What is in this image?" }]
+          : userText }]
     };
     if(prov === "openai" && /^gpt-5/.test(model)) body.max_completion_tokens = 2048;
     else body.max_tokens = (model === "deepseek-reasoner") ? 2048 : 1024;
@@ -12230,10 +12587,13 @@ async function liveReply(userText, bubble){
     headers = { "content-type":"application/json", "x-goog-api-key": key };
     body = {
       systemInstruction: { parts:[{ text: personaPrompt() }] },
-      contents: [...history, {role:"user", content:userText}].map(m=>({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }]
-      })),
+      contents: [...history.map(m=>({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }]
+        })),
+        { role:"user", parts: pics.length
+            ? [...imageParts("google", pics), { text: userText || "What is in this image?" }]
+            : [{ text: userText }] }],
       generationConfig: { maxOutputTokens: 1024 }
     };
     extract = ev => {
@@ -12253,7 +12613,10 @@ async function liveReply(userText, bubble){
       model,
       stream:true,
       system: personaPrompt(),
-      messages:[...history, {role:"user", content:userText}]
+      messages:[...history,
+        { role:"user", content: pics.length
+          ? [...imageParts("anthropic", pics), { type:"text", text:userText || "What is in this image?" }]
+          : userText }]
     };
     if(model === "claude-fable-5"){
       body.max_tokens = 4096;
@@ -12317,11 +12680,16 @@ async function liveReply(userText, bubble){
    SEND PIPELINE
    ================================================================ */
 async function handleSend(text){
-  if(busy || !text.trim()) return;
+  const imgs = pendingImgs.filter(i=>!i.busy && i.dataUrl);
+  if(busy || (!text.trim() && !imgs.length)) return;
   busy = true; $("#send").disabled = true;
   stopSpeaking();          /* a new question cuts off the old answer */
 
-  addMsg("user", fmt(text.trim()));
+  /* the tray empties as soon as the message is sent, so a slow reply can't
+     leave the images looking still-attached */
+  pendingImgs = []; renderImgTray();
+  const imgHtml = imgs.map(i=>`<img class="attimg" src="${i.dataUrl}" alt="${esc(i.name)}">` + imgMetaHtml(i)).join("");
+  addMsg("user", imgHtml + fmt(text.trim() || "_(image only)_"));
   mem.history.push({role:"user", content:text.trim()});
   recordMsg("user", text.trim());
   stats.msgs++; updateStats();
@@ -12336,7 +12704,7 @@ async function handleSend(text){
   try{
     if(liveMode()){
       try{
-        reply = histReply = await liveReply(text.trim(), bubble);
+        reply = histReply = await liveReply(text.trim(), bubble, imgs);
       }catch(err){
         histReply = localReply(text);
         reply = "Live mode hiccuped (`"+esc(String(err.message||err)).slice(0,140)+"`). Falling back to my trusty **local core** while you check the key/model.\n\n"+histReply;
@@ -12345,6 +12713,7 @@ async function handleSend(text){
       }
     }else{
       reply = histReply = localReply(text);
+      if(imgs.length) reply = histReply = imgLocalNote(imgs) + "\n\n" + reply;
       await streamText(bubble, reply.replace(/\*\*/g,"").replace(/`/g,""));
       bubble.innerHTML = fmt(reply);
     }
@@ -12673,6 +13042,7 @@ function syncModePills(){
   $("#coreChip").textContent  = lm ? "LIVE MODE" : "CORE ONLINE";
   if(lm) $("#pillLiveDesc").innerHTML = esc(eff)+"<br>"+(lm==="proxy"?"site-provided key":"streaming · your api key");
   $("#modelPillName").textContent = shortName(eff);
+  if(typeof syncImgBtn === "function") syncImgBtn();
 }
 $("#settingsBtn").addEventListener("click", ()=>{ openSettings(); closeSidebarMobile(); });
 $("#apiKey").addEventListener("input", e=>{
@@ -12685,6 +13055,7 @@ $("#closeSettings").addEventListener("click", ()=>modal.classList.remove("open")
 modal.addEventListener("click", e=>{ if(e.target === modal) modal.classList.remove("open"); });
 document.addEventListener("keydown", e=>{
   if(e.key !== "Escape") return;
+  if($("#lightbox").classList.contains("open")){ $("#lightbox").classList.remove("open"); return; }
   if($("#deck").classList.contains("open")){ closeDeck(); $("#deckBtn").focus(); return; }
   if(modal.classList.contains("open")){ modal.classList.remove("open"); $("#settingsBtn").focus(); return; }
   const mm = $("#modelMenu");
