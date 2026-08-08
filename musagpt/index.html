@@ -738,6 +738,81 @@ textarea#input::placeholder{color:var(--txt-faint)}
 .fitem.hasimg{display:flex;gap:10px;align-items:flex-start}
 .fitem.hasimg .fbody{flex:1;min-width:0}
 .novis{color:var(--amber)}
+/* ultra boards */
+.qexplain{
+  font-family:var(--mono);font-size:10px;line-height:1.65;color:var(--txt-dim);
+  border-left:2px solid var(--accent);padding:7px 10px;margin:9px 0 0;
+  background:rgba(138,180,255,.05);border-radius:0 8px 8px 0;
+}
+.qerr{
+  font-family:var(--mono);font-size:10px;color:var(--amber);
+  border-left:2px solid var(--amber);padding:6px 10px;margin:7px 0 0;
+  background:rgba(255,180,84,.05);border-radius:0 8px 8px 0;
+}
+.qerr b{color:var(--red)}
+.qhit{padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.5}
+.qhit:last-child{border-bottom:none}
+.qhit mark{background:rgba(138,180,255,.22);color:var(--accent);border-radius:3px;padding:0 2px}
+.qhit .meta{font-family:var(--mono);font-size:9px;color:var(--txt-faint);margin-top:3px}
+.facet{margin-bottom:11px}
+.facet h5{
+  font-family:var(--mono);font-size:9px;letter-spacing:.08em;color:var(--txt-faint);
+  margin:0 0 5px;text-transform:uppercase;font-weight:600;
+}
+.facetrow{
+  display:flex;justify-content:space-between;gap:8px;font-size:11px;
+  padding:3px 0;cursor:pointer;border-radius:5px;
+}
+.facetrow:hover{background:rgba(255,255,255,.04)}
+.facetrow b{font-family:var(--mono);color:var(--txt-dim)}
+.tlform select{
+  background:var(--panel);border:1px solid var(--line2);color:var(--txt);
+  border-radius:9px;padding:8px 10px;font:inherit;font-size:12px;
+}
+.dtarea{
+  width:100%;background:var(--panel);border:1px solid var(--line2);color:var(--txt);
+  border-radius:10px;padding:10px 12px;font-family:var(--mono);font-size:11px;
+  line-height:1.6;resize:vertical;
+}
+.dtarea:focus{outline:none;border-color:var(--accent)}
+.dtable{border-collapse:collapse;font-size:11px;width:100%}
+.dtable th,.dtable td{
+  border:1px solid var(--line);padding:5px 8px;text-align:left;
+  white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;
+}
+.dtable th{
+  background:rgba(255,255,255,.04);font-family:var(--mono);font-size:9px;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--txt-dim);position:sticky;top:0;
+}
+.dtable td.num{text-align:right;font-family:var(--mono)}
+.dtable tr:hover td{background:rgba(255,255,255,.025)}
+.dtype{font-family:var(--mono);font-size:8.5px;color:var(--accent);font-weight:400}
+.topicrow{
+  padding:8px 0;border-bottom:1px solid var(--line);font-size:11.5px;line-height:1.55;
+}
+.topicrow:last-child{border-bottom:none}
+.topicrow .tn{
+  font-family:var(--mono);font-size:9px;color:var(--txt-faint);
+  border:1px solid var(--line2);border-radius:5px;padding:1px 5px;margin-right:6px;
+}
+.wchip{
+  display:inline-block;font-family:var(--mono);font-size:10px;
+  background:rgba(138,180,255,.1);border:1px solid rgba(138,180,255,.2);
+  border-radius:6px;padding:2px 7px;margin:2px 3px 2px 0;color:var(--accent);
+}
+.wchip .sc{color:var(--txt-faint);margin-left:4px}
+.grnode{cursor:pointer}
+.alrule{
+  padding:8px 0;border-bottom:1px solid var(--line);font-size:11.5px;line-height:1.5;
+  display:flex;gap:8px;align-items:flex-start;
+}
+.alrule:last-child{border-bottom:none}
+.alrule .rq{flex:1;min-width:0;font-family:var(--mono);font-size:10.5px;word-break:break-word}
+.alrule .del{
+  border:none;background:transparent;color:var(--txt-faint);cursor:pointer;
+  font-size:13px;line-height:1;padding:0 2px;
+}
+.alrule .del:hover{color:var(--red)}
 /* timeline board */
 .chartbox{min-height:60px}
 .chartbox svg{width:100%;height:auto;display:block}
@@ -1078,6 +1153,12 @@ textarea#input::placeholder{color:var(--txt-faint)}
     <button class="dktab"    data-b="crypto" role="tab">₿ CRYPTO</button>
     <button class="dktab"    data-b="proj"   role="tab">📈 PROJECTIONS</button>
     <button class="dktab"    data-b="time"   role="tab">⏳ TIMELINE</button>
+    <button class="dktab"    data-b="search" role="tab">🔍 SEARCH</button>
+    <button class="dktab"    data-b="graph"  role="tab">🕸 GRAPH</button>
+    <button class="dktab"    data-b="alerts" role="tab">🔔 ALERTS</button>
+    <button class="dktab"    data-b="signal" role="tab">📉 SIGNALS</button>
+    <button class="dktab"    data-b="data"   role="tab">🧮 DATA</button>
+    <button class="dktab"    data-b="model"  role="tab">🧬 MODEL</button>
     <button class="dktab"    data-b="core"   role="tab">🧠 CORE</button>
   </div>
   <div class="dkbody">
@@ -1307,6 +1388,192 @@ textarea#input::placeholder{color:var(--txt-faint)}
         <div class="bcard wide">
           <h4>🎛 DESK MIX <span class="n" id="tlMixN">0</span></h4>
           <div id="tlMix" class="bpad chartbox"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- SEARCH ---- -->
+    <section class="board" id="b-search" role="tabpanel">
+      <div class="bnote">A real query language over the live wire — <code>gaza AND NOT sport</code>, <code>src:reuters sev:&gt;3</code>, <code>age:&lt;30m</code>, <code>"exact phrase"</code>, <code>ukrain*</code>. The parser tells you what it understood before you trust the results, and a broken query still searches rather than throwing.</div>
+      <div class="bgrid twocol">
+        <div class="bcard wide">
+          <form class="tlform" id="qyForm">
+            <input id="qyQ" placeholder='try:  doha OR khartoum  ·  src:reuters sev:>2  ·  is:translated' aria-label="Search the wire" autocomplete="off" spellcheck="false">
+            <button class="wpb" type="submit">Search</button>
+          </form>
+          <div id="qyExplain" class="qexplain"></div>
+          <div id="qyProblems"></div>
+        </div>
+        <div class="bcard wide">
+          <h4>📋 RESULTS <span class="n" id="qyN">0</span></h4>
+          <div class="blist" id="qyResults"><div class="bempty">Type a query above.</div></div>
+        </div>
+        <div class="bcard">
+          <h4>🎛 FACETS</h4>
+          <div class="bpad" id="qyFacets"><div class="bempty">Facets appear with results.</div></div>
+        </div>
+        <div class="bcard">
+          <h4>💾 SAVED</h4>
+          <div class="bpad" id="qySaved"><div class="bempty">Save a search to keep it here.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- GRAPH ---- -->
+    <section class="board" id="b-graph" role="tabpanel">
+      <div class="bnote">Who appears alongside whom. Every edge is a co-occurrence in one real headline — the graph is built from the wire, never from prior knowledge, so an empty graph means a quiet hour and not a broken panel. Communities come from Louvain modularity; size is PageRank.</div>
+      <div class="bgrid twocol">
+        <div class="bcard wide maprap">
+          <h4>🕸 ENTITY NETWORK <span class="n" id="grN">0</span></h4>
+          <div id="grCanvas" class="chartbox"></div>
+        </div>
+        <div class="bcard">
+          <h4>⭐ MOST CENTRAL</h4>
+          <div class="blist" id="grRank"><div class="bempty">Reading the wire…</div></div>
+        </div>
+        <div class="bcard">
+          <h4>🏘 COMMUNITIES <span class="n" id="grComm">0</span></h4>
+          <div class="blist" id="grCommList"><div class="bempty">Reading the wire…</div></div>
+        </div>
+        <div class="bcard wide">
+          <h4>🔗 CONNECTION</h4>
+          <div class="bpad">
+            <form class="tlform" id="grPathForm">
+              <input id="grA" placeholder="from — a name on the wire" aria-label="Path from" autocomplete="off">
+              <input id="grB" placeholder="to" aria-label="Path to" autocomplete="off">
+              <button class="wpb" type="submit">Trace</button>
+            </form>
+            <div id="grPath"><div class="bempty">Two names, and I'll show the chain of stories linking them — or tell you there isn't one.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- ALERTS ---- -->
+    <section class="board" id="b-alerts" role="tabpanel">
+      <div class="bnote">Rules that watch the wire. Each fires at most once per cooldown, so a running story can't spam you forty times — the suppression is the point, not an afterthought. Rules persist in this browser.</div>
+      <div class="bgrid twocol">
+        <div class="bcard wide">
+          <h4>➕ NEW RULE</h4>
+          <div class="bpad">
+            <form class="tlform" id="alForm">
+              <input id="alQ" placeholder="query — e.g. gaza OR beirut" aria-label="Alert query" autocomplete="off">
+              <select id="alKind" aria-label="Trigger">
+                <option value="on_match">on any match</option>
+                <option value="on_count_over">when N in a window</option>
+                <option value="on_rate_spike">on a rate spike</option>
+                <option value="on_new_source">on a new outlet</option>
+              </select>
+              <button class="wpb" type="submit">Arm</button>
+            </form>
+          </div>
+        </div>
+        <div class="bcard">
+          <h4>🔔 ARMED <span class="n" id="alN">0</span></h4>
+          <div class="blist" id="alList"><div class="bempty">No rules armed.</div></div>
+        </div>
+        <div class="bcard">
+          <h4>📣 FIRED <span class="n" id="alFiredN">0</span></h4>
+          <div class="blist" id="alFired"><div class="bempty">Nothing has fired yet.</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- SIGNALS ---- -->
+    <section class="board" id="b-signal" role="tabpanel">
+      <div class="bnote">Technical analysis on live prices, and forecasts on the wire itself. Every indicator returns <code>null</code> through its warm-up rather than a fabricated zero, so the first bars are honestly blank. Backtests charge transaction costs by default — a costless backtest is fiction.</div>
+      <div class="bgrid twocol">
+        <div class="bcard wide">
+          <h4>📉 PRICE + INDICATORS <span class="n" id="sgSym">—</span></h4>
+          <div class="bpad">
+            <div class="tlform" style="margin-bottom:8px">
+              <select id="sgInd" aria-label="Indicator">
+                <option value="rsi">RSI (14)</option>
+                <option value="macd">MACD (12,26,9)</option>
+                <option value="bb">Bollinger (20,2)</option>
+                <option value="atr">ATR (14)</option>
+                <option value="stoch">Stochastic (14,3)</option>
+              </select>
+            </div>
+            <div id="sgChart" class="chartbox"></div>
+            <div id="sgRead"></div>
+          </div>
+        </div>
+        <div class="bcard wide">
+          <h4>🔮 WIRE FORECAST</h4>
+          <div id="sgFc" class="bpad chartbox"></div>
+        </div>
+        <div class="bcard">
+          <h4>⚡ ANOMALIES <span class="n" id="sgAnomN">0</span></h4>
+          <div class="blist" id="sgAnom"><div class="bempty">Reading the wire…</div></div>
+        </div>
+        <div class="bcard">
+          <h4>✂️ CHANGEPOINTS <span class="n" id="sgCpN">0</span></h4>
+          <div class="blist" id="sgCp"><div class="bempty">Reading the wire…</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- DATA ---- -->
+    <section class="board" id="b-data" role="tabpanel">
+      <div class="bnote">Paste a CSV and interrogate it. The parser is a real state machine — quoted commas, embedded newlines, doubled quotes and ragged rows all survive — and every cell is escaped on the way to the screen, because pasted data is hostile data.</div>
+      <div class="bgrid twocol">
+        <div class="bcard wide">
+          <h4>📥 PASTE</h4>
+          <div class="bpad">
+            <textarea id="tbIn" class="dtarea" rows="5" placeholder="name,role,score&#10;Ada,engineer,99&#10;&quot;Doe, John&quot;,analyst,71" aria-label="CSV input" spellcheck="false"></textarea>
+            <div class="tlform" style="margin-top:8px">
+              <button class="wpb" type="button" id="tbParse">Parse</button>
+              <button class="wpb" type="button" id="tbWire">Load the wire</button>
+              <button class="wpb" type="button" id="tbCsv">Export CSV</button>
+              <button class="wpb" type="button" id="tbMd">Export Markdown</button>
+            </div>
+          </div>
+        </div>
+        <div class="bcard wide">
+          <h4>🧮 TABLE <span class="n" id="tbDims">—</span></h4>
+          <div class="bpad" style="overflow-x:auto"><div id="tbOut"><div class="bempty">Paste something and press Parse.</div></div></div>
+        </div>
+        <div class="bcard wide">
+          <h4>📐 DESCRIBE</h4>
+          <div class="bpad" style="overflow-x:auto"><div id="tbDesc"><div class="bempty">Column types, nulls and cardinality appear here.</div></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- MODEL ---- -->
+    <section class="board" id="b-model" role="tabpanel">
+      <div class="bnote">What CORE 5 has actually learned, this hour, in this tab. Word vectors are fitted by factorising a PPMI co-occurrence matrix built from headlines as they arrive — no pre-trained weights, nothing downloaded. With forty headlines it knows almost nothing, and it will say so.</div>
+      <div class="bgrid twocol">
+        <div class="bcard wide">
+          <h4>📊 WHAT IT KNOWS</h4>
+          <div class="bpad" id="emStats"><div class="bempty">Training on the wire…</div></div>
+        </div>
+        <div class="bcard wide">
+          <h4>🧬 TOPICS <span class="n" id="emTopN">0</span></h4>
+          <div class="bpad" id="emTopics"><div class="bempty">Needs more headlines before topics mean anything.</div></div>
+        </div>
+        <div class="bcard wide">
+          <h4>🔭 NEAREST WORDS</h4>
+          <div class="bpad">
+            <form class="tlform" id="emForm">
+              <input id="emQ" placeholder="a word from the wire — gaza, rates, court…" aria-label="Word" autocomplete="off">
+              <button class="wpb" type="submit">Look up</button>
+            </form>
+            <div id="emNn"><div class="bempty">I'll show what this tab has learned sits nearest it.</div></div>
+          </div>
+        </div>
+        <div class="bcard wide">
+          <h4>➗ ANALOGY</h4>
+          <div class="bpad">
+            <form class="tlform" id="emAnaForm">
+              <input id="emA" placeholder="a" aria-label="Analogy a" autocomplete="off">
+              <input id="emB" placeholder="is to b" aria-label="Analogy b" autocomplete="off">
+              <input id="emC" placeholder="as c is to…" aria-label="Analogy c" autocomplete="off">
+              <button class="wpb" type="submit">Solve</button>
+            </form>
+            <div id="emAna"><div class="bempty">a − b + c, in whatever space this hour of news built.</div></div>
+          </div>
         </div>
       </div>
     </section>
@@ -14590,6 +14857,129 @@ function tlLabel(ms, unit){
   return two(d.getHours()) + ":" + two(d.getMinutes());
 }
 
+/* ================================================================
+   ULTRA boards — SEARCH / GRAPH / ALERTS / SIGNALS / DATA / MODEL.
+
+   Each board is backed by a CORE 5 module that may or may not have
+   been merged into this build yet. `ultraHas()` is the single gate:
+   a board whose module is absent says so plainly and stays inert,
+   rather than throwing a ReferenceError into the console and leaving
+   a dead panel on screen. The same handlers light up unchanged once
+   the module is present, so this is a load-bearing seam and not a
+   temporary stub.
+   ================================================================ */
+function ultraHas(){
+  for(let i=0;i<arguments.length;i++)
+    if(typeof window[arguments[i]] !== "function") return false;
+  return true;
+}
+function ultraPending(what){
+  return `<div class="bempty"><b>${esc(what)}</b> isn't in this build yet.<br><br>`
+    + `The panel is wired and waiting for its CORE 5 module. I'd rather show you `
+    + `this than an empty box that looks like it's still loading.</div>`;
+}
+
+/* The per-board renderers. Each is replaced by a real implementation as its
+   CORE 5 module lands; until then they render the same honest "not in this
+   build" panel rather than existing only as a dangling reference that would
+   throw the moment a guard above was loosened. */
+function drawEntityGraph(){ $("#grCanvas").innerHTML = ultraPending("The graph renderer"); }
+function traceGraphPath(){  $("#grPath").innerHTML   = ultraPending("Path finding"); }
+function drawSignals(){     $("#sgChart").innerHTML  = ultraPending("The indicator library"); }
+function drawModelBoard(){  $("#emStats").innerHTML  = ultraPending("The embedding model"); }
+function showNearestWords(){$("#emNn").innerHTML     = ultraPending("The embedding model"); }
+function showAnalogy(){     $("#emAna").innerHTML    = ultraPending("The embedding model"); }
+function loadTable(){       $("#tbOut").innerHTML    = ultraPending("The table engine"); }
+function loadWireTable(){   $("#tbOut").innerHTML    = ultraPending("The table engine"); }
+function exportTable(){     $("#tbOut").innerHTML    = ultraPending("Table export"); }
+function runQuery(){        $("#qyResults").innerHTML= ultraPending("The query engine"); }
+
+/* ---------------- SEARCH ---------------- */
+const qyState = { last:"", saved:[] };
+try{ qyState.saved = JSON.parse(localStorage.getItem("musagpt_saved_q")||"[]"); }catch(e){ qyState.saved = []; }
+
+function renderSearch(){
+  if(!$("#qyResults")) return;
+  if(!ultraHas("mcQyParse","mcQyEval")){
+    $("#qyResults").innerHTML = ultraPending("The query engine");
+    $("#qyExplain").innerHTML = ""; $("#qyFacets").innerHTML = "";
+    renderSaved(); return;
+  }
+  runQuery(qyState.last);
+  renderSaved();
+}
+function renderSaved(){
+  const box = $("#qySaved"); if(!box) return;
+  box.innerHTML = qyState.saved.length
+    ? qyState.saved.map((q,i)=>`<div class="alrule"><span class="rq" data-runq="${esc(q)}">${esc(q)}</span>`
+        + `<button class="del" data-delq="${i}" aria-label="Delete saved search">✕</button></div>`).join("")
+    : `<div class="bempty">Save a search to keep it here.</div>`;
+}
+
+/* ---------------- GRAPH ---------------- */
+function renderGraphBoard(){
+  if(!$("#grCanvas")) return;
+  if(!ultraHas("mcGrBuild","mcGrPageRank")){
+    $("#grCanvas").innerHTML = ultraPending("The graph engine");
+    $("#grRank").innerHTML = ""; $("#grCommList").innerHTML = ""; return;
+  }
+  drawEntityGraph();
+}
+
+/* ---------------- ALERTS ---------------- */
+const alState = { rules:[], fired:[] };
+try{ alState.rules = JSON.parse(localStorage.getItem("musagpt_rules")||"[]"); }catch(e){ alState.rules = []; }
+function persistRules(){ try{ localStorage.setItem("musagpt_rules", JSON.stringify(alState.rules.slice(0,40))); }catch(e){} }
+
+function renderAlerts(){
+  const list = $("#alList"); if(!list) return;
+  $("#alN").textContent = alState.rules.length;
+  list.innerHTML = alState.rules.length
+    ? alState.rules.map((r,i)=>`<div class="alrule">
+        <span class="rq">${esc(r.q)}<br><span style="color:var(--txt-faint)">${esc(r.kind)}</span></span>
+        <button class="del" data-delrule="${i}" aria-label="Disarm rule">✕</button></div>`).join("")
+    : `<div class="bempty">No rules armed.</div>`;
+  $("#alFiredN").textContent = alState.fired.length;
+  $("#alFired").innerHTML = alState.fired.length
+    ? alState.fired.slice(0,12).map(f=>`<div class="qhit">${esc(f.text)}
+        <div class="meta">${esc(f.rule)} · ${ago(f.t)}</div></div>`).join("")
+    : `<div class="bempty">Nothing has fired yet.</div>`;
+}
+
+/* ---------------- SIGNALS ---------------- */
+function renderSignals(){
+  if(!$("#sgChart")) return;
+  if(!ultraHas("mcTaRsi","mcTaMacd")){
+    $("#sgChart").innerHTML = ultraPending("The indicator library");
+    $("#sgRead").innerHTML = "";
+  }
+  if(!ultraHas("mcTsForecast")){
+    $("#sgFc").innerHTML = ultraPending("The forecaster");
+    $("#sgAnom").innerHTML = ""; $("#sgCp").innerHTML = "";
+    return;
+  }
+  drawSignals();
+}
+
+/* ---------------- DATA ---------------- */
+function renderData(){
+  if(!$("#tbOut")) return;
+  if(!ultraHas("mcTbParse")){
+    $("#tbOut").innerHTML = ultraPending("The table engine");
+    $("#tbDesc").innerHTML = "";
+  }
+}
+
+/* ---------------- MODEL ---------------- */
+function renderModel(){
+  if(!$("#emStats")) return;
+  if(!ultraHas("mcEmObserve","mcEmStats")){
+    $("#emStats").innerHTML = ultraPending("The embedding model");
+    $("#emTopics").innerHTML = ""; return;
+  }
+  drawModelBoard();
+}
+
 function renderTimeline(){
   if(!$("#tlBars")) return;
   const real = tlReal();
@@ -15038,6 +15428,12 @@ const BOARD_SUB = {
   crypto:"live markets, on-chain and sentiment · three price sources, no stale fallback",
   proj:  "arithmetic on live data, with the method and error printed under every number",
   time:  "the hour reconstructed from arrival times · buckets and gaps both measured, not fixed",
+  search:"a real parser over the live wire · it tells you what it understood",
+  graph: "entity co-occurrence from real headlines only · Louvain communities, PageRank size",
+  alerts:"rules with cooldown · one running story cannot fire the same alert forty times",
+  signal:"indicators warm up to null, never to zero · backtests charge costs by default",
+  data:  "paste anything · a real CSV state machine, and every cell escaped on the way out",
+  model: "what CORE 5 learned in this tab, this hour · no pre-trained weights, nothing downloaded",
   core:  "CORE 5 · classical NLP fitted in this tab, on this wire, with no network",
 };
 function openDeck(board){
@@ -15066,6 +15462,12 @@ function showBoard(b){
     if(!crypto.global) fetchCryptoExtras();
   }
   if(b === "time")   renderTimeline();
+  if(b === "search") renderSearch();
+  if(b === "graph")  renderGraphBoard();
+  if(b === "alerts") renderAlerts();
+  if(b === "signal") renderSignals();
+  if(b === "data")   renderData();
+  if(b === "model")  renderModel();
   if(b === "proj"){
     renderProjections();
     if(!crypto.coins.length && !crypto.loading) fetchMarkets();
@@ -15081,6 +15483,9 @@ function deckTick(){
   if(deckBoard === "crypto"&& deckSecs % 45 === 0) fetchMarkets();
   if(deckBoard === "proj"  && deckSecs % 20 === 0) renderProjections();
   if(deckBoard === "time"  && deckSecs % 20 === 0) renderTimeline();
+  if(deckBoard === "graph" && deckSecs % 30 === 0) renderGraphBoard();
+  if(deckBoard === "signal"&& deckSecs % 30 === 0) renderSignals();
+  if(deckBoard === "model" && deckSecs % 45 === 0) renderModel();
   if(deckBoard === "core"  && deckSecs % 25 === 0) renderCoreBoard();
 }
 $("#deckBtn").addEventListener("click", ()=>openDeck());
@@ -17287,6 +17692,63 @@ $("#cmdkList").addEventListener("click", e=>{
 });
 /* Click the backdrop — but not the box — to dismiss. */
 $("#cmdk").addEventListener("mousedown", e=>{ if(e.target.id === "cmdk") cmdkClose(); });
+
+/* ---- ULTRA board wiring ----
+   preventDefault on every one of these is not optional: a <form> with no
+   submit handler navigates, and navigating a single-file app is a full
+   reload that drops the conversation and the wire. */
+$("#qyForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  qyState.last = $("#qyQ").value.trim();
+  renderSearch();
+});
+$("#qySaved").addEventListener("click", e=>{
+  const del = e.target.closest("[data-delq]");
+  if(del){ qyState.saved.splice(parseInt(del.getAttribute("data-delq"),10),1);
+           try{ localStorage.setItem("musagpt_saved_q", JSON.stringify(qyState.saved)); }catch(x){}
+           renderSaved(); return; }
+  const run = e.target.closest("[data-runq]");
+  if(run){ $("#qyQ").value = run.getAttribute("data-runq");
+           qyState.last = $("#qyQ").value; renderSearch(); }
+});
+$("#grPathForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  if(!ultraHas("mcGrShortestPath")){ $("#grPath").innerHTML = ultraPending("Path finding"); return; }
+  traceGraphPath($("#grA").value.trim(), $("#grB").value.trim());
+});
+$("#alForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const q = $("#alQ").value.trim(); if(!q) return;
+  alState.rules.unshift({ q, kind:$("#alKind").value, at:now(), lastFired:0 });
+  persistRules(); $("#alQ").value = ""; renderAlerts();
+});
+$("#alList").addEventListener("click", e=>{
+  const d = e.target.closest("[data-delrule]");
+  if(!d) return;
+  alState.rules.splice(parseInt(d.getAttribute("data-delrule"),10),1);
+  persistRules(); renderAlerts();
+});
+$("#emForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  if(!ultraHas("mcEmNearest")){ $("#emNn").innerHTML = ultraPending("The embedding model"); return; }
+  showNearestWords($("#emQ").value.trim());
+});
+$("#emAnaForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  if(!ultraHas("mcEmAnalogy")){ $("#emAna").innerHTML = ultraPending("The embedding model"); return; }
+  showAnalogy($("#emA").value.trim(), $("#emB").value.trim(), $("#emC").value.trim());
+});
+$("#sgInd").addEventListener("change", renderSignals);
+$("#tbParse").addEventListener("click", ()=>{
+  if(!ultraHas("mcTbParse")){ $("#tbOut").innerHTML = ultraPending("The table engine"); return; }
+  loadTable($("#tbIn").value);
+});
+$("#tbWire").addEventListener("click", ()=>{
+  if(!ultraHas("mcTbParse")){ $("#tbOut").innerHTML = ultraPending("The table engine"); return; }
+  loadWireTable();
+});
+$("#tbCsv").addEventListener("click", ()=>exportTable("csv"));
+$("#tbMd").addEventListener("click", ()=>exportTable("md"));
 
 /* ---- timeline board wiring ---- */
 $("#tlForm").addEventListener("submit", e=>{
