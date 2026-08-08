@@ -23,7 +23,13 @@ ORDER = ["stem.js", "metrics.js", "sentiment.js", "ner.js", "summarize.js",
          "cluster.js", "lm.js", "qa.js", "dialog.js", "calc.js",
          # second wave. These four kept strict module prefixes (mcImg/mcCh/
          # mcPal/mcTl) and collide with nothing, so they need no RENAME entry.
-         "imganalyse.js", "charts.js", "palette.js", "timeline.js"]
+         "imganalyse.js", "charts.js", "palette.js", "timeline.js",
+         # third wave (CORE 5). Same discipline: one prefix per module, no
+         # shared names, so RENAME stays empty for all of them. embed.js goes
+         # last because it is the only one that reads the others' output.
+         "stats.js", "timeseries.js", "geo.js", "graph.js", "ta.js",
+         "fuzzy.js", "markdown.js", "datetime.js", "table.js", "hash.js",
+         "query.js", "embed.js"]
 
 # per-file renames, applied only inside that file
 RENAME = {

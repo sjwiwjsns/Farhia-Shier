@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>MusaGPT v5 — Breaking News AI</title>
-<meta name="description" content="MusaGPT v5: a sarcastic AI news anchor — live breaking headlines from ten sources, a war map, İstanbul prayer times, live crypto markets and honest projections. Runs in the browser.">
+<title>MusaGPT ULTRA — Breaking News AI</title>
+<meta name="description" content="MusaGPT ULTRA: a sarcastic AI news anchor — live breaking headlines from ten sources, a war map, İstanbul prayer times, live crypto markets and honest projections. Runs in the browser.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 <style>
 /* ============================================================
-   MusaGPT v5 — Grok-inspired layout: sidebar + minimal chat + the desk
+   MusaGPT ULTRA — Grok-inspired layout: sidebar + minimal chat + the desk
    ============================================================ */
 :root{
   --bg:#050507;
@@ -973,7 +973,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 
     <div class="chatarea empty" id="chatarea">
       <div id="hero">
-        <div class="hero-mark"><div class="bolt">⚡</div><h2>MusaGPT</h2><span class="herover">v5</span></div>
+        <div class="hero-mark"><div class="bolt">⚡</div><h2>MusaGPT</h2><span class="herover">ULTRA</span></div>
         <p class="hero-tag">Your extremely well-informed, lightly sarcastic news desk.<br>I read the last hour of the wire so you don't have to — and I show my sources.</p>
         <div id="wireStrip">
           <span class="ws">⚡ wire: <b id="wsSrc">connecting…</b></span>
@@ -1024,7 +1024,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
       <button class="wpclose" id="wireClose" aria-label="Close panel">✕</button>
     </div>
     <div class="card modelcard">
-      <div class="mtitle"><h3>MusaGPT‑1</h3><span class="chip"><span class="dot"></span>LIVE</span></div>
+      <div class="mtitle"><h3>MusaGPT ULTRA</h3><span class="chip"><span class="dot"></span>LIVE</span></div>
       <div class="mid" id="modelSub">local core · no api key</div>
       <div class="meter">
         <div class="mlabel"><span>SASS</span><b id="rudeVal">62%</b></div>
@@ -1312,7 +1312,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
     </section>
 
     <section class="board" id="b-core" role="tabpanel">
-      <div class="bnote" id="coreNote"><b>musa-core-3</b> — the model that runs when no API key is set. Classical NLP, fitted in this tab on the wire as it arrives: a Porter stemmer, an n-gram language model with backoff, naive-Bayes routing, TF-IDF and BM25 retrieval, agglomerative topic clustering, TextRank summarisation, rule-based entity recognition, lexicon sentiment, and extractive QA. Zero network, zero weights downloaded.</div>
+      <div class="bnote" id="coreNote"><b>CORE 5</b> — the model that runs when no API key is set. Classical NLP, fitted in this tab on the wire as it arrives: a Porter stemmer, an n-gram language model with backoff, naive-Bayes routing, TF-IDF and BM25 retrieval, agglomerative topic clustering, TextRank summarisation, rule-based entity recognition, lexicon sentiment, and extractive QA. Zero network, zero weights downloaded.</div>
       <div class="bstats" id="coreStats" style="padding:0 0 14px"></div>
       <div class="bgrid twocol">
         <div class="bcard">
@@ -1435,7 +1435,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
 <script>
 "use strict";
 /* ================================================================
-   MusaGPT v5 — sarcastic breaking-news AI, Grok-style shell
+   MusaGPT ULTRA — sarcastic breaking-news AI, Grok-style shell
    - Real headlines (GDELT → Reddit → labeled simulated fallback)
    - Chat history (localStorage) + temporary chats
    - Brains: local core → site-key proxy (/api/chat) → your own key
@@ -1616,7 +1616,7 @@ function wireSearch(qtext){
 
 
 /* ================================================================
-   MUSA-CORE-3 — the model that runs when there is no API key.
+   CORE 5 — the model that runs when there is no API key.
 
    Ten independent classical-NLP modules, each written and unit-tested
    on its own, merged here into one script scope. Nothing below is
@@ -12298,7 +12298,7 @@ function mcTlMerge(docsA, docsB, opts) {
 // ---------------------------------------------------------------------------
 
 /* ================================================================
-   MUSA-CORE-3 — the bridge.
+   CORE 5 — the bridge.
 
    Everything above this line is a standalone algorithm that knows
    nothing about news. This layer is what turns them into a model of
@@ -12308,7 +12308,7 @@ function mcTlMerge(docsA, docsB, opts) {
 
    Still no APIs, still no network, still trained in the tab.
    ================================================================ */
-const core3 = {
+const core5 = {
   lm: mcLmNew(),
   dialog: mcDialogNew(),
   cache: { sig:"", clusters:null, entities:null, mood:null, at:0 },
@@ -12317,23 +12317,23 @@ const core3 = {
 
 /* Every live headline is a training example for the n-gram model and a
    document for everything else. Called from addItems(). */
-function core3Learn(text){
+function core5Learn(text){
   if(!text) return;
-  mcLmTrain(core3.lm, text);
-  core3.trained++;
+  mcLmTrain(core5.lm, text);
+  core5.trained++;
 }
 
 /* The expensive analyses (clustering is O(n²)) are recomputed only when
    the feed actually changes, keyed on a cheap signature. */
-function core3Sig(){ return FEED.length + ":" + (FEED[0] ? FEED[0].id : 0); }
-function core3Analyse(force){
-  const sig = core3Sig();
-  if(!force && sig === core3.cache.sig && now() - core3.cache.at < 20000) return core3.cache;
+function core5Sig(){ return FEED.length + ":" + (FEED[0] ? FEED[0].id : 0); }
+function core5Analyse(force){
+  const sig = core5Sig();
+  if(!force && sig === core5.cache.sig && now() - core5.cache.at < 20000) return core5.cache;
   const real = FEED.filter(i=>!isSim(i));
   const texts = real.map(i=>i.text);
   let clusters = [], entities = { PERSON:[], ORG:[], PLACE:[] }, mood = null;
-  try{ clusters = texts.length >= 3 ? mcCluster(texts, { minSize:1 }) : []; }catch(e){ console.warn("[core3] cluster:", e && e.message); }
-  try{ entities = mcEntityCounts(texts); }catch(e){ console.warn("[core3] ner:", e && e.message); }
+  try{ clusters = texts.length >= 3 ? mcCluster(texts, { minSize:1 }) : []; }catch(e){ console.warn("[core5] cluster:", e && e.message); }
+  try{ entities = mcEntityCounts(texts); }catch(e){ console.warn("[core5] ner:", e && e.message); }
   try{
     if(texts.length){
       const scored = texts.map(t=>mcSentiment(t));
@@ -12346,9 +12346,9 @@ function core3Analyse(force){
       });
       mood = { mean, mag, label: mcSentLabelFor(mean), worst, best, n:scored.length };
     }
-  }catch(e){ console.warn("[core3] sentiment:", e && e.message); }
-  core3.cache = { sig, clusters, entities, mood, at: now(), n: real.length };
-  return core3.cache;
+  }catch(e){ console.warn("[core5] sentiment:", e && e.message); }
+  core5.cache = { sig, clusters, entities, mood, at: now(), n: real.length };
+  return core5.cache;
 }
 function mcSentLabelFor(v){
   return v <= -0.5 ? "very negative" : v <= -0.15 ? "negative"
@@ -12357,11 +12357,11 @@ function mcSentLabelFor(v){
 
 /* --- the things chat asks for ------------------------------------- */
 
-function core3Topics(n){
-  const a = core3Analyse();
+function core5Topics(n){
+  const a = core5Analyse();
   return a.clusters.filter(c=>c.size >= 2).slice(0, n || 6);
 }
-function core3Summary(n){
+function core5Summary(n){
   const real = FEED.filter(i=>!isSim(i));
   if(!real.length) return [];
   try{
@@ -12373,53 +12373,53 @@ function core3Summary(n){
     }).filter(Boolean);
   }catch(e){ return real.slice(0, n || 4); }
 }
-function core3People(n){
-  const a = core3Analyse();
+function core5People(n){
+  const a = core5Analyse();
   const merge = [];
   for(const type of ["PERSON","ORG","PLACE"]){
     for(const [name, count] of (a.entities[type] || [])) merge.push({ name, count, type });
   }
   return merge.sort((x,y)=>y.count-x.count).slice(0, n || 10);
 }
-function core3Ask(question){
+function core5Ask(question){
   const real = FEED.filter(i=>!isSim(i));
   if(!real.length) return { answer:null, reason:"Nothing on the wire to answer from." };
   try{ return mcAnswer(question, real.map(i=>({ text:i.text, item:i })), {}); }
   catch(e){ return { answer:null, reason:"Retrieval failed: " + (e && e.message) }; }
 }
-function core3Generate(opts){
+function core5Generate(opts){
   try{
     const o = Object.assign({ maxWords:14, temperature:0.85, topK:8 }, opts || {});
-    return mcLmGenerate(core3.lm, o) || null;
+    return mcLmGenerate(core5.lm, o) || null;
   }catch(e){ return null; }
 }
 /* Perplexity over the current wire is the honest "how well do I know this
    hour" number — it goes down as the model sees more of the same beat. */
-function core3Perplexity(){
+function core5Perplexity(){
   const real = FEED.filter(i=>!isSim(i));
   if(real.length < 3) return null;
   try{
     const held = real.slice(0, Math.min(8, real.length)).map(i=>i.text).join(". ");
-    const v = mcLmPerplexity(core3.lm, held);
+    const v = mcLmPerplexity(core5.lm, held);
     return isFinite(v) ? v : null;
   }catch(e){ return null; }
 }
-function core3Stats(){
+function core5Stats(){
   let lm = { tokens:0, types:0, trigrams:0, bigrams:0 };
-  try{ lm = mcLmStats(core3.lm); }catch(e){}
-  const a = core3Analyse();
+  try{ lm = mcLmStats(core5.lm); }catch(e){}
+  const a = core5Analyse();
   return {
-    lm, trained: core3.trained,
+    lm, trained: core5.trained,
     nbExamples: trainStats.examples, nbVocab: nb.vocab.size, nbClasses: Object.keys(nb.classes).length,
     clusters: a.clusters.filter(c=>c.size>=2).length,
     entities: (a.entities.PERSON||[]).length + (a.entities.ORG||[]).length + (a.entities.PLACE||[]).length,
-    mood: a.mood, ppl: core3Perplexity(), docs: a.n || 0,
+    mood: a.mood, ppl: core5Perplexity(), docs: a.n || 0,
   };
 }
 
 /* Full analysis of any text the user pastes — the "what can this thing do"
    demonstration, and genuinely useful on a headline you're unsure about. */
-function core3Inspect(text){
+function core5Inspect(text){
   const out = { text };
   const safe = (k, fn) => { try{ out[k] = fn(); }catch(e){ out[k] = null; } };
   safe("lang",     ()=>mcDetectLang(text));
@@ -12436,25 +12436,25 @@ function core3Inspect(text){
 
 /* Follow-ups: resolve "he/there/that" against what has already been said,
    so "what else did he say" reaches the right entity. */
-function core3Resolve(text){
+function core5Resolve(text){
   try{
-    const r = mcResolve(core3.dialog, text);
+    const r = mcResolve(core5.dialog, text);
     return r && r.resolved ? r : { text, resolved:text, substitutions:[] };
   }catch(e){ return { text, resolved:text, substitutions:[] }; }
 }
-function core3Observe(role, text){
-  try{ mcDialogObserve(core3.dialog, role, text, null); }catch(e){}
+function core5Observe(role, text){
+  try{ mcDialogObserve(core5.dialog, role, text, null); }catch(e){}
 }
 
 /* Compact readout handed to the live model as a second opinion on the hour. */
 function coreReadout(){
-  const a = core3Analyse();
+  const a = core5Analyse();
   const bits = [];
   const t = a.clusters.filter(c=>c.size >= 2).slice(0,5);
   bits.push(t.length
     ? "Topics: " + t.map(c=>`${c.label} (${c.size})`).join("; ") + "."
     : "Topics: too few stories to cluster.");
-  const ppl = core3People(8);
+  const ppl = core5People(8);
   if(ppl.length) bits.push("Most-named: " + ppl.map(e=>`${e.name} ${e.count}x`).join(", ") + ".");
   if(a.mood) bits.push(`Mood: ${a.mood.mean.toFixed(2)} (${a.mood.label}), intensity ${a.mood.mag.toFixed(1)} across ${a.mood.n} stories.`);
   return bits.join("\n") || "Nothing on the wire to analyse.";
@@ -12620,7 +12620,7 @@ function addItems(list){
   }
   if(fresh.length){
     /* every headline is a labeled training example: text -> its news desk */
-    for(const f of fresh){ nbTrain(f.cat.toLowerCase(), f.text); mkTrain(f.text); core3Learn(f.text); }
+    for(const f of fresh){ nbTrain(f.cat.toLowerCase(), f.text); mkTrain(f.text); core5Learn(f.text); }
     FEED = [...fresh, ...FEED].sort((a,b)=>b.t-a.t || b.id-a.id);
     pruneFeed();
     stats.headlines += fresh.length;
@@ -14863,7 +14863,7 @@ function renderProjections(){
 /* ---------- CORE board ---------- */
 function renderCoreBoard(){
   if(!$("#coreStats")) return;
-  const st = core3Stats();
+  const st = core5Stats();
   $("#coreStats").innerHTML = `
     <div class="bstat"><b>${st.lm.tokens.toLocaleString()}</b><span>LM TOKENS</span></div>
     <div class="bstat"><b>${st.lm.types.toLocaleString()}</b><span>VOCAB</span></div>
@@ -14873,7 +14873,7 @@ function renderCoreBoard(){
     <div class="bstat"><b>${st.ppl ? st.ppl.toFixed(0) : "—"}</b><span>PERPLEXITY</span></div>`;
 
   /* topics */
-  const topics = core3Topics(7);
+  const topics = core5Topics(7);
   $("#coreTopicN").textContent = topics.length || "—";
   $("#coreTopics").innerHTML = !topics.length
     ? `<div class="cnote">Fewer than three real stories on the wire — nothing to cluster yet. Clustering on two headlines tells you nothing you couldn't see.</div>`
@@ -14892,7 +14892,7 @@ function renderCoreBoard(){
       }).join("") + `<div class="cnote">Agglomerative clustering, average linkage over TF-IDF cosine, cut by silhouette. Labels are the terms most distinctive <i>to</i> each cluster, not just the most frequent in it.</div>`;
 
   /* mood */
-  const a = core3Analyse();
+  const a = core5Analyse();
   const m = a.mood;
   $("#coreMoodN").textContent = m ? m.n + " scored" : "—";
   $("#coreMood").innerHTML = !m
@@ -14906,7 +14906,7 @@ function renderCoreBoard(){
        <div class="cnote">580-term news lexicon with negation, intensifier and contrast handling. It reads emotional charge, not importance — a calm headline about something terrible still scores calm.</div>`;
 
   /* entities */
-  const ents = core3People(16);
+  const ents = core5People(16);
   $("#coreEntN").textContent = ents.length || "—";
   $("#coreEnts").innerHTML = !ents.length
     ? `<div class="bempty">No named entities extracted yet.</div>`
@@ -14917,7 +14917,7 @@ function renderCoreBoard(){
       </div>`).join("");
 
   /* what the hour says */
-  const sum = core3Summary(4);
+  const sum = core5Summary(4);
   $("#coreSummary").innerHTML = !sum.length
     ? `<div class="cnote">Nothing on the wire.</div>`
     : sum.map(i=>`<div class="kv" style="align-items:flex-start"><span style="flex:1;line-height:1.5">${esc(i.text.slice(0,120))}${i.text.length>120?"…":""}</span><b>${ago(i.t)}</b></div>`).join("")
@@ -14926,7 +14926,7 @@ function renderCoreBoard(){
 function renderCoreQA(q){
   const box = $("#coreQOut");
   if(!q){ box.innerHTML = ""; return; }
-  const r = core3Ask(q);
+  const r = core5Ask(q);
   if(!r || !r.answer){
     box.innerHTML = `<div class="qaout"><div class="qaans none">No answer above threshold.</div>
       <div class="cnote" style="margin:0">${esc((r && r.reason) || "Nothing on the wire supports that.")} A confident wrong answer would be worse than this.</div></div>`;
@@ -14948,7 +14948,7 @@ function renderCoreGen(){
   const seed = $("#coreSeed").value.trim();
   const outs = [];
   for(let i=0;i<3;i++){
-    const g = core3Generate({ temperature:t, topK:k, seedText:seed, maxWords:16 });
+    const g = core5Generate({ temperature:t, topK:k, seedText:seed, maxWords:16 });
     if(g) outs.push(g);
   }
   $("#coreGenOut").innerHTML = outs.length
@@ -14959,7 +14959,7 @@ function renderCoreInspect(){
   const t = $("#coreIn").value.trim();
   const box = $("#coreInOut");
   if(!t){ box.innerHTML = ""; return; }
-  const r = core3Inspect(t);
+  const r = core5Inspect(t);
   const chip = (txt, cls) => `<span class="btag ${cls||""}">${esc(txt)}</span>`;
   const b = [];
   if(r.lang) b.push(`<div class="inspbox"><h5>LANGUAGE</h5><div style="font-size:14px;font-weight:700">${esc(r.lang.name || r.lang.lang || "?")}</div>
@@ -15038,7 +15038,7 @@ const BOARD_SUB = {
   crypto:"live markets, on-chain and sentiment · three price sources, no stale fallback",
   proj:  "arithmetic on live data, with the method and error printed under every number",
   time:  "the hour reconstructed from arrival times · buckets and gaps both measured, not fixed",
-  core:  "musa-core-3 · classical NLP fitted in this tab, on this wire, with no network",
+  core:  "CORE 5 · classical NLP fitted in this tab, on this wire, with no network",
 };
 function openDeck(board){
   $("#deck").classList.add("open");
@@ -15480,7 +15480,7 @@ function modelSeesImages(model){
   if(/^claude/.test(m)) return true;
   if(/^gpt-4o|^gpt-5/.test(m)) return true;
   if(/^gemini/.test(m)) return true;
-  return false;                            /* musa-core-3, deepseek: text only */
+  return false;                            /* CORE 5, deepseek: text only */
 }
 function visionAvailable(){ return !!liveMode() && modelSeesImages(effectiveModel()); }
 
@@ -16002,9 +16002,9 @@ function localReply(raw, _redir){
      and the voice intent stopped matching. App commands skip resolution. */
   const APP_CMD = /^\s*(read|say|speak|stop|mute|export|watch|stop watching|regenerate|generate|analyse|analyze|inspect|clear|new chat)\b/i;
   if(!_redir && !APP_CMD.test(q)){
-    const rz = core3Resolve(q);
+    const rz = core5Resolve(q);
     if(rz.substitutions && rz.substitutions.length){ q = rz.resolved; coreSubs = rz.substitutions; }
-    core3Observe("user", raw.trim());
+    core5Observe("user", raw.trim());
   }
   const l = q.toLowerCase();
   if(!_redir) mem.turns++;
@@ -16067,7 +16067,7 @@ function localReply(raw, _redir){
     return "Still connecting to the live sources — give me a few seconds and check the tag next to the banner: it always tells you whether you're seeing the real wire or the simulated fallback.";
   }
 
-  /* ---- musa-core-3 capabilities ---- */
+  /* ---- CORE 5 capabilities ---- */
 
   /* extractive QA over the wire — factoid questions get a span, not an essay */
   /* "when is the next prayer" starts with "when" but is not a wire question.
@@ -16076,7 +16076,7 @@ function localReply(raw, _redir){
   if(/^\s*(who|where|when|how many|how much|which|what happened)\b/.test(l) && FEED.length
      && !/\b(in the news|most mentioned|keeps? (coming up|appearing)|leaderboard)\b/.test(l)
      && !CORE_QA_NOT.test(l)){
-    const r = core3Ask(q);
+    const r = core5Ask(q);
     if(r && r.answer){
       const sup = r.support && (r.support.item || r.support);
       const txt = (r.support && r.support.text) || (sup && sup.text) || "";
@@ -16091,7 +16091,7 @@ function localReply(raw, _redir){
 
   /* topic clustering */
   if(/\b(topics?|themes?|clusters?|what.?s the wire about|what.?s dominating|group|categor)\b/.test(l)){
-    const t = core3Topics(6);
+    const t = core5Topics(6);
     if(!t.length) return "Not enough real stories on the wire to cluster yet — I need at least three, and clustering two headlines tells you nothing you couldn't see by reading them.";
     const real = FEED.filter(i=>!isSim(i));
     return `🗂 **${t.length} ${t.length===1?"topic":"topics"} on the wire right now:**\n\n`
@@ -16104,7 +16104,7 @@ function localReply(raw, _redir){
 
   /* entity leaderboard */
   if(/\b(who.?s in the news|entities|names?|who keeps|most mentioned|leaderboard|people|players)\b/.test(l) && !/\bwho is\b/.test(l)){
-    const e = core3People(12);
+    const e = core5People(12);
     if(!e.length) return "No named entities extracted from the wire yet — either it's quiet or the headlines are unusually anonymous.";
     return `👥 **Who and what the hour keeps naming:**\n\n`
       + e.map(x=>`• **${esc(x.name)}** _(${x.type.toLowerCase()})_ — ${x.count}×`).join("\n")
@@ -16113,7 +16113,7 @@ function localReply(raw, _redir){
 
   /* mood */
   if(/\b(mood|tone|sentiment|how (bad|grim|good)|vibe|feel of|depressing)\b/.test(l)){
-    const a = core3Analyse();
+    const a = core5Analyse();
     if(!a.mood) return "Nothing on the wire to score.";
     const m = a.mood;
     return `🎭 **Mood of the wire: ${m.mean>=0?"+":""}${m.mean.toFixed(2)} — ${esc(m.label)}** (intensity ${m.mag.toFixed(1)} across ${m.n} stories)\n\n`
@@ -16124,7 +16124,7 @@ function localReply(raw, _redir){
 
   /* summarise */
   if(/\b(summar\w*|gist|tl;?dr|in a nutshell|bottom line|distil\w*|condense)\b/.test(l)){
-    const sum = core3Summary(4);
+    const sum = core5Summary(4);
     if(!sum.length) return "Nothing on the wire to summarise.";
     return `📝 **The hour in ${sum.length} lines** — the stories closest to the centre of everything else:\n\n`
       + sum.map(i=>`• ${esc(i.text)}${i.src?` — _${esc(i.src)}_`:""}`).join("\n")
@@ -16134,7 +16134,7 @@ function localReply(raw, _redir){
   /* inspect arbitrary text */
   const insp = q.match(/^(?:analyse|analyze|inspect|break down|parse)\s*:?\s*(.{8,400})$/i);
   if(insp){
-    const r = core3Inspect(insp[1].trim());
+    const r = core5Inspect(insp[1].trim());
     const bits = [];
     if(r.lang) bits.push(`**Language:** ${esc(r.lang.name||r.lang.lang)} (${(r.lang.confidence||0).toFixed(2)})`);
     if(r.sent) bits.push(`**Sentiment:** ${r.sent.score>=0?"+":""}${r.sent.score.toFixed(2)} — ${esc(r.sent.label)}`);
@@ -16148,8 +16148,8 @@ function localReply(raw, _redir){
 
   /* what the core is */
   if(/\b(core|your (model|brain|nlp)|musa.?core|how do you work|what can you (do|analyse|analyze))\b/.test(l)){
-    const st = core3Stats();
-    return `🧠 **musa-core-3** — what runs when there's no API key.\n\n`
+    const st = core5Stats();
+    return `🧠 **CORE 5** — what runs when there's no API key.\n\n`
       + `Fitted in this tab, on this wire, right now: **${st.lm.tokens.toLocaleString()} tokens** through the n-gram language model (vocab ${st.lm.types.toLocaleString()}, ${(st.lm.trigrams||0).toLocaleString()} trigrams), **${st.nbExamples.toLocaleString()} labelled examples** in the naive-Bayes router across ${st.nbClasses} intents${st.ppl?`, perplexity **${st.ppl.toFixed(0)}** on held-out wire copy`:""}.\n\n`
       + `**What it can actually do:**\n`
       + `• Answer factoid questions from the wire — BM25 retrieval plus span extraction, and it declines when nothing scores\n`
@@ -16164,9 +16164,9 @@ function localReply(raw, _redir){
 
   /* generate a headline — now backed by the n-gram model */
   if(/\b(generate|invent|make up|write|compose|remix)\b.*\bheadline/.test(l) || /\bheadline generator\b/.test(l)){
-    const g = core3Generate({ temperature:0.9, topK:8, maxWords:15 });
+    const g = core5Generate({ temperature:0.9, topK:8, maxWords:15 });
     if(!g) return "The language model is still warming up — it trains on wire copy as stories land. Give it a few more headlines.";
-    const st = core3Stats();
+    const st = core5Stats();
     return `📰 “${esc(g)}”\n\n**Synthetic — not a real story.** That's an n-gram sample from ${st.lm.tokens.toLocaleString()} tokens of live wire copy: trigram where the context was seen enough, backing off to bigram then unigram, temperature 0.9 with top-k 8. Turn the knobs yourself on 🧭 DESK → 🧠 CORE.`;
   }
 
@@ -16773,7 +16773,7 @@ Each is real, live, and has a hard rule attached. Reference them naturally; neve
   - The portfolio is the user's own data, stored only in their browser. Bring it into your reasoning when it's relevant.
   - The volatility cone measures spread, not direction — it is symmetric on spot by construction. Say what you think about direction separately, in your own words, rather than implying the cone said it.
 - **📈 PROJECTIONS** — wire volume trend, story momentum, desk share shift, and a volatility cone. ${deskBrief.proj}
-- **🧠 CORE** — musa-core-3, the classical-NLP model that runs this app with no API key. ${deskBrief.core}
+- **🧠 CORE** — CORE 5, the classical-NLP model that runs this app with no API key. ${deskBrief.core}
   **Hard rules for this board:** every figure is arithmetic on observed data with a stated method and a stated error, and you must carry both when you cite one. Say "projected", "extrapolated" or "at the current rate" — never "will". A projection assumes the last hour continues; news does not work like that and you should say so when it matters. Never invent a probability, a confidence percentage, or a number the board didn't compute. If a panel reports it lacks data, relay that rather than filling the gap.
 
 ## Severity vocabulary (already computed for you, do not re-label)
@@ -16815,7 +16815,7 @@ ${tts.on ? `- **Your replies are being read aloud right now** by the browser's s
 - End with a hook or an offer to dig deeper only when it's genuinely useful — not every turn.
 
 ## WHAT MY OWN MODEL MAKES OF THIS HOUR
-This is musa-core-3's read, computed locally — topics by agglomerative clustering, entities by a rule-based recogniser, mood by a news sentiment lexicon. Use it as a second opinion on the wire below, and disagree with it out loud when you think it is wrong; it is a bag-of-words model and it has no idea what any of this means.
+This is CORE 5's read, computed locally — topics by agglomerative clustering, entities by a rule-based recogniser, mood by a news sentiment lexicon. Use it as a second opinion on the wire below, and disagree with it out loud when you think it is wrong; it is a bag-of-words model and it has no idea what any of this means.
 ${coreRead}
 
 ## CURRENT WIRE — last 60 minutes, hottest first
@@ -17046,7 +17046,7 @@ async function handleSend(text){
     mem.history.push({role:"assistant", content:histReply || "(no reply)"});
     if(mem.history.length > 32) mem.history = mem.history.slice(-32);
     recordMsg("ai", histReply || reply || "(no reply)");
-    core3Observe("ai", histReply || reply || "");
+    core5Observe("ai", histReply || reply || "");
     stats.roasts++; updateStats();
     busy = false; $("#send").disabled = false;
     $("#input").focus();
