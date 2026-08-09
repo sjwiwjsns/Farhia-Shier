@@ -127,7 +127,14 @@ The brand is **MusaGPT ULTRA**, the local model is **CORE 5**, and every `core3*
 
 Six ULTRA boards (SEARCH, GRAPH, ALERTS, SIGNALS, DATA, MODEL) are wired ahead of their CORE 5 modules. `ultraHas("mcFoo",…)` checks `typeof window[name] === "function"`; a missing module renders `ultraPending()` — "isn't in this build yet" — rather than a panel that looks stuck loading. **A `<form>` with no submit handler navigates on Enter**, which in a single-file app is a full reload that drops the conversation and the wire; every new board form must `preventDefault`.
 
-Currently live: **DATA** (table.js), **SEARCH**/**ALERTS** (query.js), **GRAPH** (graph.js). Still gated: SIGNALS (ta.js truncated), MODEL (embed.js undelivered).
+Currently live: **DATA** (table.js), **SEARCH**/**ALERTS** (query.js), **GRAPH** (graph.js), **SIGNALS** indicators (ta.js). Still gated: the SIGNALS forecast half (timeseries.js undelivered) and MODEL (embed.js undelivered).
+
+### ta.js semantics
+- **Every indicator nulls its warm-up** rather than returning 0. The board strips leading nulls before charting so a line starts where the indicator does; feeding zeros would draw a run-up from the axis that never happened.
+- RSI uses **Wilder's smoothing (RMA)**, not a plain SMA of gains — the single most mis-implemented indicator. The expected values in the suite were reproduced from an independent implementation of Wilder's recurrence, not read off this one.
+- **Backtest costs default to non-zero** (`feeBps` 6 + `slippageBps` 4). There is no `cost` option; a costless run has to be asked for explicitly with `{feeBps:0, slippageBps:0}`.
+- `mcTaIchimoku(...).future` is `{senkouA, senkouB}` — the cloud beyond the last bar, deliberately kept out of the in-sample arrays so it cannot imply knowledge of unseen prices.
+- `mcTaPatterns` returns **one entry per bar**, each a list of hits carrying a `confidence`.
 
 **Every `ultraHas()` gate so far has named a function that does not exist** — `mcQyEval` (real: `mcQyEvaluate`), `mcGrBuild` (real: `mcGrFromDocuments`), `mcGrShortestPath` (real: `mcGrBfsPath`). A wrong name fails closed and looks exactly like "module not merged yet", so it is invisible. Check gates with `grep '^function <name>'` before believing a board is still pending.
 
