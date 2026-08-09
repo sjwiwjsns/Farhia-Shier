@@ -127,7 +127,13 @@ The brand is **MusaGPT ULTRA**, the local model is **CORE 5**, and every `core3*
 
 Six ULTRA boards (SEARCH, GRAPH, ALERTS, SIGNALS, DATA, MODEL) are wired ahead of their CORE 5 modules. `ultraHas("mcFoo",…)` checks `typeof window[name] === "function"`; a missing module renders `ultraPending()` — "isn't in this build yet" — rather than a panel that looks stuck loading. **A `<form>` with no submit handler navigates on Enter**, which in a single-file app is a full reload that drops the conversation and the wire; every new board form must `preventDefault`.
 
-Currently live: **DATA** (table.js). Still gated: SEARCH, GRAPH, ALERTS, SIGNALS, MODEL.
+Currently live: **DATA** (table.js), **SEARCH** and **ALERTS** (query.js). Still gated: GRAPH, SIGNALS, MODEL.
+
+**`ultraHas()` names must be real exports.** The SEARCH gate asked for `mcQyEval`, which does not exist — the module exports `mcQyEvaluate` — so the board would have stayed gated forever with the module present and nothing would have looked wrong. Check every gate name against `grep '^function <name>'`.
+
+**Two field-shape mismatches between the app and query.js**, both silent:
+- the wire's `sev` is a tier *label* (`"BREAKING"`, `"JUST IN"`), while the engine's `sev` field is numeric — `sev:>=3` matched nothing until `qySearchView()` mapped the tiers onto their ordering. Alerts run through the same view, or a `sev:` rule silently never fires.
+- `src` holds the full domain (`reuters.com`), so `src:reuters` returns zero; `src:reuters*` is the form that works. The board placeholder advertised the broken one.
 
 ### CORE 5 third wave — delivery state
 

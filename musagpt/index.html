@@ -1398,7 +1398,7 @@ textarea#input::placeholder{color:var(--txt-faint)}
       <div class="bgrid twocol">
         <div class="bcard wide">
           <form class="tlform" id="qyForm">
-            <input id="qyQ" placeholder='try:  doha OR khartoum  ·  src:reuters sev:>2  ·  is:translated' aria-label="Search the wire" autocomplete="off" spellcheck="false">
+            <input id="qyQ" placeholder='try:  doha OR khartoum  ·  src:reuters* sev:>=4  ·  is:translated' aria-label="Search the wire" autocomplete="off" spellcheck="false">
             <button class="wpb" type="submit">Search</button>
           </form>
           <div id="qyExplain" class="qexplain"></div>
@@ -16939,6 +16939,2146 @@ function mcHxContentId(value, chars) {
   return mcHxToBase64Url(digest).slice(0, n);
 }
 
+/* ---------- core module: query.js ---------- */
+/* =====================================================================
+ * mcQy — search + alerting engine for the live news wire.
+ *
+ * Script-scope only: no modules, no bundler. Every top-level name carries
+ * the `mcQy` prefix because the host app already owns ~320 `mc*` globals.
+ *
+ * Five layers, each usable on its own:
+ *   1. mcQyParse      query text -> AST + a list of problems with offsets
+ *   2. mcQyExplain    AST -> plain English, so the user can confirm we
+ *                     understood them before they save the search
+ *   3. mcQyEvaluate   AST + item -> {match, score, highlights}
+ *   4. mcQyFacets     result set -> sidebar counts
+ *   5. mcQyRunRules   rules + batch + state -> fired alerts (+ new state)
+ *
+ * Feed item shape (all fields optional, all hostile until proven otherwise):
+ *   { id, t, text, url, src, cat, sev, sources[], sim, translated }
+ *
+ * Design rule that drives everything below: **the parser never throws and
+ * never gives up**. A half-typed query is the normal case — the user is
+ * still typing — so every error path yields the best AST we can build plus
+ * a problem record the UI can underline. Refusing to search is not an
+ * option we ever take.
+ *
+ * Pure functions over plain data. No DOM, no timers, no HTML, no clocks
+ * except an explicit `opts.now` (with a documented fallback).
+ * ===================================================================== */
+
+
+/* ---------------------------------------------------------------------
+ * 0. Caps and tuning
+ * ------------------------------------------------------------------- */
+
+/* Caps exist to bound pathological input, not to reject users. A pasted
+ * 10 KB query must still work; a fuzzer pasting 10 MB must not wedge the
+ * tab. Past a cap we truncate and record a problem. */
+const mcQyMaxQueryChars = 65536;
+const mcQyMaxTokens = 8192;
+const mcQyMaxDepth = 48;        // 8-level nesting is the requirement; 48 is far
+                                // past any human query and far under the stack.
+const mcQyMaxTextChars = 200000;
+const mcQyMaxTextTokens = 20000;
+const mcQyMaxFuzzyLen = 64;     // Levenshtein is O(n*m); refuse silly-long fuzz.
+
+const mcQyMsPer = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 };
+
+/* Ranking knobs. These are editorial judgements, not physics:
+ *  - halfLife 6h: a wire item is stale fast, but "stale" is not "worthless",
+ *    hence minRecency — a perfect match from yesterday still outranks a
+ *    weak match from a minute ago.
+ *  - phrases outweigh loose terms 2:1 because a phrase is an explicit,
+ *    expensive thing for the user to type; it is a strong intent signal.
+ *  - field clauses score low (0.5) on purpose: they are filters. If they
+ *    scored like terms, `src:reuters foo` would rank every Reuters item
+ *    above a strong `foo` match from anyone else. */
+const mcQyDefaults = {
+  now: null,               // caller should pass it; see mcQyNow()
+  halfLifeMs: 6 * 3600000,
+  minRecency: 0.05,
+  breakingSev: 4,          // is:breaking == sev >= 4 AND younger than an hour.
+  breakingAgeMs: 3600000,  // Both are tunable because desks disagree.
+  phraseBoost: 2.0,
+  wildcardWeight: 0.6,     // a glob hit is weaker evidence than the word itself
+  fuzzyPenalty: 0.25,      // per edit of distance
+  fieldWeight: 0.5,
+  negWeight: 0.1,          // a satisfied NOT is worth a token amount, not zero,
+                           // so a pure-negation query still ranks by recency
+  sevWeight: 0.06,
+  sourcesWeight: 0.04,
+  maxHighlights: 200,
+  defaultOp: "and",
+  /* Presentation options. These MUST be declared here even though nothing in
+     the matcher reads them: mcQyOpts() copies only keys it already knows, so
+     an option missing from this table is silently discarded rather than
+     rejected. limit/offset/sort/facetTop were all being dropped that way, and
+     a caller asking for page two got page one with no indication why. */
+  limit: 0,                // 0 == no limit
+  offset: 0,
+  sort: "score",           // "score" | "time"
+  facetTop: 0              // 0 == no roll-up into "(other)"
+};
+
+/* Stopwords: only used for story de-duplication signatures, never for
+ * matching. Removing them from a *search* would break `is:"the one"`. */
+const mcQyStop = (function () {
+  const w = ("a an and are as at be been by for from has have he in is it its of on " +
+    "or that the to was were will with after over into out up down new says said " +
+    "amid than then this these those his her their they we you not but").split(" ");
+  const m = Object.create(null);
+  for (let i = 0; i < w.length; i++) m[w[i]] = 1;
+  return m;
+})();
+
+
+/* ---------------------------------------------------------------------
+ * 1. Small safe utilities
+ * ------------------------------------------------------------------- */
+
+/* String() can throw (null-prototype objects, throwing toString, Symbols in
+ * some paths). Every string that reaches an output goes through here. */
+function mcQyStr(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : "";
+  if (typeof v === "boolean") return v ? "true" : "false";
+  try {
+    const str = String(v);
+    /* A plain object has no meaningful string form, and "[object Object]"
+       would lex into two real search terms — a query the user never typed,
+       silently returning results. Arrays and anything with a real toString
+       still stringify, because ["kyiv","gaza"] genuinely is a query. */
+    return str === "[object Object]" ? "" : str;
+  } catch (e) { return ""; }
+}
+
+function mcQyNum(v, dflt) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : dflt;
+  if (typeof v === "string" && v.length && v.length < 40) {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return dflt;
+}
+
+function mcQyInt(v, dflt) {
+  const n = mcQyNum(v, null);
+  return n === null ? dflt : Math.round(n);
+}
+
+function mcQyClamp(n, lo, hi) {
+  if (!Number.isFinite(n)) return lo;
+  return n < lo ? lo : (n > hi ? hi : n);
+}
+
+/* Unicode word regex, built once with a graceful fallback: if the engine
+ * lacks \p{...} the whole merged bundle would fail to *parse* without this
+ * guard, taking every other module down with it. */
+const mcQyRe = (function () {
+  try {
+    const src = "[\\p{L}\\p{N}]+(?:['’][\\p{L}\\p{N}]+)*";
+    new RegExp(src, "gu");
+    return { word: src, chr: "[\\p{L}\\p{N}]", u: "u" };
+  } catch (e) {
+    const src = "[A-Za-z0-9\\u00c0-\\u024f\\u0370-\\u04ff\\u0590-\\u06ff\\u4e00-\\u9fff]+";
+    return { word: src, chr: "[A-Za-z0-9\\u00c0-\\u024f\\u0370-\\u04ff\\u0590-\\u06ff\\u4e00-\\u9fff]", u: "" };
+  }
+})();
+const mcQyCharRe = new RegExp("^" + mcQyRe.chr + "$", mcQyRe.u);
+
+function mcQyIsWordChar(ch) {
+  if (typeof ch !== "string" || ch.length === 0) return false;
+  try { return mcQyCharRe.test(ch); } catch (e) { return false; }
+}
+
+/* Case-fold + strip combining marks so "Zelensky" finds "Želensky" and
+ * "resume" finds "résumé". ASCII fast path because this runs per token per
+ * item, and normalize() on a hot loop is measurable. */
+function mcQyFold(s) {
+  let x = mcQyStr(s);
+  if (x.length === 0) return x;
+  x = x.toLowerCase();
+  let ascii = true;
+  for (let i = 0; i < x.length; i++) { if (x.charCodeAt(i) > 127) { ascii = false; break; } }
+  if (ascii) return x;
+  if (typeof x.normalize === "function") {
+    try { x = x.normalize("NFD").replace(/[̀-ͯ]/g, ""); } catch (e) { /* keep unfolded */ }
+  }
+  return x;
+}
+
+/* Word tokeniser with offsets — offsets are what make highlighting possible. */
+function mcQyTokenizeText(text) {
+  const s0 = mcQyStr(text);
+  if (!s0) return [];
+  const s = s0.length > mcQyMaxTextChars ? s0.slice(0, mcQyMaxTextChars) : s0;
+  const re = new RegExp(mcQyRe.word, "g" + mcQyRe.u);
+  const out = [];
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    if (m[0].length === 0) { re.lastIndex++; continue; }  // zero-width would spin forever
+    out.push({ w: mcQyFold(m[0]), s: m.index, e: m.index + m[0].length });
+    if (out.length >= mcQyMaxTextTokens) break;
+  }
+  return out;
+}
+
+/* Iterative glob. Deliberately NOT a RegExp: user patterns like `a*a*a*a*b`
+ * compile to a regex that backtracks exponentially, and the query box is
+ * exactly where a hostile pattern arrives. This is O(n*m) worst case. */
+function mcQyGlob(pat, s) {
+  if (typeof pat !== "string" || typeof s !== "string") return false;
+  let p = 0, i = 0, star = -1, mark = 0;
+  const pn = pat.length, sn = s.length;
+  while (i < sn) {
+    if (p < pn && (pat[p] === "?" || pat[p] === s[i])) { p++; i++; }
+    else if (p < pn && pat[p] === "*") { star = p++; mark = i; }
+    else if (star >= 0) { p = star + 1; i = ++mark; }
+    else return false;
+  }
+  while (p < pn && pat[p] === "*") p++;
+  return p === pn;
+}
+
+/* Bounded Levenshtein with early abandonment. Returns max+1 when it blows
+ * the budget, so callers compare `<= max` and never see a huge number. */
+function mcQyEditDistance(a, b, max) {
+  if (typeof a !== "string" || typeof b !== "string") return max + 1;
+  if (a === b) return 0;
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > max) return max + 1;
+  if (la > mcQyMaxFuzzyLen || lb > mcQyMaxFuzzyLen) return max + 1;
+  let prev = new Array(lb + 1), cur = new Array(lb + 1);
+  for (let j = 0; j <= lb; j++) prev[j] = j;
+  for (let i = 1; i <= la; i++) {
+    cur[0] = i;
+    let best = cur[0];
+    const ca = a.charCodeAt(i - 1);
+    for (let j = 1; j <= lb; j++) {
+      const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+      let v = prev[j - 1] + cost;
+      const del = prev[j] + 1, ins = cur[j - 1] + 1;
+      if (del < v) v = del;
+      if (ins < v) v = ins;
+      cur[j] = v;
+      if (v < best) best = v;
+    }
+    if (best > max) return max + 1;
+    const tmp = prev; prev = cur; cur = tmp;
+  }
+  return prev[lb] > max ? max + 1 : prev[lb];
+}
+
+function mcQyMergeRanges(list) {
+  if (!Array.isArray(list) || list.length === 0) return [];
+  const ok = [];
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i];
+    if (!r) continue;
+    const s = mcQyInt(r.s, -1), e = mcQyInt(r.e, -1);
+    if (s < 0 || e <= s) continue;
+    ok.push({ s: s, e: e });
+  }
+  ok.sort(function (a, b) { return a.s - b.s || a.e - b.e; });
+  const out = [];
+  for (let i = 0; i < ok.length; i++) {
+    const last = out[out.length - 1];
+    if (last && ok[i].s <= last.e) { if (ok[i].e > last.e) last.e = ok[i].e; }
+    else out.push(ok[i]);
+  }
+  return out;
+}
+
+function mcQyProblem(list, severity, code, message, start, end) {
+  if (!Array.isArray(list)) return;
+  if (list.length > 200) return;   // a fuzzer must not produce a 10k-entry list
+  const s = Math.max(0, mcQyInt(start, 0));
+  const e = Math.max(s, mcQyInt(end, s));
+  list.push({ severity: severity, code: code, message: mcQyStr(message), start: s, end: e });
+}
+
+/* Quote a user value for display. Truncated so one 10 KB term cannot make
+ * explain() unreadable, and never emits a bare undefined/NaN. */
+function mcQyQuote(v) {
+  let s = mcQyStr(v);
+  if (s.length > 48) s = s.slice(0, 45) + "...";
+  return '"' + s.replace(/"/g, "'") + '"';
+}
+
+function mcQyHumanMs(ms) {
+  let n = mcQyNum(ms, 0);
+  if (!Number.isFinite(n) || n < 0) n = 0;
+  n = Math.round(n);
+  if (n === 0) return "0 seconds";
+  const units = [["day", 86400000], ["hour", 3600000], ["minute", 60000], ["second", 1000]];
+  const parts = [];
+  for (let i = 0; i < units.length && parts.length < 2; i++) {
+    const q = Math.floor(n / units[i][1]);
+    if (q > 0) { parts.push(q + " " + units[i][0] + (q === 1 ? "" : "s")); n -= q * units[i][1]; }
+  }
+  return parts.length ? parts.join(" ") : "under a second";
+}
+
+/* Parse `30m`, `2h`, `1h30m`, `3d`, `45s`, `2w`.
+ * Judgement call: a bare number (`age:<30`) is accepted as MINUTES with an
+ * info-level problem. Rejecting it is technically cleaner but in a newsroom
+ * "under 30" always means minutes, and a rejected filter means the user
+ * silently gets the wrong result set. We tell them what we assumed. */
+function mcQyParseDuration(v) {
+  const raw = mcQyStr(v).trim().toLowerCase();
+  if (!raw) return { ok: false, ms: 0, assumed: false, text: "" };
+  if (/^[0-9]+(\.[0-9]+)?$/.test(raw)) {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return { ok: false, ms: 0, assumed: false, text: raw };
+    return { ok: true, ms: n * mcQyMsPer.m, assumed: true, text: raw };
+  }
+  const re = /([0-9]+(?:\.[0-9]+)?)\s*(ms|s|m|h|d|w)/g;
+  let m, total = 0, seen = 0, consumed = 0;
+  while ((m = re.exec(raw)) !== null) {
+    const n = Number(m[1]);
+    if (!Number.isFinite(n)) return { ok: false, ms: 0, assumed: false, text: raw };
+    total += m[2] === "ms" ? n : n * mcQyMsPer[m[2]];
+    seen++; consumed += m[0].replace(/\s+/g, "").length;
+  }
+  if (!seen || consumed !== raw.replace(/\s+/g, "").length) {
+    return { ok: false, ms: 0, assumed: false, text: raw };
+  }
+  return { ok: true, ms: total, assumed: false, text: raw };
+}
+
+
+/* ---------------------------------------------------------------------
+ * 2. Field registry
+ *
+ * `kind` drives value validation, comparison and explain(). Adding a field
+ * is a one-line change here plus a getter — nothing in the parser knows
+ * any field name.
+ * ------------------------------------------------------------------- */
+
+function mcQySourceCount(item) {
+  if (!item || typeof item !== "object") return 0;
+  if (Array.isArray(item.sources)) return item.sources.length;
+  const n = mcQyNum(item.sources, null);
+  if (n !== null && n >= 0) return Math.floor(n);
+  return mcQyStr(item.src) ? 1 : 0;   // one named source is one source
+}
+
+function mcQyBool(v) {
+  if (v === true) return true;
+  if (typeof v === "string") { const f = v.toLowerCase(); return f === "true" || f === "yes" || f === "1"; }
+  if (typeof v === "number") return v === 1;
+  return false;
+}
+
+const mcQyFields = {
+  src: { kind: "keyword", label: "source", get: function (it) { return mcQyStr(it && it.src); } },
+  cat: { kind: "keyword", label: "category", get: function (it) { return mcQyStr(it && it.cat); } },
+  id: { kind: "keyword", label: "id", get: function (it) { return mcQyStr(it && it.id); } },
+  url: { kind: "keyword", label: "url", get: function (it) { return mcQyStr(it && it.url); } },
+  sev: { kind: "number", label: "severity", get: function (it) { return mcQyNum(it && it.sev, null); } },
+  sources: { kind: "number", label: "source count", get: function (it) { return mcQySourceCount(it); } },
+  age: { kind: "duration", label: "age", get: function (it, ctx) { return ctx.ageMs; } },
+  text: { kind: "text", label: "text", get: function (it) { return mcQyStr(it && it.text); } },
+  is: { kind: "flag", label: "flag", get: null }
+};
+
+const mcQyFieldAlias = {
+  source: "src", from: "src", feed: "src",
+  category: "cat", topic: "cat", section: "cat",
+  severity: "sev", sev: "sev", priority: "sev",
+  nsources: "sources", srccount: "sources", corroboration: "sources",
+  older: "age", newer: "age", since: "age",
+  body: "text", headline: "text", title: "text",
+  has: "is", flag: "is"
+};
+
+function mcQyResolveField(name) {
+  const n = mcQyStr(name).toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(mcQyFields, n)) return n;
+  if (Object.prototype.hasOwnProperty.call(mcQyFieldAlias, n)) return mcQyFieldAlias[n];
+  return null;
+}
+
+/* is:/has: flag predicates. Each returns a strict boolean. */
+const mcQyFlagDefs = {
+  translated: { label: "translated", fn: function (it) { return mcQyBool(it && it.translated); } },
+  original: { label: "not translated", fn: function (it) { return !mcQyBool(it && it.translated); } },
+  simulated: { label: "simulated", fn: function (it) { return mcQyBool(it && it.sim); } },
+  real: { label: "not simulated", fn: function (it) { return !mcQyBool(it && it.sim); } },
+  breaking: {
+    label: "breaking",
+    fn: function (it, ctx) {
+      const sev = mcQyNum(it && it.sev, null);
+      return sev !== null && sev >= ctx.opts.breakingSev && ctx.ageMs <= ctx.opts.breakingAgeMs;
+    }
+  },
+  corroborated: { label: "corroborated by 2+ sources", fn: function (it) { return mcQySourceCount(it) >= 2; } },
+  single: { label: "from a single source", fn: function (it) { return mcQySourceCount(it) <= 1; } },
+  url: { label: "has a link", fn: function (it) { return mcQyStr(it && it.url).length > 0; } }
+};
+const mcQyFlagAlias = { sim: "simulated", fake: "simulated", live: "breaking", link: "url", multi: "corroborated", solo: "single" };
+
+function mcQyResolveFlag(name) {
+  const n = mcQyStr(name).toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(mcQyFlagDefs, n)) return n;
+  if (Object.prototype.hasOwnProperty.call(mcQyFlagAlias, n)) return mcQyFlagAlias[n];
+  return null;
+}
+
+function mcQyFieldNames() {
+  const out = [];
+  for (const k in mcQyFields) if (Object.prototype.hasOwnProperty.call(mcQyFields, k)) out.push(k);
+  out.sort();
+  return out;
+}
+
+
+/* ---------------------------------------------------------------------
+ * 3. Tokeniser
+ *
+ * Emits: term | phrase | field | and | or | not | plus | minus | lparen |
+ *        rparen. Every token carries [start,end) offsets into the query so
+ *        the UI can underline exactly the characters at fault.
+ * ------------------------------------------------------------------- */
+
+function mcQyIsSpace(c) {
+  return c === " " || c === "\t" || c === "\n" || c === "\r" || c === "\f" || c === "\x0b" || c === " ";
+}
+
+function mcQyReadQuoted(src, i) {
+  let j = i + 1, buf = "";
+  while (j < src.length) {
+    const c = src[j];
+    if (c === "\\" && j + 1 < src.length && (src[j + 1] === '"' || src[j + 1] === "\\")) { buf += src[j + 1]; j += 2; continue; }
+    if (c === '"') return { value: buf, end: j + 1, closed: true };
+    buf += c; j++;
+  }
+  return { value: buf, end: j, closed: false };
+}
+
+/* Field head = `name:`, `name:>`, `name>=` ... Returns null when this is not
+ * a field, which is the common case (`http://x` must stay a term). */
+function mcQyFieldHead(src, i) {
+  let j = i;
+  while (j < src.length && /[A-Za-z_]/.test(src[j])) j++;
+  if (j === i || j - i > 24) return null;
+  const name = src.slice(i, j).toLowerCase();
+  let op = null, k = j;
+  if (src[k] === ":") {
+    k++;
+    const two = src.slice(k, k + 2);
+    if (two === ">=" || two === "<=" || two === "!=") { op = two; k += 2; }
+    else if (src[k] === ">" || src[k] === "<" || src[k] === "=") { op = src[k]; k += 1; }
+    else op = ":";
+  } else {
+    const two = src.slice(k, k + 2);
+    if (two === ">=" || two === "<=" || two === "!=") { op = two; k += 2; }
+    else if (src[k] === ">" || src[k] === "<") { op = src[k]; k += 1; }
+    else return null;   // a bare `=` without a colon is far more often a URL
+  }                     // fragment or an equation than a filter.
+  return { name: name, op: op, valueAt: k, nameEnd: j };
+}
+
+function mcQyIsWordStop(c) {
+  return mcQyIsSpace(c) || c === "(" || c === ")" || c === '"';
+}
+
+function mcQyReadValue(src, k) {
+  if (src[k] === '"') {
+    const q = mcQyReadQuoted(src, k);
+    return { value: q.value, end: q.end, quoted: true, closed: q.closed };
+  }
+  let j = k;
+  while (j < src.length && !mcQyIsWordStop(src[j])) j++;
+  return { value: src.slice(k, j), end: j, quoted: false, closed: true };
+}
+
+function mcQyLex(query, problems) {
+  const raw = mcQyStr(query);
+  let src = raw;
+  if (src.length > mcQyMaxQueryChars) {
+    src = src.slice(0, mcQyMaxQueryChars);
+    mcQyProblem(problems, "warning", "query_truncated",
+      "Query is longer than " + mcQyMaxQueryChars + " characters; only the first part was used.",
+      mcQyMaxQueryChars, mcQyMaxQueryChars);
+  }
+  const toks = [];
+  const n = src.length;
+  let i = 0;
+
+  const operandPos = function () {
+    const last = toks[toks.length - 1];
+    if (!last) return true;
+    return last.type === "and" || last.type === "or" || last.type === "not" ||
+      last.type === "lparen" || last.type === "plus" || last.type === "minus";
+  };
+  /* Where a +/-/! may act as a prefix operator. operandPos() alone is too
+     strict: it only fires after an explicit operator, so in "kyiv -drone" the
+     minus fell through to the term lexer, which stripped it into `raw` and
+     kept a *positive* term — the exclusion silently became an inclusion, and
+     "a -b" is far and away the most common way people write exclusion.
+     Whitespace is the discriminator every real search engine uses: " -drone"
+     negates, "covid-19" is one hyphenated word. */
+  const prefixPos = function (at) {
+    return operandPos() || at === 0 || mcQyIsSpace(src[at - 1]);
+  };
+
+  while (i < n) {
+    const c = src[i];
+    if (mcQyIsSpace(c)) { i++; continue; }
+    if (toks.length >= mcQyMaxTokens) {
+      mcQyProblem(problems, "warning", "too_many_terms",
+        "Query has more than " + mcQyMaxTokens + " terms; the rest was ignored.", i, n);
+      break;
+    }
+    if (c === "(") { toks.push({ type: "lparen", start: i, end: i + 1 }); i++; continue; }
+    if (c === ")") { toks.push({ type: "rparen", start: i, end: i + 1 }); i++; continue; }
+    if (c === '"') {
+      const q = mcQyReadQuoted(src, i);
+      if (!q.closed) {
+        mcQyProblem(problems, "warning", "unclosed_quote",
+          "Unclosed quote — searched for " + mcQyQuote(q.value) + " as a phrase to the end of the query.", i, q.end);
+      }
+      if (q.value.length === 0) {
+        mcQyProblem(problems, "info", "empty_phrase", "Empty quotes ignored.", i, q.end);
+      } else {
+        toks.push({ type: "phrase", value: q.value, start: i, end: q.end, closed: q.closed });
+      }
+      i = q.end; continue;
+    }
+    if ((c === "+" || c === "-") && prefixPos(i) && i + 1 < n && !mcQyIsWordStop(src[i + 1])) {
+      toks.push({ type: c === "+" ? "plus" : "minus", start: i, end: i + 1 }); i++; continue;
+    }
+    if (c === "&" && src[i + 1] === "&") { toks.push({ type: "and", start: i, end: i + 2 }); i += 2; continue; }
+    if (c === "|" && src[i + 1] === "|") { toks.push({ type: "or", start: i, end: i + 2 }); i += 2; continue; }
+    if (c === "!" && prefixPos(i) && i + 1 < n && !mcQyIsWordStop(src[i + 1])) {
+      toks.push({ type: "not", start: i, end: i + 1 }); i++; continue;
+    }
+
+    const head = mcQyFieldHead(src, i);
+    if (head) {
+      const canon = mcQyResolveField(head.name);
+      const v = mcQyReadValue(src, head.valueAt);
+      if (canon) {
+        if (v.quoted && !v.closed) {
+          mcQyProblem(problems, "warning", "unclosed_quote",
+            "Unclosed quote after " + head.name + ":", head.valueAt, v.end);
+        }
+        toks.push({
+          type: "field", field: canon, name: head.name, op: head.op,
+          value: v.value, quoted: v.quoted, start: i, end: v.end
+        });
+        i = v.end; continue;
+      }
+      /* Unknown field. Two rejected options: (a) drop the clause — silently
+       * wrong results; (b) search the literal text "foo:bar" — matches
+       * nothing, also silently wrong. We search the *value* and say so, so
+       * the user still gets results and can see why. URL schemes are exempt
+       * because `http://x` is a term, not a mistake. */
+      const isUrlish = src.slice(head.valueAt, head.valueAt + 2) === "//";
+      if (!isUrlish && v.value.length) {
+        mcQyProblem(problems, "warning", "unknown_field",
+          "Unknown field " + mcQyQuote(head.name) + " — searched for " + mcQyQuote(v.value) +
+          " as text instead. Known fields: " + mcQyFieldNames().join(", ") + ".",
+          i, v.end);
+        toks.push(mcQyMakeTermTok(v.value, i, v.end));
+        i = v.end; continue;
+      }
+    }
+
+    let j = i;
+    while (j < n && !mcQyIsWordStop(src[j])) j++;
+    const word = src.slice(i, j);
+    if (word === "AND" || word === "OR" || word === "NOT") {
+      toks.push({ type: word.toLowerCase(), start: i, end: j });
+    } else {
+      const lower = word.toLowerCase();
+      if (lower === "and" || lower === "or" || lower === "not") {
+        /* Lucene's rule: operators are uppercase. Lowercasing them would
+         * turn "does not compute" into a negation, which is worse than
+         * treating a stray "not" as a word — but we say so out loud. */
+        mcQyProblem(problems, "info", "lowercase_operator",
+          "Treated " + mcQyQuote(word) + " as a search word. Write it in capitals (" +
+          lower.toUpperCase() + ") to use it as an operator.", i, j);
+      }
+      toks.push(mcQyMakeTermTok(word, i, j));
+    }
+    i = j;
+  }
+  return toks;
+}
+
+function mcQyMakeTermTok(word, start, end) {
+  let value = word, fuzzy = 0;
+  const fm = /~([0-9]?)$/.exec(value);
+  if (fm && fm.index > 0) {
+    fuzzy = fm[1] === "" ? 1 : Math.min(2, parseInt(fm[1], 10) || 0);
+    value = value.slice(0, fm.index);
+  }
+  const wild = value.indexOf("*") >= 0 || value.indexOf("?") >= 0;
+  return { type: "term", value: value, raw: word, fuzzy: fuzzy, wild: wild, start: start, end: end };
+}
+
+
+/* ---------------------------------------------------------------------
+ * 4. Parser (recursive descent)
+ *
+ *   or    := and ( OR and )*
+ *   and   := unary ( [AND] unary )*          // juxtaposition = defaultOp
+ *   unary := (NOT | '-' | '+')* primary
+ *   primary := '(' or ')' | field | phrase | term
+ *
+ * Precedence NOT > AND > OR, which is what every user expects and what
+ * Lucene/GitHub/Gmail all do.
+ *
+ * Recovery contract: every loop is guarded on index progress, so no input
+ * can spin the parser; every failed production yields {type:"all"} (the
+ * neutral element of AND) rather than {type:"none"}, because a dropped
+ * clause that widens the result set is visible to the user, while one that
+ * empties it looks like "there is no news".
+ * ------------------------------------------------------------------- */
+
+function mcQyNodeAll() { return { type: "all" }; }
+
+function mcQyJoin(parts, op) {
+  const kept = [];
+  for (let i = 0; i < parts.length; i++) if (parts[i]) kept.push(parts[i]);
+  /* `all` is the neutral element of AND and the absorbing element of OR.
+     Without this, a query that parses to nothing twice — ")))(((" produces
+     one `all` per fragment — becomes {and:[all,all]}, which behaves
+     identically but reports itself as a real query the user did not write. */
+  if (op !== "or") {
+    const solid = [];
+    for (let i = 0; i < kept.length; i++) if (kept[i].type !== "all") solid.push(kept[i]);
+    if (solid.length === 0) return mcQyNodeAll();
+    kept.length = 0;
+    for (let i = 0; i < solid.length; i++) kept.push(solid[i]);
+  } else {
+    for (let i = 0; i < kept.length; i++) if (kept[i].type === "all") return mcQyNodeAll();
+  }
+  if (kept.length === 0) return mcQyNodeAll();
+  if (kept.length === 1) return kept[0];
+  if (op !== "or") return { type: "and", kids: kept };
+  /* Default-OR mode: `+x` is a hard requirement and `-x` a hard exclusion
+   * (Lucene semantics). Optional clauses become score-only `boost` nodes so
+   * `+ukraine kyiv` means "must mention ukraine, rank kyiv higher". */
+  const must = [], should = [];
+  for (let i = 0; i < kept.length; i++) {
+    if (kept[i].req || kept[i].type === "not") must.push(kept[i]); else should.push(kept[i]);
+  }
+  if (must.length === 0) return { type: "or", kids: should };
+  const all = must.slice();
+  if (should.length) all.push({ type: "boost", kid: should.length === 1 ? should[0] : { type: "or", kids: should } });
+  return all.length === 1 ? all[0] : { type: "and", kids: all };
+}
+
+function mcQyStartsOperand(st) {
+  const tk = st.t[st.i];
+  if (!tk) return false;
+  return tk.type === "term" || tk.type === "phrase" || tk.type === "field" ||
+    tk.type === "lparen" || tk.type === "not" || tk.type === "plus" || tk.type === "minus";
+}
+
+function mcQySkipToClose(st) {
+  let bal = 1;
+  while (st.i < st.t.length) {
+    const tk = st.t[st.i++];
+    if (tk.type === "lparen") bal++;
+    else if (tk.type === "rparen") { bal--; if (bal === 0) return; }
+  }
+}
+
+function mcQyParseOr(st) {
+  const parts = [mcQyParseAnd(st)];
+  for (;;) {
+    const tk = st.t[st.i];
+    if (!tk || tk.type !== "or") break;
+    st.i++;
+    while (st.i < st.t.length && (st.t[st.i].type === "or" || st.t[st.i].type === "and")) {
+      mcQyProblem(st.p, "warning", "double_operator",
+        "Two operators in a row — the extra one was ignored.", st.t[st.i].start, st.t[st.i].end);
+      st.i++;
+    }
+    if (!mcQyStartsOperand(st)) {
+      mcQyProblem(st.p, "warning", "dangling_operator",
+        "OR has nothing after it — it was ignored.", tk.start, tk.end);
+      break;
+    }
+    const before = st.i;
+    parts.push(mcQyParseAnd(st));
+    if (st.i === before) { st.i++; }   // progress guard
+  }
+  return parts.length === 1 ? parts[0] : { type: "or", kids: parts };
+}
+
+function mcQyParseAnd(st) {
+  while (st.i < st.t.length && (st.t[st.i].type === "and" || st.t[st.i].type === "or")) {
+    mcQyProblem(st.p, "warning", "leading_operator",
+      "Query starts with " + st.t[st.i].type.toUpperCase() + " — it was ignored.",
+      st.t[st.i].start, st.t[st.i].end);
+    st.i++;
+  }
+  const parts = [];
+  const first = mcQyParseUnary(st);
+  if (first) parts.push(first);
+  for (;;) {
+    const tk = st.t[st.i];
+    if (!tk || tk.type === "rparen" || tk.type === "or") break;
+    const before = st.i;
+    if (tk.type === "and") {
+      st.i++;
+      while (st.i < st.t.length && st.t[st.i].type === "and") {
+        mcQyProblem(st.p, "warning", "double_operator",
+          "Two operators in a row — the extra one was ignored.", st.t[st.i].start, st.t[st.i].end);
+        st.i++;
+      }
+      if (!mcQyStartsOperand(st)) {
+        mcQyProblem(st.p, "warning", "dangling_operator",
+          "AND has nothing after it — it was ignored.", tk.start, tk.end);
+        break;
+      }
+      const p = mcQyParseUnary(st);
+      if (p) parts.push(p);
+    } else if (mcQyStartsOperand(st)) {
+      const p = mcQyParseUnary(st);          // juxtaposition
+      if (p) parts.push(p);
+    } else break;
+    if (st.i === before) { st.i++; }         // progress guard
+  }
+  return mcQyJoin(parts, st.defaultOp);
+}
+
+function mcQyParseUnary(st) {
+  let neg = 0, req = false, firstTok = null;
+  for (;;) {
+    const tk = st.t[st.i];
+    if (!tk) break;
+    if (tk.type === "not" || tk.type === "minus") { neg++; if (!firstTok) firstTok = tk; st.i++; continue; }
+    if (tk.type === "plus") { req = true; if (!firstTok) firstTok = tk; st.i++; continue; }
+    break;
+  }
+  if (st.i >= st.t.length) {
+    if (firstTok) {
+      mcQyProblem(st.p, "warning", "dangling_not",
+        "Nothing to negate after this — it was ignored.", firstTok.start, firstTok.end);
+    }
+    return null;
+  }
+  const node = mcQyParsePrimary(st);
+  if (!node) {
+    if (firstTok) {
+      mcQyProblem(st.p, "warning", "dangling_not",
+        "Nothing to negate after this — it was ignored.", firstTok.start, firstTok.end);
+    }
+    return null;
+  }
+  let out = node;
+  if (neg >= 2) {
+    /* NOT NOT x is legal and means x. We fold it here rather than in the
+     * evaluator so nothing downstream ever walks a stack of negations. */
+    mcQyProblem(st.p, "info", "double_negation",
+      (neg === 2 ? "Double negative" : neg + " negations") + " cancel out.", firstTok.start, node.__end || firstTok.end);
+  }
+  if (neg % 2 === 1) out = { type: "not", kid: out };
+  if (req) out.req = true;
+  return out;
+}
+
+function mcQyParsePrimary(st) {
+  const tk = st.t[st.i];
+  if (!tk) return null;
+  if (tk.type === "lparen") {
+    st.i++;
+    if (st.depth >= mcQyMaxDepth) {
+      mcQyProblem(st.p, "warning", "too_deep",
+        "Query is nested more than " + mcQyMaxDepth + " levels deep; this group was ignored.", tk.start, tk.end);
+      mcQySkipToClose(st);
+      return mcQyNodeAll();
+    }
+    st.depth++;
+    let inner;
+    if (st.t[st.i] && st.t[st.i].type === "rparen") {
+      mcQyProblem(st.p, "info", "empty_group", "Empty () ignored.", tk.start, st.t[st.i].end);
+      inner = mcQyNodeAll();
+    } else {
+      inner = mcQyParseOr(st);
+    }
+    st.depth--;
+    if (st.t[st.i] && st.t[st.i].type === "rparen") { st.i++; }
+    else {
+      mcQyProblem(st.p, "warning", "unclosed_paren",
+        "This '(' is never closed — the group was closed at the end of the query.", tk.start, tk.end);
+    }
+    return inner;
+  }
+  if (tk.type === "rparen") return null;
+  if (tk.type === "term") { st.i++; return mcQyTermNode(tk, st); }
+  if (tk.type === "phrase") { st.i++; return mcQyPhraseNode(tk, st); }
+  if (tk.type === "field") { st.i++; return mcQyFieldNode(tk, st); }
+  return null;
+}
+
+/* A query term is matched against *tokenised* text, so a term that the text
+ * tokeniser would split (covid-19, u.s., foo:bar) can never match as one
+ * word. Rather than fail silently we promote it to a phrase — which is what
+ * the user meant by typing it as one word. */
+function mcQyTermNode(tk, st) {
+  const folded = mcQyFold(tk.value);
+  if (tk.wild) {
+    let pat = "";
+    for (let i = 0; i < folded.length; i++) {
+      const c = folded[i];
+      if (c === "*" || c === "?" || mcQyIsWordChar(c)) pat += c;
+    }
+    const bare = pat.replace(/[*?]/g, "");
+    if (!pat.length || (!bare.length && pat.indexOf("*") >= 0 && pat.length <= 2)) {
+      mcQyProblem(st.p, "warning", "bare_wildcard",
+        "A wildcard on its own matches everything — " + mcQyQuote(tk.raw) + " was ignored.", tk.start, tk.end);
+      return mcQyNodeAll();
+    }
+    if (bare.length < 2) {
+      mcQyProblem(st.p, "info", "short_wildcard",
+        "Wildcard " + mcQyQuote(tk.raw) + " has very little to match on; results will be broad.", tk.start, tk.end);
+    }
+    return { type: "term", value: pat, wild: true, fuzzy: 0, raw: tk.raw, start: tk.start, end: tk.end };
+  }
+  const parts = mcQyTokenizeText(folded);
+  if (parts.length === 0) {
+    mcQyProblem(st.p, "info", "unsearchable_term",
+      mcQyQuote(tk.raw) + " has no letters or digits to search for; it was ignored.", tk.start, tk.end);
+    return mcQyNodeAll();
+  }
+  if (parts.length > 1) {
+    const words = parts.map(function (p) { return p.w; });
+    return { type: "phrase", value: tk.value, words: words, raw: tk.raw, implicit: true, start: tk.start, end: tk.end };
+  }
+  if (tk.fuzzy > 0 && parts[0].w.length > mcQyMaxFuzzyLen) {
+    mcQyProblem(st.p, "info", "fuzzy_too_long",
+      "Fuzzy matching is skipped for words longer than " + mcQyMaxFuzzyLen + " characters.", tk.start, tk.end);
+  }
+  return {
+    type: "term", value: parts[0].w, wild: false,
+    fuzzy: parts[0].w.length <= mcQyMaxFuzzyLen ? tk.fuzzy : 0,
+    raw: tk.raw, start: tk.start, end: tk.end
+  };
+}
+
+function mcQyPhraseNode(tk, st) {
+  const parts = mcQyTokenizeText(mcQyFold(tk.value));
+  if (parts.length === 0) {
+    mcQyProblem(st.p, "info", "unsearchable_phrase",
+      "Phrase " + mcQyQuote(tk.value) + " has no searchable words; it was ignored.", tk.start, tk.end);
+    return mcQyNodeAll();
+  }
+  const words = parts.map(function (p) { return p.w; });
+  if (words.length === 1) {
+    return { type: "term", value: words[0], wild: false, fuzzy: 0, raw: tk.value, quoted: true, start: tk.start, end: tk.end };
+  }
+  return { type: "phrase", value: tk.value, words: words, raw: tk.value, start: tk.start, end: tk.end };
+}
+
+function mcQyFieldNode(tk, st) {
+  const def = mcQyFields[tk.field];
+  const label = def ? def.label : tk.field;
+  const raw = mcQyStr(tk.value);
+  const kill = function (sev, code, msg) {
+    /* A broken filter degrades to the neutral element, never to "match
+     * nothing": the user keeps a usable result set and sees the problem. */
+    mcQyProblem(st.p, sev, code, msg, tk.start, tk.end);
+    return mcQyNodeAll();
+  };
+  if (!raw.length) return kill("warning", "empty_value", tk.name + ": has no value after it — the filter was ignored.");
+
+  if (def.kind === "flag") {
+    const flag = mcQyResolveFlag(raw);
+    if (!flag) {
+      const known = Object.keys(mcQyFlagDefs).sort().join(", ");
+      return kill("warning", "unknown_flag",
+        "Unknown flag " + mcQyQuote(raw) + " — the filter was ignored. Try: " + known + ".");
+    }
+    if (tk.op !== ":" && tk.op !== "=" && tk.op !== "!=") {
+      mcQyProblem(st.p, "info", "bad_operator",
+        "'" + tk.op + "' means nothing for is: — read as is:" + flag + ".", tk.start, tk.end);
+    }
+    return { type: "flag", flag: flag, neg: tk.op === "!=", start: tk.start, end: tk.end };
+  }
+
+  if (def.kind === "number") {
+    const nums = [];
+    const bits = raw.split(",");
+    for (let i = 0; i < bits.length; i++) {
+      const n = mcQyNum(bits[i].trim(), null);
+      if (n === null) {
+        return kill("error", "bad_number",
+          label + " needs a number, but " + mcQyQuote(bits[i].trim() || raw) + " is not one — the filter was ignored.");
+      }
+      nums.push(n);
+    }
+    if (nums.length > 1 && tk.op !== ":" && tk.op !== "=" && tk.op !== "!=") {
+      return kill("warning", "bad_operator", "A list of numbers cannot be used with '" + tk.op + "' — the filter was ignored.");
+    }
+    return { type: "num", field: tk.field, label: label, op: tk.op === ":" ? "=" : tk.op, values: nums, start: tk.start, end: tk.end };
+  }
+
+  if (def.kind === "duration") {
+    const d = mcQyParseDuration(raw);
+    if (!d.ok) {
+      return kill("error", "bad_duration",
+        label + " needs a duration like 30m, 2h or 3d, but " + mcQyQuote(raw) + " is not one — the filter was ignored.");
+    }
+    if (d.assumed) {
+      mcQyProblem(st.p, "info", "assumed_minutes",
+        "Read " + mcQyQuote(raw) + " as " + mcQyHumanMs(d.ms) + ". Write 30m / 2h / 3d to be explicit.", tk.start, tk.end);
+    }
+    let op = tk.op;
+    if (op === ":" || op === "=") {
+      /* `age:30m` is never a request for items exactly 30 minutes old. */
+      mcQyProblem(st.p, "info", "duration_lte",
+        "Read " + tk.name + ":" + raw + " as " + tk.name + ":<=" + raw + " (within " + mcQyHumanMs(d.ms) + ").", tk.start, tk.end);
+      op = "<=";
+    }
+    return { type: "num", field: tk.field, label: label, op: op, values: [d.ms], duration: true, start: tk.start, end: tk.end };
+  }
+
+  /* keyword / text */
+  const vals = [];
+  const bits = tk.quoted ? [raw] : raw.split(",");
+  for (let i = 0; i < bits.length; i++) {
+    const v = mcQyFold(bits[i].trim());
+    if (v.length) vals.push(v);
+  }
+  if (!vals.length) return kill("warning", "empty_value", tk.name + ": has no value after it — the filter was ignored.");
+  if (tk.op === ">" || tk.op === "<" || tk.op === ">=" || tk.op === "<=") {
+    mcQyProblem(st.p, "warning", "bad_operator",
+      label + " is text, so '" + tk.op + "' makes no sense — read as " + tk.name + ":" + bits[0].trim() + ".", tk.start, tk.end);
+  }
+  if (def.kind === "text") {
+    const words = mcQyTokenizeText(vals.join(" ")).map(function (p) { return p.w; });
+    if (!words.length) return kill("info", "unsearchable_term", "Nothing searchable in " + tk.name + ":" + mcQyQuote(raw) + ".");
+    if (words.length === 1) return { type: "term", value: words[0], wild: false, fuzzy: 0, raw: raw, start: tk.start, end: tk.end };
+    return { type: "phrase", value: raw, words: words, raw: raw, start: tk.start, end: tk.end };
+  }
+  return {
+    type: "kw", field: tk.field, label: label, values: vals,
+    neg: tk.op === "!=", start: tk.start, end: tk.end
+  };
+}
+
+/* Public entry point. Never throws — the outermost try/catch is the last
+ * line of defence, and returns a query that matches everything plus an
+ * error the UI can show. */
+function mcQyParse(query, opts) {
+  const o = opts || {};
+  const problems = [];
+  const qs = mcQyStr(query);
+  let ast = mcQyNodeAll();
+  try {
+    const toks = mcQyLex(qs, problems);
+    if (toks.length === 0) {
+      if (qs.trim().length === 0) {
+        mcQyProblem(problems, "info", "empty_query", "Empty query — everything matches.", 0, 0);
+      } else {
+        mcQyProblem(problems, "warning", "nothing_searchable",
+          "Nothing searchable in this query — everything matches.", 0, qs.length);
+      }
+      return mcQyParseResult(qs, ast, problems, o);
+    }
+    const st = {
+      t: toks, i: 0, p: problems, depth: 0,
+      defaultOp: mcQyStr(o.defaultOp).toLowerCase() === "or" ? "or" : "and"
+    };
+    ast = mcQyParseOr(st);
+    while (st.i < st.t.length) {
+      const before = st.i;
+      const tk = st.t[st.i];
+      if (tk.type === "rparen") {
+        mcQyProblem(problems, "warning", "unbalanced_paren", "Unmatched ')' — ignored.", tk.start, tk.end);
+        st.i++;
+      } else {
+        mcQyProblem(problems, "warning", "unexpected_token",
+          "Unexpected " + tk.type + " here; the rest of the query was still searched.", tk.start, tk.end);
+        const more = mcQyParseOr(st);
+        ast = mcQyJoin([ast, more], "and");
+      }
+      if (st.i === before) st.i++;
+    }
+    if (ast && ast.type === "all") {
+      let has = false;
+      for (let i = 0; i < problems.length; i++) if (problems[i].severity !== "info") has = true;
+      if (!has) mcQyProblem(problems, "info", "matches_everything", "This query matches everything.", 0, qs.length);
+    }
+  } catch (e) {
+    /* Should be unreachable. If it ever fires, the user still gets a search. */
+    ast = mcQyNodeAll();
+    mcQyProblem(problems, "error", "internal",
+      "The query could not be parsed (" + mcQyStr(e && e.message) + "); everything is shown instead.", 0, qs.length);
+  }
+  return mcQyParseResult(qs, ast, problems, o);
+}
+
+function mcQyParseResult(qs, ast, problems, o) {
+  let worst = "ok";
+  for (let i = 0; i < problems.length; i++) {
+    const s = problems[i].severity;
+    if (s === "error") worst = "error";
+    else if (s === "warning" && worst !== "error") worst = "warning";
+    else if (s === "info" && worst === "ok") worst = "info";
+  }
+  return {
+    query: qs,
+    ast: ast || mcQyNodeAll(),
+    problems: problems,
+    severity: worst,
+    ok: worst !== "error",
+    defaultOp: mcQyStr(o && o.defaultOp).toLowerCase() === "or" ? "or" : "and"
+  };
+}
+
+
+/* ---------------------------------------------------------------------
+ * 5. explain() and stringify()
+ *
+ * explain() is shown to the user before they save an alert rule. It has to
+ * be readable by someone who does not know the DSL, so it says "newer than
+ * 30 minutes", not "age < 1800000".
+ * ------------------------------------------------------------------- */
+
+const mcQyExplainMaxKids = 6;
+
+function mcQyExplainNum(node) {
+  const label = mcQyStr(node.label) || mcQyStr(node.field);
+  const fmt = node.duration
+    ? function (v) { return mcQyHumanMs(v); }
+    : function (v) { return mcQyStr(Math.round(v * 1000) / 1000); };
+  const v = node.values && node.values.length ? node.values[0] : 0;
+  if (node.field === "age") {
+    switch (node.op) {
+      case "<": return "newer than " + fmt(v);
+      case "<=": return "no older than " + fmt(v);
+      case ">": return "older than " + fmt(v);
+      case ">=": return "at least " + fmt(v) + " old";
+      case "!=": return "not exactly " + fmt(v) + " old";
+      default: return "exactly " + fmt(v) + " old";
+    }
+  }
+  if (node.values && node.values.length > 1) {
+    const list = node.values.map(fmt).join(" or ");
+    return (node.op === "!=" ? label + " is neither " : label + " is ") + list;
+  }
+  switch (node.op) {
+    case ">": return label + " above " + fmt(v);
+    case ">=": return label + " of at least " + fmt(v);
+    case "<": return label + " below " + fmt(v);
+    case "<=": return label + " of at most " + fmt(v);
+    case "!=": return label + " is not " + fmt(v);
+    default: return label + " is exactly " + fmt(v);
+  }
+}
+
+function mcQyExplainNode(node, depth) {
+  if (!node || typeof node !== "object") return "anything";
+  if (depth > mcQyMaxDepth) return "(a very deeply nested condition)";
+  switch (node.type) {
+    case "all": return "anything";
+    case "none": return "nothing";
+    case "term":
+      if (node.wild) return "a word matching the pattern " + mcQyQuote(node.value);
+      if (node.fuzzy > 0) {
+        return "the word " + mcQyQuote(node.value) + " (or a spelling up to " +
+          node.fuzzy + " character" + (node.fuzzy === 1 ? "" : "s") + " different)";
+      }
+      return "the word " + mcQyQuote(node.value);
+    case "phrase":
+      return (node.implicit ? "the words " : "the exact phrase ") +
+        mcQyQuote(node.words ? node.words.join(" ") : node.value) +
+        (node.implicit ? " next to each other" : "");
+    case "kw": {
+      const label = mcQyStr(node.label) || mcQyStr(node.field);
+      const wild = node.values.some(function (v) { return v.indexOf("*") >= 0 || v.indexOf("?") >= 0; });
+      const list = node.values.map(mcQyQuote).join(" or ");
+      const verb = node.neg ? " is not " : (wild ? " matches " : " is ");
+      return label + verb + (node.values.length > 1 ? "one of " : "") + list;
+    }
+    case "num": return mcQyExplainNum(node);
+    case "flag": {
+      const def = mcQyFlagDefs[node.flag];
+      const l = def ? def.label : node.flag;
+      return node.neg ? "the item is not " + l : "the item is " + l;
+    }
+    case "not": return "NOT " + mcQyExplainNode(node.kid, depth + 1);
+    case "boost": return "(preferably " + mcQyExplainNode(node.kid, depth + 1) + ", used only for ranking)";
+    case "and":
+    case "or": {
+      const kids = Array.isArray(node.kids) ? node.kids : [];
+      if (kids.length === 0) return "anything";
+      if (kids.length === 1) return mcQyExplainNode(kids[0], depth + 1);
+      const shown = kids.slice(0, mcQyExplainMaxKids)
+        .map(function (k) { return mcQyExplainNode(k, depth + 1); });
+      const extra = kids.length - shown.length;
+      if (extra > 0) shown.push("and " + extra + " more condition" + (extra === 1 ? "" : "s"));
+      const joiner = node.type === "and" ? "; and " : "; or ";
+      if (kids.length === 2 && extra === 0) {
+        return shown[0] + (node.type === "and" ? " and " : " or ") + shown[1];
+      }
+      return (node.type === "and" ? "all of: " : "any of: ") + shown.join(joiner);
+    }
+    default: return "an unrecognised condition";
+  }
+}
+
+function mcQyExplain(astOrParsed, opts) {
+  try {
+    const ast = astOrParsed && astOrParsed.ast ? astOrParsed.ast : astOrParsed;
+    if (!ast || typeof ast !== "object") return "Matches everything.";
+    if (ast.type === "all") return "Matches everything (no filter).";
+    if (ast.type === "none") return "Matches nothing.";
+    let s = mcQyExplainNode(ast, 0);
+    s = "Matches items with " + s;
+    if (opts && opts.now) { /* reserved: relative-time rendering hook */ }
+    return s.charAt(0).toUpperCase() + s.slice(1) + ".";
+  } catch (e) {
+    return "Matches everything (this query could not be described).";
+  }
+}
+
+/* Canonical round-trippable form. Used for saved-search normalisation and
+ * as the compile cache key. */
+function mcQyStringify(node, depth) {
+  const d = depth || 0;
+  if (!node || typeof node !== "object" || d > mcQyMaxDepth) return "*";
+  switch (node.type) {
+    case "all": return "*";
+    case "none": return "NOT *";
+    case "term": return node.value + (node.fuzzy > 0 ? "~" + node.fuzzy : "");
+    case "phrase": return '"' + mcQyStr(node.words ? node.words.join(" ") : node.value).replace(/"/g, "") + '"';
+    case "kw": return node.field + (node.neg ? ":!=" : ":") + node.values.join(",");
+    case "num": return node.field + ":" + node.op + (node.duration ? node.values[0] + "ms" : node.values.join(","));
+    case "flag": return (node.neg ? "-" : "") + "is:" + node.flag;
+    case "not": return "NOT " + mcQyStringify(node.kid, d + 1);
+    case "boost": return mcQyStringify(node.kid, d + 1);
+    case "and":
+    case "or": {
+      const kids = Array.isArray(node.kids) ? node.kids : [];
+      const parts = kids.map(function (k) { return mcQyStringify(k, d + 1); });
+      const joined = parts.join(node.type === "and" ? " AND " : " OR ");
+      return d === 0 ? joined : "(" + joined + ")";
+    }
+    default: return "*";
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+ * 6. Evaluation, scoring, highlighting
+ * ------------------------------------------------------------------- */
+
+function mcQyOpts(o) {
+  const out = {};
+  for (const k in mcQyDefaults) if (Object.prototype.hasOwnProperty.call(mcQyDefaults, k)) out[k] = mcQyDefaults[k];
+  if (o && typeof o === "object") {
+    for (const k in out) {
+      if (Object.prototype.hasOwnProperty.call(o, k) && o[k] !== undefined && o[k] !== null) {
+        out[k] = typeof out[k] === "number" ? mcQyNum(o[k], out[k]) : o[k];
+      }
+    }
+  }
+  return out;
+}
+
+/* `now` is a parameter, not a clock read, so every result is reproducible.
+ * Fallback order: explicit -> newest item in the batch -> Date.now(). The
+ * last one is documented, not hidden: callers that care pass opts.now. */
+function mcQyNow(opts, items) {
+  const n = mcQyNum(opts && opts.now, null);
+  if (n !== null) return n;
+  let max = null;
+  if (Array.isArray(items)) {
+    for (let i = 0; i < items.length; i++) {
+      const t = mcQyNum(items[i] && items[i].t, null);
+      if (t !== null && (max === null || t > max)) max = t;
+    }
+  }
+  if (max !== null) return max;
+  return Date.now();
+}
+
+function mcQyItemCtx(item, opts, now) {
+  const o = opts && opts.__norm ? opts : mcQyOpts(opts);
+  o.__norm = true;
+  const t = mcQyNum(item && item.t, null);
+  const nw = Number.isFinite(now) ? now : mcQyNow(o, [item]);
+  const tokens = mcQyTokenizeText(item && item.text);
+  const index = new Map();
+  for (let i = 0; i < tokens.length; i++) {
+    const w = tokens[i].w;
+    const a = index.get(w);
+    if (a) a.push(i); else index.set(w, [i]);
+  }
+  return {
+    item: item, opts: o, now: nw,
+    ageMs: t === null ? Infinity : Math.max(0, nw - t),
+    hasTime: t !== null,
+    tokens: tokens, index: index,
+    hl: [], neg: 0
+  };
+}
+
+function mcQyCmp(op, a, b) {
+  switch (op) {
+    case ">": return a > b;
+    case ">=": return a >= b;
+    case "<": return a < b;
+    case "<=": return a <= b;
+    case "!=": return a !== b;
+    default: return a === b;
+  }
+}
+
+function mcQyPushHl(ctx, s, e) {
+  if (ctx.neg !== 0) return;
+  if (ctx.hl.length >= ctx.opts.maxHighlights) return;
+  ctx.hl.push({ s: s, e: e });
+}
+
+/* Returns {m, s}: matched, and a score contribution. Score is only ever
+ * consumed when the whole tree matched, so a partial score from a failed
+ * OR branch is harmless. */
+function mcQyEvalNode(node, ctx, depth) {
+  if (!node || typeof node !== "object") return { m: true, s: 0 };
+  if (depth > mcQyMaxDepth + 4) return { m: true, s: 0 };
+  const o = ctx.opts;
+  switch (node.type) {
+    case "all": return { m: true, s: 0 };
+    case "none": return { m: false, s: 0 };
+
+    case "term": {
+      let tf = 0, weight = 1;
+      if (node.wild) {
+        weight = o.wildcardWeight;
+        ctx.index.forEach(function (positions, w) {
+          if (mcQyGlob(node.value, w)) {
+            tf += positions.length;
+            for (let i = 0; i < positions.length; i++) {
+              const tk = ctx.tokens[positions[i]];
+              mcQyPushHl(ctx, tk.s, tk.e);
+            }
+          }
+        });
+      } else {
+        const hit = ctx.index.get(node.value);
+        if (hit) {
+          tf = hit.length;
+          for (let i = 0; i < hit.length; i++) mcQyPushHl(ctx, ctx.tokens[hit[i]].s, ctx.tokens[hit[i]].e);
+        }
+        if (tf === 0 && node.fuzzy > 0) {
+          let best = node.fuzzy + 1;
+          const target = node.value;
+          ctx.index.forEach(function (positions, w) {
+            if (Math.abs(w.length - target.length) > node.fuzzy) return;
+            const d = mcQyEditDistance(target, w, node.fuzzy);
+            if (d <= node.fuzzy) {
+              if (d < best) best = d;
+              tf += positions.length;
+              for (let i = 0; i < positions.length; i++) mcQyPushHl(ctx, ctx.tokens[positions[i]].s, ctx.tokens[positions[i]].e);
+            }
+          });
+          if (tf > 0) weight = Math.max(0.1, 1 - o.fuzzyPenalty * Math.max(1, best));
+        }
+      }
+      if (tf === 0) return { m: false, s: 0 };
+      return { m: true, s: weight * (1 + Math.log(1 + tf)) };
+    }
+
+    case "phrase": {
+      const words = Array.isArray(node.words) ? node.words : [];
+      if (words.length === 0) return { m: true, s: 0 };
+      const starts = ctx.index.get(words[0]);
+      if (!starts) return { m: false, s: 0 };
+      let count = 0;
+      for (let i = 0; i < starts.length; i++) {
+        const p = starts[i];
+        if (p + words.length > ctx.tokens.length) break;
+        let ok = true;
+        for (let k = 1; k < words.length; k++) {
+          if (ctx.tokens[p + k].w !== words[k]) { ok = false; break; }
+        }
+        if (ok) {
+          count++;
+          mcQyPushHl(ctx, ctx.tokens[p].s, ctx.tokens[p + words.length - 1].e);
+        }
+      }
+      if (count === 0) return { m: false, s: 0 };
+      return { m: true, s: o.phraseBoost * (1 + Math.log(1 + count)) };
+    }
+
+    case "kw": {
+      const def = mcQyFields[node.field];
+      const val = def ? mcQyFold(def.get(ctx.item, ctx)) : "";
+      if (!val.length) {
+        /* Missing value: every comparison is false except `!=`, which is
+         * true — an item with no source genuinely is not src:reuters. */
+        return { m: !!node.neg, s: node.neg ? o.fieldWeight : 0 };
+      }
+      let hit = false;
+      for (let i = 0; i < node.values.length; i++) {
+        const v = node.values[i];
+        if (v.indexOf("*") >= 0 || v.indexOf("?") >= 0) { if (mcQyGlob(v, val)) { hit = true; break; } }
+        else if (v === val) { hit = true; break; }
+      }
+      const m = node.neg ? !hit : hit;
+      return { m: m, s: m ? o.fieldWeight : 0 };
+    }
+
+    case "num": {
+      const def = mcQyFields[node.field];
+      const val = def ? def.get(ctx.item, ctx) : null;
+      if (val === null || !Number.isFinite(val)) {
+        if (node.field === "age" && !ctx.hasTime) return { m: false, s: 0 };
+        return { m: node.op === "!=", s: 0 };
+      }
+      let hit = false;
+      for (let i = 0; i < node.values.length; i++) {
+        if (mcQyCmp(node.op, val, node.values[i])) { hit = true; if (node.op !== "!=") break; }
+        else if (node.op === "!=") { hit = false; break; }
+      }
+      return { m: hit, s: hit ? o.fieldWeight : 0 };
+    }
+
+    case "flag": {
+      const def = mcQyFlagDefs[node.flag];
+      let v = false;
+      try { v = def ? !!def.fn(ctx.item, ctx) : false; } catch (e) { v = false; }
+      const m = node.neg ? !v : v;
+      return { m: m, s: m ? o.fieldWeight : 0 };
+    }
+
+    case "not": {
+      ctx.neg++;
+      const r = mcQyEvalNode(node.kid, ctx, depth + 1);
+      ctx.neg--;
+      return { m: !r.m, s: r.m ? 0 : o.negWeight };
+    }
+
+    case "boost": {
+      const r = mcQyEvalNode(node.kid, ctx, depth + 1);
+      return { m: true, s: r.m ? r.s : 0 };
+    }
+
+    case "and": {
+      const kids = Array.isArray(node.kids) ? node.kids : [];
+      let s = 0;
+      for (let i = 0; i < kids.length; i++) {
+        const r = mcQyEvalNode(kids[i], ctx, depth + 1);
+        if (!r.m) return { m: false, s: 0 };
+        s += r.s;
+      }
+      return { m: true, s: s };
+    }
+
+    case "or": {
+      const kids = Array.isArray(node.kids) ? node.kids : [];
+      let s = 0, m = false;
+      for (let i = 0; i < kids.length; i++) {
+        const r = mcQyEvalNode(kids[i], ctx, depth + 1);
+        if (r.m) { m = true; s += r.s; }
+      }
+      return { m: m, s: s };
+    }
+
+    default: return { m: true, s: 0 };
+  }
+}
+
+function mcQyRecency(ageMs, o) {
+  if (!Number.isFinite(ageMs) || ageMs < 0) return o.minRecency;
+  const half = o.halfLifeMs > 0 ? o.halfLifeMs : 1;
+  const r = Math.pow(0.5, ageMs / half);
+  return mcQyClamp(r, o.minRecency, 1);
+}
+
+/* Full evaluation of one item. Never throws; on an internal failure it
+ * reports "no match" rather than corrupting the result list. */
+function mcQyEvaluate(ast, item, opts, now) {
+  const empty = { match: false, score: 0, highlights: [], ageMs: 0 };
+  if (!item || typeof item !== "object") return empty;
+  try {
+    const ctx = mcQyItemCtx(item, opts, now);
+    const node = ast && ast.ast ? ast.ast : ast;
+    const r = mcQyEvalNode(node, ctx, 0);
+    if (!r.m) return { match: false, score: 0, highlights: [], ageMs: ctx.ageMs === Infinity ? 0 : ctx.ageMs };
+    const o = ctx.opts;
+    const sev = mcQyNum(item.sev, 0);
+    const base = r.s + 1;   // +1 so a pure-filter query still ranks by recency
+    let score = base *
+      mcQyRecency(ctx.ageMs, o) *
+      (1 + o.sevWeight * mcQyClamp(sev, 0, 5)) *
+      (1 + o.sourcesWeight * Math.min(6, mcQySourceCount(item)));
+    if (!Number.isFinite(score)) score = 0;
+    return {
+      match: true,
+      score: Math.round(score * 1e6) / 1e6,
+      highlights: mcQyMergeRanges(ctx.hl),
+      ageMs: ctx.ageMs === Infinity ? 0 : ctx.ageMs
+    };
+  } catch (e) {
+    return empty;
+  }
+}
+
+function mcQyMatch(ast, item, opts, now) {
+  return mcQyEvaluate(ast, item, opts, now).match;
+}
+
+/* Plain-text snippet around the first highlight, with the ranges rebased.
+ * No HTML is produced anywhere in this module — the caller owns escaping. */
+function mcQySnippet(text, ranges, width) {
+  const s = mcQyStr(text);
+  const w = mcQyClamp(mcQyInt(width, 180), 40, 2000);
+  const rs = Array.isArray(ranges) ? ranges : [];
+  if (s.length <= w) return { text: s, ranges: mcQyMergeRanges(rs), truncatedStart: false, truncatedEnd: false };
+  const first = rs.length ? mcQyInt(rs[0].s, 0) : 0;
+  let start = Math.max(0, first - Math.floor(w / 3));
+  if (start > 0) { const sp = s.indexOf(" ", start); if (sp >= 0 && sp - start < 20) start = sp + 1; }
+  let end = Math.min(s.length, start + w);
+  if (end < s.length) { const sp = s.lastIndexOf(" ", end); if (sp > start + w / 2) end = sp; }
+  const out = [];
+  for (let i = 0; i < rs.length; i++) {
+    const a = mcQyInt(rs[i].s, -1), b = mcQyInt(rs[i].e, -1);
+    if (a < 0 || b <= a) continue;
+    if (b <= start || a >= end) continue;
+    out.push({ s: Math.max(a, start) - start, e: Math.min(b, end) - start });
+  }
+  return {
+    text: s.slice(start, end),
+    ranges: mcQyMergeRanges(out),
+    truncatedStart: start > 0,
+    truncatedEnd: end < s.length
+  };
+}
+
+
+/* ---------------------------------------------------------------------
+ * 7. Compile + search
+ * ------------------------------------------------------------------- */
+
+function mcQyCompile(query, opts) {
+  const parsed = (query && typeof query === "object" && query.ast)
+    ? query
+    : mcQyParse(query, opts);
+  const o = mcQyOpts(opts);
+  o.__norm = true;
+  return {
+    query: parsed.query,
+    ast: parsed.ast,
+    problems: parsed.problems,
+    severity: parsed.severity,
+    explain: mcQyExplain(parsed.ast),
+    canonical: mcQyStringify(parsed.ast, 0),
+    opts: o,
+    test: function (item, now) { return mcQyEvaluate(parsed.ast, item, o, now).match; },
+    evaluate: function (item, now) { return mcQyEvaluate(parsed.ast, item, o, now); }
+  };
+}
+
+function mcQySearch(items, query, opts) {
+  const o = mcQyOpts(opts);
+  o.__norm = true;
+  const list = Array.isArray(items) ? items : [];
+  const compiled = mcQyCompile(query, o);
+  const problems = compiled.problems.slice();
+  if (!Array.isArray(items)) {
+    mcQyProblem(problems, "error", "bad_items", "No items to search.", 0, 0);
+  }
+  const now = mcQyNow(o, list);
+  const hits = [];
+  for (let i = 0; i < list.length; i++) {
+    const it = list[i];
+    if (!it || typeof it !== "object") continue;
+    const r = mcQyEvaluate(compiled.ast, it, o, now);
+    if (!r.match) continue;
+    hits.push({ item: it, score: r.score, highlights: r.highlights, ageMs: r.ageMs, i: i });
+  }
+  /* Deterministic ordering: score, then newest, then id, then input order.
+   * Without the last two tie-breaks the list flickers between renders. */
+  const byTime = mcQyStr(o.sort) === "time";
+  hits.sort(function (a, b) {
+    if (!byTime && b.score !== a.score) return b.score - a.score;
+    const ta = mcQyNum(a.item.t, -Infinity), tb = mcQyNum(b.item.t, -Infinity);
+    if (tb !== ta) return tb - ta;
+    const ia = mcQyStr(a.item.id), ib = mcQyStr(b.item.id);
+    if (ia !== ib) return ia < ib ? -1 : 1;
+    return a.i - b.i;
+  });
+  const total = hits.length;
+  const offset = Math.max(0, mcQyInt(o.offset, 0));
+  const limit = mcQyInt(o.limit, 0);
+  const page = limit > 0 ? hits.slice(offset, offset + limit) : hits.slice(offset);
+  for (let i = 0; i < page.length; i++) delete page[i].i;
+  return {
+    hits: page, total: total, scanned: list.length, now: now,
+    query: compiled.query, ast: compiled.ast, problems: problems,
+    severity: compiled.severity, explain: compiled.explain
+  };
+}
+
+
+/* ---------------------------------------------------------------------
+ * 8. Faceting
+ *
+ * Age buckets are relative and always present (even at zero) because a
+ * sidebar whose rows appear and vanish as items arrive is unusable — the
+ * row you were about to click moves. Severity is ordered by value, not by
+ * count, for the same reason. Only src/cat are count-ordered.
+ * ------------------------------------------------------------------- */
+
+const mcQyAgeBuckets = [
+  { key: "1h", label: "Last hour", max: 3600000 },
+  { key: "6h", label: "1-6 hours", max: 6 * 3600000 },
+  { key: "24h", label: "6-24 hours", max: 86400000 },
+  { key: "7d", label: "1-7 days", max: 7 * 86400000 },
+  { key: "older", label: "Older", max: Infinity }
+];
+
+function mcQyCountSort(map, topN) {
+  const out = [];
+  map.forEach(function (count, value) { out.push({ value: value, count: count }); });
+  out.sort(function (a, b) { return b.count - a.count || (a.value < b.value ? -1 : (a.value > b.value ? 1 : 0)); });
+  const n = mcQyInt(topN, 12);
+  if (n > 0 && out.length > n) {
+    let other = 0;
+    for (let i = n; i < out.length; i++) other += out[i].count;
+    const head = out.slice(0, n);
+    head.push({ value: "(other)", count: other, other: true });
+    return head;
+  }
+  return out;
+}
+
+function mcQyFacets(input, opts) {
+  const o = mcQyOpts(opts);
+  const rows = Array.isArray(input) ? input : [];
+  const now = mcQyNow(o, rows.map(function (r) { return r && r.item ? r.item : r; }));
+  const srcMap = new Map(), catMap = new Map(), sevMap = new Map();
+  const ageCounts = mcQyAgeBuckets.map(function () { return 0; });
+  const flags = { breaking: 0, translated: 0, simulated: 0, corroborated: 0, withUrl: 0 };
+  let total = 0, undated = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const it = row && typeof row === "object" && row.item ? row.item : row;
+    if (!it || typeof it !== "object") continue;
+    total++;
+
+    const src = mcQyStr(it.src).trim() || "(unknown)";
+    srcMap.set(src, (srcMap.get(src) || 0) + 1);
+    const cat = mcQyStr(it.cat).trim() || "(uncategorised)";
+    catMap.set(cat, (catMap.get(cat) || 0) + 1);
+
+    const sevN = mcQyNum(it.sev, null);
+    const sevKey = sevN === null ? "(none)" : mcQyStr(Math.round(mcQyClamp(sevN, 0, 5)));
+    sevMap.set(sevKey, (sevMap.get(sevKey) || 0) + 1);
+
+    const t = mcQyNum(it.t, null);
+    if (t === null) undated++;
+    else {
+      const age = Math.max(0, now - t);
+      for (let b = 0; b < mcQyAgeBuckets.length; b++) {
+        if (age < mcQyAgeBuckets[b].max) { ageCounts[b]++; break; }
+      }
+    }
+
+    const ctx = { opts: o, ageMs: t === null ? Infinity : Math.max(0, now - t) };
+    if (mcQyFlagDefs.breaking.fn(it, ctx)) flags.breaking++;
+    if (mcQyBool(it.translated)) flags.translated++;
+    if (mcQyBool(it.sim)) flags.simulated++;
+    if (mcQySourceCount(it) >= 2) flags.corroborated++;
+    if (mcQyStr(it.url)) flags.withUrl++;
+  }
+
+  const sev = [];
+  sevMap.forEach(function (count, value) { sev.push({ value: value, count: count }); });
+  sev.sort(function (a, b) {
+    const na = a.value === "(none)" ? 99 : Number(a.value);
+    const nb = b.value === "(none)" ? 99 : Number(b.value);
+    return na - nb;
+  });
+
+  return {
+    total: total,
+    now: now,
+    src: mcQyCountSort(srcMap, o.facetTop),
+    cat: mcQyCountSort(catMap, o.facetTop),
+    sev: sev,
+    age: mcQyAgeBuckets.map(function (b, i) {
+      return { value: b.key, label: b.label, count: ageCounts[i] };
+    }),
+    undated: undated,
+    flags: flags
+  };
+}
+
+
+/* ---------------------------------------------------------------------
+ * 9. Saved searches
+ * ------------------------------------------------------------------- */
+
+function mcQySavedCounts(searches, items, opts) {
+  const o = mcQyOpts(opts);
+  const list = Array.isArray(searches) ? searches : [];
+  const rows = Array.isArray(items) ? items : [];
+  const now = mcQyNow(o, rows);
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const s = list[i];
+    if (!s || typeof s !== "object") continue;
+    const compiled = mcQyCompile(s.query, o);
+    const since = mcQyNum(s.lastSeenAt, null);
+    let count = 0, fresh = 0, top = 0, newestT = null;
+    for (let k = 0; k < rows.length; k++) {
+      const it = rows[k];
+      if (!it || typeof it !== "object") continue;
+      const r = mcQyEvaluate(compiled.ast, it, o, now);
+      if (!r.match) continue;
+      count++;
+      if (r.score > top) top = r.score;
+      const t = mcQyNum(it.t, null);
+      if (t !== null && (newestT === null || t > newestT)) newestT = t;
+      if (since !== null && t !== null && t > since) fresh++;
+    }
+    out.push({
+      id: mcQyStr(s.id) || "saved-" + i,
+      name: mcQyStr(s.name) || mcQyStr(s.query) || "(untitled)",
+      query: compiled.query,
+      count: count,
+      newCount: since === null ? 0 : fresh,
+      topScore: top,
+      newestT: newestT,
+      explain: compiled.explain,
+      problems: compiled.problems,
+      severity: compiled.severity
+    });
+  }
+  return out;
+}
+
+
+/* ---------------------------------------------------------------------
+ * 10. Alert rules
+ *
+ * The hard part of alerting is not detection, it is *suppression*. A rule
+ * that fires forty times for one story trains the user to ignore it, which
+ * costs more than not having the rule. So four independent brakes, in this
+ * order, each reported separately so the UI can say why nothing fired:
+ *
+ *   1. cooldown   — rule-level rate limit, measured against the last fire
+ *                   AS OF THE START OF THE BATCH. Deliberate: it lets one
+ *                   batch surface up to maxPerBatch genuinely distinct
+ *                   stories, then goes quiet. Checking it after every fire
+ *                   instead would make maxPerBatch dead code and would mean
+ *                   a batch containing two unrelated wars reports one.
+ *   2. duplicate  — this exact dedupe key fired within dedupeWindowMs.
+ *   3. similar    — a *different* key whose story signature overlaps a
+ *                   recent fire by >= dedupeSim (Jaccard). This is what
+ *                   actually kills the forty-alert cascade: forty rewrites
+ *                   of one story have different ids and different exact
+ *                   keys but ~the same content words.
+ *   4. max_per_batch — hard ceiling on alerts per rule per batch.
+ *
+ * State is plain JSON and is returned, never mutated in place.
+ * ------------------------------------------------------------------- */
+
+const mcQyRuleDefaults = {
+  cooldownMs: 900000,        // 15 min
+  dedupe: "story",
+  dedupeWindowMs: 3600000,   // 1 h
+  dedupeSim: 0.6,
+  maxPerBatch: 3,
+  minScore: 0,
+  enabled: true
+};
+
+function mcQyStemLite(w) {
+  if (w.length <= 4) return w;
+  if (/ies$/.test(w)) return w.slice(0, -3) + "y";
+  if (/(sses|shes|ches|xes)$/.test(w)) return w.slice(0, -2);
+  if (/ing$/.test(w) && w.length > 6) return w.slice(0, -3);
+  if (/ed$/.test(w) && w.length > 5) return w.slice(0, -2);
+  if (/s$/.test(w) && !/ss$/.test(w)) return w.slice(0, -1);
+  return w;
+}
+
+/* Story signature: stemmed content words, deduped and sorted. Sorting is
+ * what makes it order-insensitive, so "Russia strikes Kyiv" and "Kyiv hit
+ * in Russian strikes" land on overlapping signatures. The exact key uses
+ * the 8 longest words (long words are the specific ones); the token set is
+ * kept for the Jaccard test, which is the real workhorse. */
+function mcQyStorySignature(text) {
+  const toks = mcQyTokenizeText(text);
+  const seen = Object.create(null);
+  const words = [];
+  for (let i = 0; i < toks.length && words.length < 40; i++) {
+    const w = mcQyStemLite(toks[i].w);
+    if (w.length < 3 || mcQyStop[w] || seen[w]) continue;
+    seen[w] = 1;
+    words.push(w);
+  }
+  const byLen = words.slice().sort(function (a, b) { return b.length - a.length || (a < b ? -1 : 1); });
+  const key = byLen.slice(0, 8).sort().join("-");
+  return { key: key, toks: words.slice(0, 24).sort() };
+}
+
+function mcQyJaccard(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || b.length === 0) return 0;
+  const set = Object.create(null);
+  for (let i = 0; i < a.length; i++) set[a[i]] = 1;
+  let inter = 0;
+  const seen = Object.create(null);
+  for (let i = 0; i < b.length; i++) {
+    if (seen[b[i]]) continue;
+    seen[b[i]] = 1;
+    if (set[b[i]]) inter++;
+  }
+  const union = a.length + b.length - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+function mcQyDedupeKey(item, mode) {
+  const it = item && typeof item === "object" ? item : {};
+  const m = mcQyStr(mode) || "story";
+  if (m === "item") return { key: "i:" + (mcQyStr(it.id) || mcQyStr(it.t) + ":" + mcQyStr(it.text).slice(0, 40)), toks: [] };
+  if (m === "source") return { key: "src:" + (mcQyFold(it.src) || "(unknown)"), toks: [] };
+  if (m === "none") return { key: "n:" + mcQyStr(it.id) + ":" + mcQyStr(it.t) + ":" + Math.random().toString(36).slice(2), toks: [] };
+  const sig = mcQyStorySignature(it.text);
+  if (!sig.key) return { key: "i:" + (mcQyStr(it.id) || mcQyStr(it.t)), toks: [] };
+  return { key: "s:" + sig.key, toks: sig.toks };
+}
+
+function mcQyNewAlertState() { return { v: 1, rules: {} }; }
+
+function mcQyCloneState(state) {
+  const out = mcQyNewAlertState();
+  if (!state || typeof state !== "object" || !state.rules || typeof state.rules !== "object") return out;
+  for (const id in state.rules) {
+    if (!Object.prototype.hasOwnProperty.call(state.rules, id)) continue;
+    const r = state.rules[id];
+    if (!r || typeof r !== "object") continue;
+    const fired = [];
+    if (Array.isArray(r.fired)) {
+      for (let i = 0; i < r.fired.length && i < 500; i++) {
+        const f = r.fired[i];
+        if (!f || typeof f !== "object") continue;
+        fired.push({ k: mcQyStr(f.k), at: mcQyNum(f.at, 0), toks: Array.isArray(f.toks) ? f.toks.slice(0, 24) : [] });
+      }
+    }
+    const buckets = {};
+    if (r.buckets && typeof r.buckets === "object") {
+      for (const b in r.buckets) if (Object.prototype.hasOwnProperty.call(r.buckets, b)) buckets[b] = mcQyNum(r.buckets[b], 0);
+    }
+    const sources = {};
+    if (r.sources && typeof r.sources === "object") {
+      for (const s in r.sources) if (Object.prototype.hasOwnProperty.call(r.sources, s)) sources[s] = mcQyNum(r.sources[s], 0);
+    }
+    out.rules[id] = {
+      lastFireAt: mcQyNum(r.lastFireAt, 0),
+      firedCount: mcQyNum(r.firedCount, 0),
+      fired: fired,
+      matchTimes: Array.isArray(r.matchTimes) ? r.matchTimes.filter(Number.isFinite).slice(0, 5000) : [],
+      buckets: buckets,
+      sources: sources,
+      init: !!r.init
+    };
+  }
+  return out;
+}
+
+function mcQyRuleState(state, id) {
+  if (!state.rules[id]) {
+    state.rules[id] = { lastFireAt: 0, firedCount: 0, fired: [], matchTimes: [], buckets: {}, sources: {}, init: false };
+  }
+  return state.rules[id];
+}
+
+function mcQyNormRule(rule, i) {
+  const r = rule && typeof rule === "object" ? rule : {};
+  const t = r.trigger && typeof r.trigger === "object" ? r.trigger : { type: mcQyStr(r.trigger) || "on_match" };
+  const type = mcQyStr(t.type) || "on_match";
+  const known = { on_match: 1, on_count_over: 1, on_rate_spike: 1, on_new_source: 1 };
+  const problems = [];
+  let useType = type;
+  if (!known[type]) {
+    mcQyProblem(problems, "warning", "unknown_trigger",
+      "Unknown trigger " + mcQyQuote(type) + " — treated as on_match.", 0, 0);
+    useType = "on_match";
+  }
+  const dedupe = mcQyStr(r.dedupe) || mcQyRuleDefaults.dedupe;
+  if (["story", "item", "source", "none"].indexOf(dedupe) < 0) {
+    mcQyProblem(problems, "warning", "unknown_dedupe",
+      "Unknown dedupe mode " + mcQyQuote(dedupe) + " — using 'story'.", 0, 0);
+  }
+  return {
+    id: mcQyStr(r.id) || "rule-" + i,
+    name: mcQyStr(r.name) || mcQyStr(r.query) || "rule-" + i,
+    query: r.query,
+    enabled: r.enabled === undefined ? true : !!r.enabled,
+    dedupe: ["story", "item", "source", "none"].indexOf(dedupe) >= 0 ? dedupe : "story",
+    dedupeWindowMs: Math.max(0, mcQyNum(r.dedupeWindowMs, mcQyRuleDefaults.dedupeWindowMs)),
+    dedupeSim: mcQyClamp(mcQyNum(r.dedupeSim, mcQyRuleDefaults.dedupeSim), 0, 1),
+    cooldownMs: Math.max(0, mcQyNum(r.cooldownMs, mcQyRuleDefaults.cooldownMs)),
+    maxPerBatch: Math.max(1, mcQyInt(r.maxPerBatch, mcQyRuleDefaults.maxPerBatch)),
+    minScore: mcQyNum(r.minScore, 0),
+    trigger: {
+      type: useType,
+      n: Math.max(1, mcQyInt(t.n, 5)),
+      windowMs: Math.max(1000, mcQyNum(t.windowMs, 900000)),
+      factor: Math.max(1, mcQyNum(t.factor, 3)),
+      minCount: Math.max(1, mcQyInt(t.minCount, 5)),
+      baselineWindows: Math.max(1, mcQyInt(t.baselineWindows, 4))
+    },
+    problems: problems
+  };
+}
+
+function mcQyPruneRuleState(rs, rule, now) {
+  const keepFired = Math.max(rule.dedupeWindowMs, rule.cooldownMs, 3600000) * 2;
+  const fired = [];
+  for (let i = 0; i < rs.fired.length; i++) {
+    if (now - rs.fired[i].at <= keepFired) fired.push(rs.fired[i]);
+  }
+  /* Newest first, hard cap: an unbounded fire log is a memory leak in a
+   * tab that stays open for a week. 200 recent stories is plenty of
+   * context for de-duplication. */
+  fired.sort(function (a, b) { return b.at - a.at; });
+  rs.fired = fired.slice(0, 200);
+
+  const keepMatch = rule.trigger.windowMs * 4;
+  const mt = [];
+  for (let i = 0; i < rs.matchTimes.length; i++) if (now - rs.matchTimes[i] <= keepMatch) mt.push(rs.matchTimes[i]);
+  mt.sort(function (a, b) { return a - b; });
+  rs.matchTimes = mt.slice(-5000);
+
+  const curIdx = Math.floor(now / rule.trigger.windowMs);
+  const minIdx = curIdx - (rule.trigger.baselineWindows + 2);
+  for (const k in rs.buckets) {
+    if (!Object.prototype.hasOwnProperty.call(rs.buckets, k)) continue;
+    if (Number(k) < minIdx) delete rs.buckets[k];
+  }
+  const srcKeys = Object.keys(rs.sources);
+  if (srcKeys.length > 500) {
+    srcKeys.sort(function (a, b) { return rs.sources[a] - rs.sources[b]; });
+    for (let i = 0; i < srcKeys.length - 500; i++) delete rs.sources[srcKeys[i]];
+  }
+}
+
+function mcQyAlertTitle(rule, type, items, count) {
+  const first = items && items.length ? items[0] : null;
+  const head = first ? mcQyStr(first.text).replace(/\s+/g, " ").trim().slice(0, 120) : "";
+  if (type === "on_count_over") return rule.name + ": " + count + " matching items";
+  if (type === "on_rate_spike") return rule.name + ": activity spike (" + count + " items)";
+  if (type === "on_new_source") return rule.name + ": new source " + (first ? mcQyQuote(first.src) : "");
+  return rule.name + (head ? ": " + head : "");
+}
+
+function mcQyRunRules(rules, batch, state, opts) {
+  const o = mcQyOpts(opts);
+  o.__norm = true;
+  const list = Array.isArray(rules) ? rules : [];
+  const items = Array.isArray(batch) ? batch : [];
+  const now = mcQyNow(o, items);
+  const next = mcQyCloneState(state);
+  const alerts = [], suppressed = [], stats = [];
+  const cache = new Map();
+
+  for (let ri = 0; ri < list.length; ri++) {
+    const rule = mcQyNormRule(list[ri], ri);
+    if (!rule.enabled) { stats.push({ ruleId: rule.id, enabled: false, matched: 0, fired: 0 }); continue; }
+
+    let compiled = cache.get(mcQyStr(rule.query));
+    if (!compiled) { compiled = mcQyCompile(rule.query, o); cache.set(mcQyStr(rule.query), compiled); }
+
+    const rs = mcQyRuleState(next, rule.id);
+    const firstRun = !rs.init;
+    rs.init = true;
+
+    /* --- match the batch ------------------------------------------- */
+    const matched = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!it || typeof it !== "object") continue;
+      const r = mcQyEvaluate(compiled.ast, it, o, now);
+      if (!r.match || r.score < rule.minScore) continue;
+      matched.push({ item: it, score: r.score, t: mcQyNum(it.t, now) });
+    }
+    matched.sort(function (a, b) { return b.score - a.score || b.t - a.t; });
+
+    for (let i = 0; i < matched.length; i++) rs.matchTimes.push(matched[i].t);
+    const wIdx = Math.floor(now / rule.trigger.windowMs);
+    if (matched.length) rs.buckets[wIdx] = (rs.buckets[wIdx] || 0) + matched.length;
+    else if (rs.buckets[wIdx] === undefined) rs.buckets[wIdx] = 0;
+
+    /* --- build candidates ------------------------------------------ */
+    const cands = [];
+    const T = rule.trigger.type;
+    if (T === "on_match") {
+      for (let i = 0; i < matched.length; i++) {
+        const dk = mcQyDedupeKey(matched[i].item, rule.dedupe);
+        cands.push({ key: dk.key, toks: dk.toks, items: [matched[i].item], count: 1, score: matched[i].score });
+      }
+    } else if (T === "on_count_over") {
+      const from = now - rule.trigger.windowMs;
+      let c = 0;
+      for (let i = 0; i < rs.matchTimes.length; i++) if (rs.matchTimes[i] >= from && rs.matchTimes[i] <= now) c++;
+      if (c >= rule.trigger.n) {
+        /* Keyed on the window index: a running story keeps the count over
+         * the threshold on every batch, and without this key it would fire
+         * on every batch forever. */
+        cands.push({
+          key: "count:" + wIdx, toks: [], count: c, score: matched.length ? matched[0].score : 1,
+          items: matched.slice(0, 5).map(function (m) { return m.item; }),
+          detail: { count: c, threshold: rule.trigger.n, windowMs: rule.trigger.windowMs }
+        });
+      }
+    } else if (T === "on_rate_spike") {
+      const cur = rs.buckets[wIdx] || 0;
+      let sum = 0, n = 0;
+      for (let k = 1; k <= rule.trigger.baselineWindows; k++) {
+        const b = rs.buckets[wIdx - k];
+        if (b === undefined) continue;
+        sum += b; n++;
+      }
+      /* Refuse to fire without a baseline. Cold start is the single biggest
+       * source of false "spikes" — everything is a spike compared to no
+       * history at all. */
+      if (n >= 2 && cur >= rule.trigger.minCount) {
+        const mean = sum / n;
+        const floor = 0.5;                 // stops divide-by-zero euphoria
+        if (cur >= rule.trigger.factor * Math.max(mean, floor)) {
+          cands.push({
+            key: "spike:" + wIdx, toks: [], count: cur, score: matched.length ? matched[0].score : 1,
+            items: matched.slice(0, 5).map(function (m) { return m.item; }),
+            detail: { count: cur, baseline: Math.round(mean * 100) / 100, factor: rule.trigger.factor }
+          });
+        }
+      }
+    } else if (T === "on_new_source") {
+      const seenNow = Object.create(null);
+      for (let i = 0; i < matched.length; i++) {
+        const s = mcQyFold(matched[i].item.src);
+        if (!s || seenNow[s]) continue;
+        seenNow[s] = 1;
+        const known = Object.prototype.hasOwnProperty.call(rs.sources, s);
+        rs.sources[s] = now;
+        /* First run learns silently. Otherwise the very first batch alerts
+         * once per source in the feed, which is pure noise. */
+        if (!known && !firstRun) {
+          cands.push({
+            key: "newsrc:" + s, toks: [], count: 1, score: matched[i].score,
+            items: [matched[i].item], detail: { src: mcQyStr(matched[i].item.src) }
+          });
+        }
+      }
+    }
+
+    /* --- collapse rewrites of one story, within the batch ----------
+     *
+     * This has to happen BEFORE the fire loop, not inside it. Similarity is
+     * not transitive: every rewrite of a running story resembles the original
+     * ("Drone strike near Kyiv overnight" vs "...amid air raid alerts" = 0.63)
+     * while resembling each other far less (0.50). Suppressing incrementally
+     * against already-fired alerts therefore made the outcome depend on which
+     * rewrite sorted first — the long outliers fired, each too distant from
+     * the next to suppress it, and forty updates of one story produced three
+     * alerts instead of one.
+     *
+     * Single-link agglomeration over the whole batch is order-independent:
+     * two candidates share a cluster if a chain of >= dedupeSim links joins
+     * them, whichever order they arrived in. The representative is the
+     * highest-scoring member, and the rest fold their items into it so the
+     * alert still reports every outlet that carried the story.
+     *
+     * Deliberately greedy: over-merging two genuinely distinct stories costs
+     * one missed alert, under-merging costs forty notifications for one
+     * event. The asymmetry is the whole reason this panel exists. */
+    if (rule.dedupeSim > 0 && cands.length > 1) {
+      const parent = [];
+      for (let i = 0; i < cands.length; i++) parent.push(i);
+      const find = function (x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+      for (let i = 0; i < cands.length; i++) {
+        for (let j = i + 1; j < cands.length; j++) {
+          if (find(i) === find(j)) continue;
+          if (!cands[i].toks || !cands[j].toks || !cands[i].toks.length || !cands[j].toks.length) continue;
+          if (mcQyJaccard(cands[i].toks, cands[j].toks) >= rule.dedupeSim) parent[find(i)] = find(j);
+        }
+      }
+      const groups = Object.create(null);
+      for (let i = 0; i < cands.length; i++) {
+        const r = find(i);
+        if (!groups[r]) groups[r] = [];
+        groups[r].push(cands[i]);
+      }
+      const merged = [];
+      for (const g in groups) {
+        const members = groups[g];
+        if (members.length === 1) { merged.push(members[0]); continue; }
+        let best = members[0];
+        for (let i = 1; i < members.length; i++) if (members[i].score > best.score) best = members[i];
+        const items = [], seenId = Object.create(null);
+        let count = 0;
+        for (let i = 0; i < members.length; i++) {
+          count += members[i].count || 0;
+          for (let k = 0; k < members[i].items.length; k++) {
+            const id = mcQyStr(members[i].items[k].id);
+            if (id && seenId[id]) continue;
+            if (id) seenId[id] = 1;
+            items.push(members[i].items[k]);
+          }
+        }
+        /* The folded-away rewrites still have to be reported. Collapsing them
+           silently would leave the user with one alert and no way to see that
+           thirty-nine others were judged the same story — the suppression log
+           IS the explanation, so it has to survive the merge. Similarity is
+           reported as the strongest link that pulled the member into the
+           cluster, not its distance to the representative, because under
+           single-link chaining those are not the same number. */
+        for (let i = 0; i < members.length; i++) {
+          if (members[i] === best) continue;
+          let link = 0;
+          const probe = Math.min(members.length, 24);
+          for (let j = 0; j < probe; j++) {
+            if (members[j] === members[i]) continue;
+            const jv = mcQyJaccard(members[i].toks, members[j].toks);
+            if (jv > link) link = jv;
+          }
+          suppressed.push({
+            ruleId: rule.id, key: members[i].key,
+            reason: members[i].key === best.key ? "duplicate" : "similar",
+            similarTo: best.key, similarity: Math.round(link * 100) / 100,
+            lastFiredAt: now,
+            itemId: members[i].items[0] ? mcQyStr(members[i].items[0].id) : ""
+          });
+        }
+        merged.push({ key: best.key, toks: best.toks, items: items, count: count, score: best.score,
+                      rewrites: members.length });
+      }
+      merged.sort(function (x, y) { return y.score - x.score; });
+      cands.length = 0;
+      for (let i = 0; i < merged.length; i++) cands.push(merged[i]);
+    }
+
+    /* --- suppression pipeline -------------------------------------- */
+    const cooldownFrom = rs.lastFireAt;            // frozen at batch start
+    const inCooldown = rule.cooldownMs > 0 && cooldownFrom > 0 && (now - cooldownFrom) < rule.cooldownMs;
+    let firedThisBatch = 0;
+    const localFired = [];
+
+    for (let ci = 0; ci < cands.length; ci++) {
+      const c = cands[ci];
+      if (inCooldown) {
+        suppressed.push({
+          ruleId: rule.id, key: c.key, reason: "cooldown",
+          until: cooldownFrom + rule.cooldownMs, itemId: c.items[0] ? mcQyStr(c.items[0].id) : ""
+        });
+        continue;
+      }
+      let dup = null;
+      for (let i = 0; i < rs.fired.length; i++) {
+        if (rs.fired[i].k === c.key && (now - rs.fired[i].at) <= rule.dedupeWindowMs) { dup = rs.fired[i]; break; }
+      }
+      if (dup) {
+        suppressed.push({
+          ruleId: rule.id, key: c.key, reason: "duplicate", lastFiredAt: dup.at,
+          itemId: c.items[0] ? mcQyStr(c.items[0].id) : ""
+        });
+        continue;
+      }
+      if (c.toks.length && rule.dedupeSim > 0) {
+        /* Single-link clustering, not nearest-representative.
+         *
+         * Similarity is not transitive, and a running story is a chain: every
+         * rewrite resembles the original, but "X -- updated" and "X amid air
+         * raid alerts" resemble each other only 0.56. Comparing a candidate
+         * against just the fired headline therefore leaks — whichever rewrite
+         * happened to fire first decided how many others escaped, so the same
+         * forty updates produced one alert or four depending on sort order.
+         *
+         * A suppressed rewrite joins the cluster it matched, and later
+         * candidates are tested against every member. Chaining is what makes
+         * "one story, one alert" hold regardless of arrival order. It is the
+         * deliberately greedy direction: over-merging a genuinely separate
+         * story costs one missed alert, while under-merging costs forty. */
+        let sim = null;
+        for (let i = 0; i < rs.fired.length; i++) {
+          const f = rs.fired[i];
+          if ((now - f.at) > rule.dedupeWindowMs) continue;
+          const members = f.members && f.members.length ? f.members : (f.toks ? [f.toks] : []);
+          for (let m = 0; m < members.length; m++) {
+            if (!members[m] || !members[m].length) continue;
+            const j = mcQyJaccard(members[m], c.toks);
+            if (j >= rule.dedupeSim && (!sim || j > sim.j)) sim = { j: j, k: f.k, at: f.at, ref: f };
+          }
+        }
+        if (sim) {
+          /* Cap the cluster so a long-running story cannot grow an unbounded
+             comparison list — 24 members is far past the point of new signal. */
+          if (sim.ref) {
+            if (!sim.ref.members) sim.ref.members = [sim.ref.toks];
+            if (sim.ref.members.length < 24) sim.ref.members.push(c.toks);
+          }
+          suppressed.push({
+            ruleId: rule.id, key: c.key, reason: "similar", similarTo: sim.k,
+            similarity: Math.round(sim.j * 100) / 100, lastFiredAt: sim.at,
+            itemId: c.items[0] ? mcQyStr(c.items[0].id) : ""
+          });
+          continue;
+        }
+      }
+      if (firedThisBatch >= rule.maxPerBatch) {
+        suppressed.push({
+          ruleId: rule.id, key: c.key, reason: "max_per_batch", limit: rule.maxPerBatch,
+          itemId: c.items[0] ? mcQyStr(c.items[0].id) : ""
+        });
+        continue;
+      }
+
+      firedThisBatch++;
+      rs.fired.push({ k: c.key, at: now, toks: c.toks, members: [c.toks] });
+      localFired.push(c.key);
+      rs.lastFireAt = now;
+      rs.firedCount++;
+      alerts.push({
+        ruleId: rule.id,
+        ruleName: rule.name,
+        trigger: T,
+        at: now,
+        key: c.key,
+        title: mcQyAlertTitle(rule, T, c.items, c.count),
+        count: c.count,
+        score: c.score,
+        itemIds: c.items.map(function (x) { return mcQyStr(x && x.id); }),
+        items: c.items,
+        detail: c.detail || null,
+        explain: compiled.explain
+      });
+    }
+
+    mcQyPruneRuleState(rs, rule, now);
+    stats.push({
+      ruleId: rule.id, enabled: true, matched: matched.length,
+      candidates: cands.length, fired: firedThisBatch,
+      suppressed: cands.length - firedThisBatch, inCooldown: inCooldown,
+      problems: rule.problems.concat(compiled.problems)
+    });
+  }
+
+  return { alerts: alerts, suppressed: suppressed, state: next, stats: stats, now: now };
+}
+
+
+/* ===================================================================== */
+/* Self-test. Node only; the merge tool strips from the guard line down.  */
+/* ===================================================================== */
+
 /* ================================================================
    CORE 5 — the bridge.
 
@@ -17263,6 +19403,9 @@ function addItems(list){
   if(fresh.length){
     /* every headline is a labeled training example: text -> its news desk */
     for(const f of fresh){ nbTrain(f.cat.toLowerCase(), f.text); mkTrain(f.text); core5Learn(f.text); }
+    /* Rules see each batch once, as it lands — not on a timer, so a rule
+       cannot fire twice for the same arrival. */
+    try{ alRunRules(fresh); }catch(e){ console.warn("[alerts]", e); }
     FEED = [...fresh, ...FEED].sort((a,b)=>b.t-a.t || b.id-a.id);
     pruneFeed();
     stats.headlines += fresh.length;
@@ -19342,7 +21485,98 @@ function exportTable(kind){
     $("#tbIn").value = text;
   }
 }
-function runQuery(){        $("#qyResults").innerHTML= ultraPending("The query engine"); }
+/* ---- SEARCH board, backed by the mcQy engine ---- */
+function qyEscHighlight(text, ranges){
+  /* Ranges are offsets into the raw string, so escaping has to happen
+     per-slice — escaping first would shift every offset. */
+  const t = String(text == null ? "" : text);
+  if(!ranges || !ranges.length) return esc(t);
+  const out = []; let at = 0;
+  for(const r of ranges){
+    const st = Math.max(0, Math.min(t.length, r.start != null ? r.start : r.s));
+    const en = Math.max(st, Math.min(t.length, r.end != null ? r.end : r.e));
+    if(st < at) continue;
+    out.push(esc(t.slice(at, st)), "<mark>", esc(t.slice(st, en)), "</mark>");
+    at = en;
+  }
+  out.push(esc(t.slice(at)));
+  return out.join("");
+}
+
+/* The wire's `sev` is a tier LABEL ("BREAKING", "JUST IN"), but the query
+   engine's sev field is numeric — so sev:>=3 could never match anything until
+   the two agreed. The search view maps the tiers onto their real ordering and
+   keeps the label for display. Ranking, not a score: BREAKING outranks JUST IN
+   because it is newer AND more urgent, which is exactly what the tiers encode. */
+const QY_SEV = { BREAKING:5, "JUST IN":4, DEVELOPING:3, UPDATE:2, DEMO:0 };
+function qySearchView(list){
+  return list.map(i=>{
+    const n = QY_SEV[i.sev];
+    return n === undefined ? i : Object.assign({}, i, { sev:n, sevLabel:i.sev });
+  });
+}
+
+function runQuery(q){
+  const box = $("#qyResults"); if(!box) return;
+  qyState.last = q = String(q == null ? "" : q);
+  const real = qySearchView(FEED.filter(i=>!isSim(i)));
+  const parsed = mcQyParse(q, { now: now() });
+
+  $("#qyExplain").innerHTML = q.trim()
+    ? `<b>Reading it as:</b> ${esc(mcQyExplain(parsed, {}))}` : "";
+  const probs = (parsed.problems || []).filter(p=>p.severity !== "info");
+  $("#qyProblems").innerHTML = probs.length
+    ? `<div class="qerr">${probs.map(p=>`<b>${esc(p.severity)}</b> · ${esc(p.message)}`).join("<br>")}</div>` : "";
+
+  const res = mcQySearch(real, q, { now: now(), limit: 60 });
+  $("#qyN").textContent = res.total;
+  box.innerHTML = res.hits.length
+    ? res.hits.map(h=>`<div class="qhit">${qyEscHighlight(h.item.text, h.highlights)}
+        <div class="meta">${esc(h.item.sevLabel||h.item.sev||"")} · ${esc(h.item.src||"?")} · ${ago(h.item.t)} · score ${h.score.toFixed(2)}${
+          h.item.translated?" · ع→en":""}</div></div>`).join("")
+    : `<div class="bempty">${q.trim()
+        ? "Nothing on the wire matches that. That's an answer — I'm not going to loosen your query and pretend otherwise."
+        : "Type a query above."}</div>`;
+
+  const f = mcQyFacets(res.hits, { now: now(), facetTop: 6 });
+  const block = (title, rows) => !rows || !rows.length ? "" :
+    `<div class="facet"><h5>${esc(title)}</h5>${rows.map(r=>
+      `<div class="facetrow" data-facet="${esc(r.facet||"")}" data-val="${esc(String(r.label!=null?r.label:r.value))}">
+        <span>${esc(String(r.label != null ? r.label : r.value))}</span><b>${r.count}</b></div>`).join("")}</div>`;
+  $("#qyFacets").innerHTML = res.hits.length
+    ? block("Source", (f.src||[]).map(r=>({...r, facet:"src"})))
+      + block("Desk", (f.cat||[]).map(r=>({...r, facet:"cat"})))
+      + block("Age", (f.age||[]).filter(r=>r.count))
+    : `<div class="bempty">Facets appear with results.</div>`;
+}
+
+/* ---- ALERTS: rules actually evaluated against each new batch ---- */
+function alRunRules(batch){
+  if(!ultraHas("mcQyRunRules") || !alState.rules.length) return;
+  const items = qySearchView((batch || []).filter(i=>!isSim(i)));
+  if(!items.length) return;
+  if(!alState.engine) alState.engine = mcQyNewAlertState();
+  const rules = alState.rules.map((r,i)=>({
+    id: "r"+i, name: r.q, query: r.q,
+    trigger: { type: r.kind, n: 5, windowMs: 900000 },
+    cooldownMs: 10*60000, dedupe: "story",
+  }));
+  let out;
+  try{ out = mcQyRunRules(rules, items, alState.engine, { now: now() }); }
+  catch(e){ console.warn("[alerts]", e); return; }
+  alState.engine = out.state;
+  for(const a of out.alerts){
+    alState.fired.unshift({
+      rule: a.ruleName || a.ruleId,
+      text: (a.items && a.items[0] && a.items[0].text) || a.title || "(matched)",
+      t: now(),
+    });
+  }
+  if(out.alerts.length){
+    alState.fired = alState.fired.slice(0, 60);
+    if(deckBoard === "alerts") renderAlerts();
+  }
+}
 
 /* ---------------- SEARCH ---------------- */
 const qyState = { last:"", saved:[] };
@@ -19350,7 +21584,7 @@ try{ qyState.saved = JSON.parse(localStorage.getItem("musagpt_saved_q")||"[]"); 
 
 function renderSearch(){
   if(!$("#qyResults")) return;
-  if(!ultraHas("mcQyParse","mcQyEval")){
+  if(!ultraHas("mcQyParse","mcQySearch")){
     $("#qyResults").innerHTML = ultraPending("The query engine");
     $("#qyExplain").innerHTML = ""; $("#qyFacets").innerHTML = "";
     renderSaved(); return;
@@ -19377,7 +21611,11 @@ function renderGraphBoard(){
 }
 
 /* ---------------- ALERTS ---------------- */
-const alState = { rules:[], fired:[] };
+/* `engine` is mcQy's own alert state — the cooldown clocks and the fired
+   history it needs to suppress a running story. It is deliberately NOT
+   persisted: cooldowns measured against a previous session would swallow
+   the first alerts after a reload. */
+const alState = { rules:[], fired:[], engine:null };
 try{ alState.rules = JSON.parse(localStorage.getItem("musagpt_rules")||"[]"); }catch(e){ alState.rules = []; }
 function persistRules(){ try{ localStorage.setItem("musagpt_rules", JSON.stringify(alState.rules.slice(0,40))); }catch(e){} }
 
