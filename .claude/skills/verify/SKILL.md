@@ -117,6 +117,29 @@ Four more modules joined the core: `imganalyse.js`, `charts.js`, `palette.js`, `
 - The BM25 chat index is rebuilt only when `mem.history` grows (`cmdkState.idxAt`); it runs on every keystroke otherwise.
 - Chat snippets in the palette are hostile text — assert `<img src=x onerror=...>` is escaped, no live `img` lands in the list, and nothing executes.
 
+## MusaGPT ULTRA / CORE 5 (renamed from MusaGPT v5 / musa-core-3)
+
+The brand is **MusaGPT ULTRA**, the local model is **CORE 5**, and every `core3*` bridge symbol is now `core5*`. Three driver assertions were genuinely coupled to the old names and had to move with it — `drive-core3` called `core3Stats` through `page.evaluate` and matched `/musa-core-3/` in prompt text; `drive-crypto` asserted on both the document title and the `.hero-mark .herover` badge. Grep drivers for the old strings before assuming a rename is cosmetic.
+
+`inject-core.py`'s end marker is the bridge banner, which the rename also moved — it silently failed to find the core block until updated. Renaming a marker string breaks the tool that depends on it.
+
+### Sixteen boards, gated on `ultraHas()`
+
+Six ULTRA boards (SEARCH, GRAPH, ALERTS, SIGNALS, DATA, MODEL) are wired ahead of their CORE 5 modules. `ultraHas("mcFoo",…)` checks `typeof window[name] === "function"`; a missing module renders `ultraPending()` — "isn't in this build yet" — rather than a panel that looks stuck loading. **A `<form>` with no submit handler navigates on Enter**, which in a single-file app is a full reload that drops the conversation and the wire; every new board form must `preventDefault`.
+
+Currently live: **DATA** (table.js). Still gated: SEARCH, GRAPH, ALERTS, SIGNALS, MODEL.
+
+### CORE 5 third wave — delivery state
+
+`table.js` (325 assertions) and `hash.js` (342) are merged and green. Held back as `.wip`: `graph.js` (no self-test block written, plus raw control bytes and a BOM inside a regex literal), `ta.js` (truncated mid-write at a `// __PART_THREE__` marker), `query.js` (23 failing assertions). Not delivered at all: stats, timeseries, geo, fuzzy, markdown, datetime, embed.
+
+Traps these surfaced, all worth remembering:
+- **Fabricated test vectors.** `hash.js` asserted a murmur3 value for a non-ASCII string that no published vector covers. The module was right and the expectation invented. Settled with an independent implementation validated against the five real vectors — build the oracle, don't pick a side.
+- **Arithmetic in a fixture.** `table.js` grouped on `(bi%4, bi%250)` and expected 250 groups; `gcd(4,250)=2` makes 500 reachable by CRT. The code was right.
+- **The template trap again.** `query.js` built ten "distinct stories" from one skeleton; the alert engine's near-duplicate filter collapsed nine of them, so a test claiming to exercise `maxPerBatch` was exercising similarity suppression instead. Feed fixtures need genuinely different sentences — this is now the third time this has bitten.
+- **A self-defeating test.** `query.js` checks `src.indexOf("\uFEFF") < 0` using a *literal* BOM as the needle, so the needle guarantees the failure. Hygiene assertions about a file's own bytes must escape what they search for.
+- `table.js` keeps its tests in a body function (like `calc.js`) rather than inside the guard, so fixture bytes there **do** reach index.html and must be escaped.
+
 ## Guardrail posture (deliberate, do not "restore")
 
 Investment-advice refusals and boilerplate disclaimers were **removed on request** — this is a private single-user tool. `drive-crypto.js` now asserts the *inverse*: the prompt invites a real read, the portfolio informs reasoning, the safety section reads "private terminal, not a published product". What stayed, and is still asserted: never quote a price from memory, never invent a headline, and the whole simulated-story failsafe system.
