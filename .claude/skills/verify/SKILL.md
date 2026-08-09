@@ -127,7 +127,16 @@ The brand is **MusaGPT ULTRA**, the local model is **CORE 5**, and every `core3*
 
 Six ULTRA boards (SEARCH, GRAPH, ALERTS, SIGNALS, DATA, MODEL) are wired ahead of their CORE 5 modules. `ultraHas("mcFoo",…)` checks `typeof window[name] === "function"`; a missing module renders `ultraPending()` — "isn't in this build yet" — rather than a panel that looks stuck loading. **A `<form>` with no submit handler navigates on Enter**, which in a single-file app is a full reload that drops the conversation and the wire; every new board form must `preventDefault`.
 
-Currently live: **DATA** (table.js), **SEARCH** and **ALERTS** (query.js). Still gated: GRAPH, SIGNALS, MODEL.
+Currently live: **DATA** (table.js), **SEARCH**/**ALERTS** (query.js), **GRAPH** (graph.js). Still gated: SIGNALS (ta.js truncated), MODEL (embed.js undelivered).
+
+**Every `ultraHas()` gate so far has named a function that does not exist** — `mcQyEval` (real: `mcQyEvaluate`), `mcGrBuild` (real: `mcGrFromDocuments`), `mcGrShortestPath` (real: `mcGrBfsPath`). A wrong name fails closed and looks exactly like "module not merged yet", so it is invisible. Check gates with `grep '^function <name>'` before believing a board is still pending.
+
+### graph.js semantics that are easy to get backwards
+- `g.nodes()`/`g.edges()` are **methods**, not properties. Results are wrapped: `mcGrPageRank(...).scores`, `mcGrLouvain(...).groups` + `.communities` + `.modularity`.
+- **`mcGrDijkstra` inverts weights by default** (`invertWeights !== false`). Edge weight is *affinity* — two names co-occurring ten times are **closer** — so a weight-10 edge is distance 0.1 and the direct route wins. Pass `{invertWeights:false}` for raw cost. Reading one as the other silently returns the wrong path.
+- **`mcGrFromDocuments` takes pre-extracted entities** (`doc.entities`/`.ents`/`.names`), never raw text — NER stays the host's job, and the app feeds it `mcEntities()` output filtered at conf >= 0.6.
+- Node ids are **case-folded**; the first spelling survives as `node(id).label`. Address nodes by the folded id.
+- `mcGrRenderModel` deliberately emits **unescaped** labels so the renderer escapes exactly once. The board's SVG builder calls `esc()` on every label — do not "fix" the model to escape too, or labels double-encode.
 
 **`ultraHas()` names must be real exports.** The SEARCH gate asked for `mcQyEval`, which does not exist — the module exports `mcQyEvaluate` — so the board would have stayed gated forever with the module present and nothing would have looked wrong. Check every gate name against `grep '^function <name>'`.
 
