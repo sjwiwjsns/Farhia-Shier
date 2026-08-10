@@ -127,7 +127,15 @@ The brand is **MusaGPT ULTRA**, the local model is **CORE 5**, and every `core3*
 
 Six ULTRA boards (SEARCH, GRAPH, ALERTS, SIGNALS, DATA, MODEL) are wired ahead of their CORE 5 modules. `ultraHas("mcFoo",…)` checks `typeof window[name] === "function"`; a missing module renders `ultraPending()` — "isn't in this build yet" — rather than a panel that looks stuck loading. **A `<form>` with no submit handler navigates on Enter**, which in a single-file app is a full reload that drops the conversation and the wire; every new board form must `preventDefault`.
 
-Currently live: **DATA** (table.js), **SEARCH**/**ALERTS** (query.js), **GRAPH** (graph.js), **SIGNALS** indicators (ta.js). Still gated: the SIGNALS forecast half (timeseries.js undelivered) and MODEL (embed.js undelivered).
+Currently live: **DATA**, **SEARCH**/**ALERTS**, **GRAPH**, **SIGNALS** indicators, **MODEL** (embed.js). Only the SIGNALS forecast half is still gated — timeseries.js was never delivered.
+
+### embed.js
+- **The API is methods on the object `mcEmCreate()` returns**, not free functions: `m.observe/refit/maybeRefit/policy/nearest/analogy/similarity/docVector/topics/readiness/stats/summary`. Only `mcEmCreate` is global, so that is the only name an `ultraHas()` gate can check.
+- `stats().confidence` is driven by **corpus size, never reconstruction error** — a five-document corpus reconstructs almost perfectly and knows nothing, so reporting the low error as confidence would be the most misleading number the module could emit.
+- `similarity()` returns **null, not 0**, when a word is unknown or nothing is fitted. Zero is a real cosine ("orthogonal"); returning it for ignorance makes "no model" indistinguishable from "unrelated". `nearest()` returns `[]` and `docVector()` returns `null` in the same case.
+- Refits are driven by `maybeRefit()`/`policy()`, never a timer: refitting per headline freezes the tab, never refitting goes stale. The board pays for one on open.
+
+**That is now four boards whose `ultraHas()` gate named a function that never existed** (`mcQyEval`, `mcGrBuild`, `mcGrShortestPath`, and all three `mcEm*` gates). It always fails closed and looks identical to "module not merged yet".
 
 ### ta.js semantics
 - **Every indicator nulls its warm-up** rather than returning 0. The board strips leading nulls before charting so a line starts where the indicator does; feeding zeros would draw a run-up from the axis that never happened.
