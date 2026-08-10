@@ -127,7 +127,14 @@ The brand is **MusaGPT ULTRA**, the local model is **CORE 5**, and every `core3*
 
 Six ULTRA boards (SEARCH, GRAPH, ALERTS, SIGNALS, DATA, MODEL) are wired ahead of their CORE 5 modules. `ultraHas("mcFoo",…)` checks `typeof window[name] === "function"`; a missing module renders `ultraPending()` — "isn't in this build yet" — rather than a panel that looks stuck loading. **A `<form>` with no submit handler navigates on Enter**, which in a single-file app is a full reload that drops the conversation and the wire; every new board form must `preventDefault`.
 
-Currently live: **DATA**, **SEARCH**/**ALERTS**, **GRAPH**, **SIGNALS** indicators, **MODEL** (embed.js). **All six ULTRA boards are live.** Undelivered and still unbuilt: stats, geo, fuzzy, markdown, datetime — none of which any board depends on.
+Currently live: **DATA**, **SEARCH**/**ALERTS**, **GRAPH**, **SIGNALS** indicators, **MODEL** (embed.js). **All six ULTRA boards are live.** Undelivered and still unbuilt: stats, geo, fuzzy, datetime — none of which any board depends on.
+
+### markdown.js — chat rendering is a security boundary
+`fmt()` renders **model output** into a bubble, so mcMdRender is the trust boundary, not a formatting nicety. It escapes everything, passes through no raw HTML (no option to change that), and allows only http/https/mailto/tel — checked against a normalised copy so mixed case, embedded whitespace/control chars, HTML entities (`&#106;avascript:`) and percent-encoding all fail. A rejected URL **keeps its link text and loses the anchor**; deleting the text would silently drop content the model wrote. `fmt()` still falls back to the old escape-only formatter if the module is absent, so a missing module degrades rather than throwing.
+
+**A block-parser loop must be unable to make zero progress.** The paragraph guard rejects lines that merely *look* like another block's opener, but the real rules are stricter — `***x` trips the horizontal-rule lookahead yet is not a rule, because that rule requires end-of-line. No branch consumed it, `para` came back empty, `i` never advanced, and the outer loop spun forever: **a hung tab from ordinary model output containing `***bold` at a line start.** There is now a forced-progress fallback. Any line-oriented parser added later needs the same guarantee.
+
+Testing the escaping needs care in both directions: `/\son\w+=/` over the whole output flags inert *escaped text* (`&lt;img onerror=&quot;...`), and un-escaping before the check manufactures the very breakout being tested. Extract the real tags, strip quoted attribute values, then look at what remains.
 
 ### timeseries.js
 - **An empty bucket is a gap, not a zero** — except for `agg:"count"`, where zero genuinely is the measured value. `mcTsResample` returns null for an empty mean/sum bucket and reports `gaps` and `covered` so a caller can see how much of the span was real.
