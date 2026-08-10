@@ -127,7 +127,14 @@ The brand is **MusaGPT ULTRA**, the local model is **CORE 5**, and every `core3*
 
 Six ULTRA boards (SEARCH, GRAPH, ALERTS, SIGNALS, DATA, MODEL) are wired ahead of their CORE 5 modules. `ultraHas("mcFoo",…)` checks `typeof window[name] === "function"`; a missing module renders `ultraPending()` — "isn't in this build yet" — rather than a panel that looks stuck loading. **A `<form>` with no submit handler navigates on Enter**, which in a single-file app is a full reload that drops the conversation and the wire; every new board form must `preventDefault`.
 
-Currently live: **DATA**, **SEARCH**/**ALERTS**, **GRAPH**, **SIGNALS** indicators, **MODEL** (embed.js). Only the SIGNALS forecast half is still gated — timeseries.js was never delivered.
+Currently live: **DATA**, **SEARCH**/**ALERTS**, **GRAPH**, **SIGNALS** indicators, **MODEL** (embed.js). **All six ULTRA boards are live.** Undelivered and still unbuilt: stats, geo, fuzzy, markdown, datetime — none of which any board depends on.
+
+### timeseries.js
+- **An empty bucket is a gap, not a zero** — except for `agg:"count"`, where zero genuinely is the measured value. `mcTsResample` returns null for an empty mean/sum bucket and reports `gaps` and `covered` so a caller can see how much of the span was real.
+- **`mcTsForecast` returns a `skill` score against seasonal-naive, and a `verdict`.** A forecaster that cannot beat "repeat the last value" has to say so; on a short wire that is the common case, and the board prints it verbatim rather than drawing a confident line.
+- **Changepoints use a self-starting CUSUM** — the reference is the running mean of the *current segment*, reset at each detection. Against a global mean, any series containing a shift has its first half below that mean by construction, so the detector fired "down" three times before reaching the real step and reported the step late. That was the wrong reference, not a tuning problem.
+- Anomalies scale residuals by **MAD, not standard deviation**: the outliers being hunted inflate sd and then hide inside their own inflated threshold.
+- The SIGNALS board's two halves gate independently (`ta.js` for indicators, `timeseries.js` for the forecast) and each renders what it can.
 
 ### embed.js
 - **The API is methods on the object `mcEmCreate()` returns**, not free functions: `m.observe/refit/maybeRefit/policy/nearest/analogy/similarity/docVector/topics/readiness/stats/summary`. Only `mcEmCreate` is global, so that is the only name an `ultraHas()` gate can check.
