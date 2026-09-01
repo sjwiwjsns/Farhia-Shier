@@ -113,6 +113,24 @@ frame(dt):   entity.syncVisual (surfaces/gear/fans/debris) → effects → airpo
              → camera rig → sky follow → shadow frustum follow → render → HUD canvas
 ```
 
+## Exterior detail layer (`aircraft/exterior.js`)
+
+The generic factory and the bespoke A380 both hand their finished airframe to
+`applyExterior`, which adds the hundreds of small pieces that make a hull read as
+a machine — driven entirely by the type's real dimensions (chord/thickness
+closures per wing station, the hull's cross-section function, nacelle radius,
+gear geometry), so a 717 and a 777 get correctly scaled parts from one code path.
+Two rules keep it cheap: **static pieces are batched** (`PieceBatcher` merges
+every piece sharing a material into one mesh per parent group), and **animated
+pieces stay separate** and plug into the entity's existing hinge-group contract
+(`parts.slats/flaps/spoilers/ailR/ailL/elevons/rudder/elevator`, spinning
+`fan` groups, translating reverser sleeves). Surface-mounted hull fittings use a
+mount frame (outward normal / around-the-ring / along-the-hull) so door frames
+follow the arc of the skin instead of floating off it. Detail pieces use
+solid-colour skin materials — the lofted panels keep the textured ones, since a
+mapped material squashes the whole skin texture onto every small face. Parked
+and AI aircraft keep the coarse build (`detail < 0.9`).
+
 ## Flight model (`physics/flightModel.js`)
 
 Rigid-body-lite: body frame forward = −Z, right = +X, up = +Y; quaternion attitude,

@@ -59,6 +59,11 @@ export class AircraftEntity {
     // Flaps / spoilers
     this.flapAnim = damp(this.flapAnim, fm.flap, 1.6, dt);
     for (const f of p.flaps) f.hinge.rotation.x = this.flapAnim * 0.62;
+    // slats translate forward/down along the leading edge and droop
+    for (const s of (p.slats || [])) {
+      s.hinge.position.copy(s.base).addScaledVector(s.out, this.flapAnim);
+      s.hinge.rotation.x = -s.droop * this.flapAnim;
+    }
     this.spoilerAnim = damp(this.spoilerAnim, fm.spoilers ? 1 : 0, 5, dt);
     for (const s of p.spoilers) s.hinge.rotation.x = -this.spoilerAnim * 0.95;
     // Primary surfaces
@@ -66,6 +71,10 @@ export class AircraftEntity {
     for (const ail of p.ailR) ail.hinge.rotation.x = -c.roll * 0.4;
     for (const ail of p.ailL) ail.hinge.rotation.x = c.roll * 0.4;
     if (p.elevator) p.elevator.rotation.x = -(c.pitch + fm.trim) * 0.4;
+    // delta elevons: elevator authority plus differential roll
+    for (const el of (p.elevons || [])) {
+      el.hinge.rotation.x = -(c.pitch + fm.trim) * 0.35 + (el.side > 0 ? -1 : 1) * c.roll * 0.3;
+    }
     if (p.rudder) p.rudder.rotation.y = -c.yaw * 0.45;
     // Engines
     for (const e of p.engines) {

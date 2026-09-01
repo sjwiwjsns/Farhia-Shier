@@ -11,19 +11,26 @@ import { buildA380Engines } from './engines.js';
 import { buildA380Gear } from './gear.js';
 import { buildA380Tail } from './tail.js';
 import { buildA380Cabin, cabinInfo } from './cabin.js';
+import { applyExterior } from '../exterior.js';
+import { lerp } from '../../core/math.js';
 
 function makeMaterials(livery, quality) {
   const std = (params) => quality === 'low'
     ? new THREE.MeshLambertMaterial(params)
-    : new THREE.MeshStandardMaterial({ metalness: 0.15, roughness: 0.5, ...params });
+    : quality === 'ultra'
+      ? new THREE.MeshPhysicalMaterial({ metalness: 0.12, roughness: 0.42, clearcoat: 0.85, clearcoatRoughness: 0.16, ...params })
+      : new THREE.MeshStandardMaterial({ metalness: 0.15, roughness: 0.5, ...params });
   const metal = (params) => quality === 'low'
     ? new THREE.MeshLambertMaterial(params)
     : new THREE.MeshStandardMaterial({ metalness: 0.75, roughness: 0.3, ...params });
 
-  const wing = std({ color: livery.wingColor });
+  const wing = std(quality !== 'low' && livery.wingMap ? { map: livery.wingMap } : { color: livery.wingColor });
   wing.side = THREE.DoubleSide;
   return {
-    fuselage: std({ map: livery.fuselageMap }),
+    fuselage: std({
+      map: livery.fuselageMap,
+      ...(quality !== 'low' && livery.roughnessMap ? { roughnessMap: livery.roughnessMap, roughness: 1.0 } : {})
+    }),
     belly: std({ color: livery.bellyColor }),
     wing,
     tail: std({ map: livery.tailMap }),
@@ -92,6 +99,29 @@ export function buildA380(livery, opts = {}) {
 
   group.add(buildA380Gear(materials, parts, detail));
 
+  // exterior extras the bespoke build doesn't already carry: vortex
+  // generators, static wicks, fuel panels, landing lights, tip lights
+  let base = 0;
+  group.traverse((o) => { if (o.isMesh) base++; });
+  const w = A380.wing;
+  const mkWing = (side, parent) => ({
+    side, parent, halfSpan: w.semiSpan,
+    chordAt: (f) => planformAt(f).chord, leAt: (f) => planformAt(f).zLE, yAt: (f) => planformAt(f).y,
+    thickAt: (f) => planformAt(f).chord * lerp(w.thickness, 0.075, f),
+    tipChord: planformAt(1).chord, wingletKind: null, supersonic: false, fairings: [], vgs: 36
+  });
+  const lightMat = (c) => new THREE.MeshBasicMaterial({ color: c });
+  const pieceCount = base + applyExterior({
+    group, parts,
+    mats: {
+      wing: materials.tailplane, belly: materials.belly, dark: materials.dark, grey: materials.grey,
+      metal: materials.hub, glass: materials.glassDark,
+      navRed: lightMat(0xff3b2b), navGreen: lightMat(0x35e05a), strobe: lightMat(0xffffff), beacon: lightMat(0xff2a1a)
+    },
+    wings: [mkWing(1, wingR), mkWing(-1, wingL)],
+    options: { surfaces: false, fuselage: false, engines: false, tail: false, gear: false }
+  });
+
   // full two-deck cabin interior (skipped on the Low tier)
   let cabin = null;
   if (quality !== 'low') {
@@ -105,6 +135,7 @@ export function buildA380(livery, opts = {}) {
   const wingY = A380.wing.rootY, wingZ = -L / 2 + A380.wing.rootX;
   const info = {
     gearHeight: A380.gear.height,
+    pieceCount,
     cockpitPos: new THREE.Vector3(0, A380.cockpit.eyePoint.y, -L / 2 + A380.cockpit.eyePoint.x),
     engineOffsets: parts.engines.map((e) => e.pos.clone()),
     wingTipL: new THREE.Vector3(-tip.x, wingY + tip.y, wingZ + tip.zLE),

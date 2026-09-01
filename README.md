@@ -53,6 +53,23 @@ placement (wing pods, tail-mounted, 727 S-duct, DC-10 banjo, SST boxes), T-tails
 747 hump, A380/MD-12 double deck, winglet styles per variant, era-appropriate
 engine sound synthesis (turbojet / low-bypass / high-bypass).
 
+**Every airframe is built from hundreds of individually modelled pieces** (540–720
+on a typical airliner, counted live on the flight-start toast): six-segment
+leading-edge slats that translate and droop with the flaps, double-slotted flaps
+with vanes and end ribs, six spoiler panels with actuators, ailerons with horns
+and tabs, flap-track canoes, rows of vortex generators, static wicks, fuel panels,
+landing lights, nav/strobe lights; door frames with handles, cargo doors, VHF /
+satcom / GPS / TCAS antennas, pitots, AoA vanes, static ports, beacons, APU, belly
+fairing, windscreen posts and wipers; 22-blade spinning fan discs, cowl seams and
+latches, nacelle strakes, exhaust plugs, nozzle chevrons on modern types, reverser
+cascades that translate with the sleeve, pylon fairings; split rudders and
+elevators with horns, tabs and wicks; torque links, brake discs, hubcaps and gear
+doors. Deltas get three elevon segments per side and petalled reheat nozzles.
+Skins carry frame and stringer lines, rivet rows, door outlines, a bare radome and
+APU cone, a registration, and a roughness map; the Maximum tier renders the paint
+with a physically-based clearcoat. Static pieces are batched per material, so a
+600-piece airframe costs ~150 draw calls.
+
 **Liveries are simplified color tributes generated at runtime — not exact airline
 artwork.** The airline picker only offers aircraft that carrier historically or
 currently operated (era + fleet checked), cargo carriers get freighters, and the

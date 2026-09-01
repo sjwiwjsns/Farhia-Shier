@@ -59,18 +59,18 @@ class Sim {
     // --- player aircraft ---
     this.entity = new AircraftEntity({
       variant: config.variant, family: config.family, airline: config.airline,
-      scene: this.scene, quality: this.tier.lowMat ? 'low' : 'high', texScale: this.tier.texScale
+      scene: this.scene, quality: this.tier.lowMat ? 'low' : (this.tier.fuselageReflections ? 'ultra' : 'high'), texScale: this.tier.texScale
     });
     if (this.tier.fuselageReflections) {
+      // clearcoat + roughness map carry the finish now; just feed the env map
       this.entity.group.traverse((o) => {
-        if (o.material && o.material.isMeshStandardMaterial && o.material.map) {
-          o.material.envMapIntensity = 0.85;
-          o.material.metalness = 0.3;
-          o.material.roughness = 0.35;
-        }
+        if (o.material && o.material.isMeshStandardMaterial && o.material.map) o.material.envMapIntensity = 0.9;
       });
     }
     this.fm = this.entity.fm;
+    if (this.entity.info.pieceCount) {
+      toast(`${config.variant.name} — ${this.entity.info.pieceCount.toLocaleString()} exterior pieces`, 3200);
+    }
 
     // --- support systems ---
     this.effects = new Effects(this.scene);
@@ -196,7 +196,7 @@ class Sim {
       this.entity.dispose();
       this.entity = new AircraftEntity({
         variant: this.config.variant, family: this.config.family, airline: this.config.airline,
-        scene: this.scene, quality: this.tier.lowMat ? 'low' : 'high', texScale: this.tier.texScale
+        scene: this.scene, quality: this.tier.lowMat ? 'low' : (this.tier.fuselageReflections ? 'ultra' : 'high'), texScale: this.tier.texScale
       });
       this.fm = this.entity.fm;
       this.crashed = false;

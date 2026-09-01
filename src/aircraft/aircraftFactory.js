@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { DEG2RAD, clamp, lerp } from '../core/math.js';
 import { buildA380 } from './a380/index.js';
+import { applyExterior } from './exterior.js';
 
 function mergeGeo(family, variant) {
   const g = JSON.parse(JSON.stringify(family.geometry));
@@ -19,31 +20,40 @@ function mergeGeo(family, variant) {
 }
 
 function mat(quality, params) {
-  return quality === 'low'
-    ? new THREE.MeshLambertMaterial(params)
-    : new THREE.MeshStandardMaterial({ metalness: 0.15, roughness: 0.55, ...params });
+  if (quality === 'low') return new THREE.MeshLambertMaterial(params);
+  // 'ultra' (Maximum tier): clearcoated paint — the wet-look airliner finish
+  if (quality === 'ultra') {
+    return new THREE.MeshPhysicalMaterial({ metalness: 0.12, roughness: 0.42, clearcoat: 0.85, clearcoatRoughness: 0.16, ...params });
+  }
+  return new THREE.MeshStandardMaterial({ metalness: 0.15, roughness: 0.55, ...params });
+}
+
+// Cross-section radius / vertical offset along the hull. Shared by the loft
+// and by the exterior layer, which mounts doors, antennas and probes on it.
+export function fuselageProfile(t, R, geo, supersonic) {
+  const scaleY = geo.deck === 'double' ? 1.30 : 1.0;
+  const noseFrac = supersonic ? 0.24 : 0.115;
+  const tailFrac = supersonic ? 0.26 : 0.30;
+  let r = R, yOff = 0;
+  if (t < noseFrac) {
+    const s = t / noseFrac;
+    r = R * Math.pow(s, supersonic ? 1.0 : 0.62);
+    if (supersonic) yOff = -R * 0.35 * Math.pow(1 - s, 1.4);
+  } else if (t > 1 - tailFrac) {
+    const s = (t - (1 - tailFrac)) / tailFrac;
+    r = R * (1 - 0.90 * Math.pow(s, 1.35));
+    yOff = R * 0.72 * Math.pow(s, 1.7);
+  }
+  return { r: Math.max(r, 0.02), yOff, scaleY };
 }
 
 // ---------------------------------------------------------------- fuselage
 function buildFuselage(len, R, geo, supersonic, radialSegs, lengthSegs) {
-  const scaleY = geo.deck === 'double' ? 1.30 : 1.0;
-  const noseFrac = supersonic ? 0.24 : 0.115;
-  const tailFrac = supersonic ? 0.26 : 0.30;
   const pos = [], uv = [], idx = [];
 
   for (let i = 0; i <= lengthSegs; i++) {
     const t = i / lengthSegs;
-    let r = R, yOff = 0;
-    if (t < noseFrac) {
-      const s = t / noseFrac;
-      r = R * Math.pow(s, supersonic ? 1.0 : 0.62);
-      if (supersonic) yOff = -R * 0.35 * Math.pow(1 - s, 1.4);
-    } else if (t > 1 - tailFrac) {
-      const s = (t - (1 - tailFrac)) / tailFrac;
-      r = R * (1 - 0.90 * Math.pow(s, 1.35));
-      yOff = R * 0.72 * Math.pow(s, 1.7);
-    }
-    r = Math.max(r, 0.02);
+    const { r, yOff, scaleY } = fuselageProfile(t, R, geo, supersonic);
     const z = -len / 2 + t * len;
     for (let j = 0; j <= radialSegs; j++) {
       const phi = (j / radialSegs) * Math.PI * 2;
@@ -133,11 +143,12 @@ function makeNacelle(nacR, nacL, engineMat, darkMat, detail) {
   sleeve.rotation.x = Math.PI / 2;
   sleeve.position.z = nacL * 0.12;
   grp.add(sleeve);
+  grp.userData = { nacR, nacL };
   return { grp, fan, sleeve };
 }
 
 // ------------------------------------------------------------------ gear
-function makeGear({ strutLen, wheelR, bogie, dark, grey, detail }) {
+function makeGear({ strutLen, wheelR, bogie, dark, grey, detail, isNose = false }) {
   const grp = new THREE.Group();
   const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, strutLen, detail > 0.6 ? 10 : 6), grey);
   strut.position.y = -strutLen / 2;
@@ -152,6 +163,7 @@ function makeGear({ strutLen, wheelR, bogie, dark, grey, detail }) {
     w.position.set(wx, -strutLen + wheelR * 0.2, wz);
     grp.add(w);
   }
+  grp.userData = { strutLen, wheelR, positions, isNose };
   return grp;
 }
 
@@ -174,13 +186,33 @@ export function buildAircraft(variant, family, livery, opts = {}) {
   const group = new THREE.Group();
   const parts = { engines: [], flaps: [], spoilers: [], slats: [] };
 
-  const fuselageMat = mat(quality, { map: livery.fuselageMap });
+  const hiQ = quality !== 'low';
+  const fuselageMat = mat(quality, {
+    map: livery.fuselageMap,
+    ...(hiQ && livery.roughnessMap ? { roughnessMap: livery.roughnessMap, roughness: 1.0 } : {})
+  });
   const tailMat = mat(quality, { map: livery.tailMap });
-  const wingMat = mat(quality, { color: livery.wingColor });
+  const wingMat = mat(quality, hiQ && livery.wingMap ? { map: livery.wingMap } : { color: livery.wingColor });
   wingMat.side = THREE.DoubleSide;
   const engineMat = mat(quality, { color: livery.engineColor });
   const darkMat = mat(quality, { color: 0x23262a });
   const greyMat = mat(quality, { color: 0x8d9297 });
+  const bellyMat = mat(quality, { color: livery.bellyColor || 0xb9bec4 });
+  // solid-colour skins for the small detail pieces: a mapped material would
+  // squash the whole wing/tail texture onto every slat and spoiler face
+  const wingSkinMat = mat(quality, { color: livery.wingColor });
+  const tailSkinMat = mat(quality, { color: livery.tailColor || livery.wingColor });
+  const metalMat = hiQ
+    ? new THREE.MeshStandardMaterial({ color: 0xc9cdd2, metalness: 0.85, roughness: 0.32 })
+    : new THREE.MeshLambertMaterial({ color: 0xc9cdd2 });
+  const fanBladeMat = hiQ
+    ? new THREE.MeshStandardMaterial({ color: 0x3b4046, metalness: 0.8, roughness: 0.35 })
+    : new THREE.MeshLambertMaterial({ color: 0x3b4046 });
+  const whiteMat = mat(quality, { color: 0xe6e8eb });
+  const glassMat = mat(quality, { color: 0x1b2129, roughness: 0.15 });
+  const brakeMat = mat(quality, { color: 0x4a3f3a });
+  const lightMat = (c) => new THREE.MeshBasicMaterial({ color: c });
+  const modernEngine = family.sound === 'hbpr-modern';
 
   // Fuselage
   const fuselage = new THREE.Mesh(buildFuselage(len, R, geo, supersonic, radialSegs, lengthSegs), fuselageMat);
@@ -246,7 +278,9 @@ export function buildAircraft(variant, family, livery, opts = {}) {
   const chordAt = (fx) => lerp(wing.rootChord, tipChord, fx);
   const leAt = (fx) => fx * halfSpan * sweepTan;
   const yAt = (fx) => fx * halfSpan * dihTan;
-  if (detail > 0.5 && !supersonic) {
+  // Coarse surfaces only for parked/AI copies; the player's airframe gets the
+  // full multi-piece set from the exterior layer below.
+  if (detail > 0.5 && detail < 0.9 && !supersonic) {
     for (const side of [1, -1]) {
       const parent = side > 0 ? wingR : wingL;
       const addTE = (f0, f1, chordFrac, list, isTop) => {
@@ -292,9 +326,11 @@ export function buildAircraft(variant, family, livery, opts = {}) {
     tailGroup.add(rudder);
     parts.rudder = rudder;
   }
+  let hSpanOut = 0, hChordOut = 0;
   if (geo.tail !== 'delta') {
     const hSpan = span * 0.185;
     const hChord = len * 0.085;
+    hSpanOut = hSpan; hChordOut = hChord;
     const hstab = new THREE.Group();
     const hy = geo.tail === 'ttail' ? R * 0.70 + finH * 0.96 : R * 0.32;
     const hz = geo.tail === 'ttail' ? finZ + finH * Math.tan(42 * DEG2RAD) * 0.85 : len / 2 - hChord * 2.1;
@@ -318,6 +354,8 @@ export function buildAircraft(variant, family, livery, opts = {}) {
   const addEngine = (x, y, z, parent, withPylon = true, pylonDown = true) => {
     const { grp, fan, sleeve } = makeNacelle(nacR, nacL, engineMat, darkMat, detail);
     grp.position.set(x, y, z);
+    grp.userData.mount = parent === tailGroup ? 'tail' : 'wing';
+    grp.userData.modern = modernEngine;
     if (withPylon) {
       const py = boxMesh(0.28, Math.abs(pylonDown ? nacR * 1.0 : nacR * 0.8), nacL * 0.5, greyMat);
       py.position.set(x, y + (pylonDown ? nacR * 0.75 : 0), z + nacL * 0.1);
@@ -362,6 +400,7 @@ export function buildAircraft(variant, family, livery, opts = {}) {
   if (layout === 'trijetdc10') {
     // banjo engine at fin base
     const { grp, fan, sleeve } = makeNacelle(nacR, nacL * 1.05, engineMat, darkMat, detail);
+    grp.userData.mount = 'tail';
     grp.position.set(0, R * 0.72 + finH * 0.30, finZ + finRootChord * 0.35);
     tailGroup.add(grp);
     parts.engines.push({ grp, fan, sleeve, pos: grp.position.clone() });
@@ -402,7 +441,7 @@ export function buildAircraft(variant, family, livery, opts = {}) {
   const wheelR = clamp(R * 0.28, 0.35, 0.62);
   const heavy = variant.perf.mtowKg > 150000;
 
-  const gearNose = makeGear({ strutLen: gearHeight - R * 0.72 - wheelR, wheelR: wheelR * 0.8, bogie: 2, dark: darkMat, grey: greyMat, detail });
+  const gearNose = makeGear({ strutLen: gearHeight - R * 0.72 - wheelR, wheelR: wheelR * 0.8, bogie: 2, dark: darkMat, grey: greyMat, detail, isNose: true });
   gearNose.position.set(0, -R * 0.72, -len * 0.36);
   group.add(gearNose);
   const track = Math.max(0.095 * span, R * 1.5);
@@ -419,8 +458,48 @@ export function buildAircraft(variant, family, livery, opts = {}) {
     parts.gearC = gc;
   }
 
+  // ------------------------------------------------- exterior detail layer
+  let pieceCount = 0;
+  if (detail >= 0.9) {
+    let base = 0;
+    group.traverse((o) => { if (o.isMesh) base++; });
+    const thickAt = (f) => chordAt(f) * lerp(0.10, 0.06, f);
+    const hasWinglet = wingletKind && wingletKind !== 'none' && !supersonic;
+    const mkWing = (side, parent) => ({
+      side, parent, halfSpan, chordAt, leAt, yAt, thickAt, tipChord,
+      wingletKind: hasWinglet ? wingletKind : null, supersonic
+    });
+    const added = applyExterior({
+      group, parts,
+      mats: {
+        wing: wingSkinMat, fuselage: fuselageMat, tail: tailSkinMat, belly: bellyMat, dark: darkMat, grey: greyMat,
+        metal: metalMat, engine: engineMat, white: whiteMat, glass: glassMat, brake: brakeMat, fanBlade: fanBladeMat,
+        navRed: lightMat(0xff3b2b), navGreen: lightMat(0x35e05a), strobe: lightMat(0xffffff), beacon: lightMat(0xff2a1a)
+      },
+      fus: {
+        len, R, wingZ, wingY, rootChord: wing.rootChord, supersonic, deck: geo.deck,
+        at: (t, phi) => {
+          const p = fuselageProfile(t, R, geo, supersonic);
+          return { x: p.r * Math.sin(phi), y: -p.r * Math.cos(phi) * p.scaleY + p.yOff };
+        }
+      },
+      wings: [mkWing(1, wingR), mkWing(-1, wingL)],
+      tail: {
+        group: tailGroup,
+        fin: { rootChord: finRootChord, height: finH, z: finZ, y: R * 0.70, sweep: (supersonic ? 52 : 42) * DEG2RAD },
+        hstab: parts.hstab ? {
+          group: parts.hstab, span: hSpanOut, chord: hChordOut,
+          sweep: (wing.sweep + 4) * DEG2RAD, dihedral: (geo.tail === 'ttail' ? -3 : 7) * DEG2RAD
+        } : null
+      },
+      gears: [parts.gearNose, parts.gearL, parts.gearR, parts.gearC].filter(Boolean)
+    });
+    pieceCount = base + added;
+  }
+
   const info = {
     gearHeight,
+    pieceCount,
     cockpitPos: new THREE.Vector3(0, R * (geo.deck === 'hump' ? 1.15 : 0.55), -len / 2 + len * 0.055),
     engineOffsets: parts.engines.map((e) => e.pos.clone()),
     wingTipL: new THREE.Vector3(-halfSpan, wingY + halfSpan * dihTan, wingZ + halfSpan * sweepTan),

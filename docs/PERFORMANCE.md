@@ -26,7 +26,7 @@ never the art direction.
 
 | Asset | Budget |
 |---|---|
-| Player aircraft | 8–15 k tris (fuselage 24×26 grid, per-part control surfaces, gear) |
+| Player aircraft | ~600 individually modelled pieces batched per material to ~150 draw calls (fuselage loft, six slats, flaps + vanes, six spoilers, fan discs, doors, antennas…) |
 | Parked/AI aircraft | 2–4 k tris (detail 0.4: fewer segments, no control surfaces) |
 | Terminal cluster | 1–3 k tris (boxes/cylinders/arcs + glass bands) |
 | Full airport + scenery | ~120 k tris High / ~60 k Medium / ~35 k Low |

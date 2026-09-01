@@ -3,6 +3,7 @@
 // artwork (see docs/ARCHITECTURE.md). Fuselage texture mapping:
 // u = 0 (nose) -> 1 (tail); v = 0 bottom -> 0.25 right -> 0.5 top -> 0.75 left -> 1 bottom.
 import * as THREE from 'three';
+import { hashString } from '../core/math.js';
 
 export function airlineOperates(airline, variant) {
   const flags = variant.flags || [];
@@ -96,6 +97,50 @@ export function generateLivery(airline, variant, texScale = 1) {
     g.fill();
   }
 
+  // ---- skin detail: frames, stringers, rivet rows (all subtle — they read
+  // as panel structure up close and vanish at distance)
+  const lw = Math.max(1, W / 2048);
+  g.strokeStyle = 'rgba(40,46,54,0.16)';
+  g.lineWidth = lw;
+  for (let x = W * 0.06; x < W * 0.975; x += W * 0.0176) {
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke();
+  }
+  g.strokeStyle = 'rgba(40,46,54,0.10)';
+  for (const fy of [0.08, 0.16, 0.33, 0.42, 0.58, 0.67, 0.84, 0.92]) {
+    g.beginPath(); g.moveTo(W * 0.04, H * fy); g.lineTo(W * 0.985, H * fy); g.stroke();
+  }
+  g.fillStyle = 'rgba(30,34,40,0.20)';
+  for (const fy of [0.12, 0.37, 0.63, 0.88]) {
+    for (let x = W * 0.06; x < W * 0.975; x += W * 0.0044) g.fillRect(x, H * fy, lw * 1.5, lw * 1.5);
+  }
+  // ---- door outlines at the same stations the exterior layer frames
+  const len = variant.dims.len;
+  const doorT = len > 60 ? [0.09, 0.28, 0.55, 0.86] : len > 40 ? [0.09, 0.62, 0.86] : [0.09, 0.86];
+  const outline = (u, y0, y1, wM, r = 3) => {
+    const x0 = W * u - (W * wM / len) / 2, x1 = W * u + (W * wM / len) / 2;
+    g.beginPath();
+    g.roundRect ? g.roundRect(x0, y0, x1 - x0, y1 - y0, r) : g.rect(x0, y0, x1 - x0, y1 - y0);
+    g.stroke();
+  };
+  g.strokeStyle = 'rgba(22,26,32,0.62)';
+  g.lineWidth = lw * 1.6;
+  if (!isFreighter) {
+    for (const t of doorT) {
+      outline(t, H * 0.585, H * 0.800, 1.07);   // right flank (higher = smaller y)
+      outline(t, H * 0.200, H * 0.415, 1.07);   // left flank (inverted band)
+    }
+    if (len < 45) for (const t of [0.46, 0.51]) { outline(t, H * 0.655, H * 0.745, 0.5); outline(t, H * 0.255, H * 0.345, 0.5); }
+  }
+  for (const t of [0.20, 0.72]) outline(t, H * 0.80, H * 0.93, 2.6);   // cargo doors, lower right
+  // ---- radome and APU cone in unpainted tones, with seams
+  g.fillStyle = 'rgba(118,124,131,0.38)';
+  g.fillRect(0, 0, W * 0.036, H);
+  g.fillStyle = 'rgba(88,93,99,0.55)';
+  g.fillRect(W * 0.978, 0, W * 0.022, H);
+  g.strokeStyle = 'rgba(30,34,40,0.55)';
+  g.lineWidth = lw * 1.4;
+  for (const u of [0.036, 0.978]) { g.beginPath(); g.moveTo(W * u, 0); g.lineTo(W * u, H); g.stroke(); }
+
   // Flank text mapping, established empirically with four-orientation marker
   // words after the hull winding fix (outward-facing loft triangles):
   //   RIGHT flank <- canvas ~0.615H band, drawn pre-mirrored horizontally;
@@ -135,18 +180,87 @@ export function generateLivery(airline, variant, texScale = 1) {
     drawFlankText(titles, 0.30, -fs * 0.35, `bold ${fs}px Arial, Helvetica, sans-serif`, col.text);
   }
 
+  // ---- registration on the rear fuselage (deterministic per airline/type)
+  {
+    const h = hashString(airline.id + ':' + variant.id) >>> 0;
+    const reg = 'N' + (100 + (h % 900)) + String.fromCharCode(65 + (h >> 10) % 26) + String.fromCharCode(65 + (h >> 15) % 26);
+    const fs = H * 0.046;
+    drawFlankText(reg, 0.835, -fs * 0.15, `bold ${fs}px Arial, Helvetica, sans-serif`, cleanHull ? '#3a3f46' : col.text);
+  }
+
   const fuselageMap = new THREE.CanvasTexture(cv);
-  fuselageMap.anisotropy = 4;
+  fuselageMap.anisotropy = 8;
   fuselageMap.colorSpace = THREE.SRGBColorSpace;
+
+  // ---- roughness map: glossy paint, matte radome, duller belly + APU
+  const rc = document.createElement('canvas');
+  rc.width = W >> 1; rc.height = H >> 1;
+  const rg = rc.getContext('2d');
+  rg.fillStyle = '#5a5a5a'; rg.fillRect(0, 0, rc.width, rc.height);              // paint ~0.35
+  rg.fillStyle = '#7c7c7c'; rg.fillRect(0, 0, rc.width, rc.height * 0.10);        // belly
+  rg.fillRect(0, rc.height * 0.90, rc.width, rc.height * 0.10);
+  rg.fillStyle = '#b4b4b4'; rg.fillRect(0, 0, rc.width * 0.036, rc.height);       // radome (matte)
+  rg.fillStyle = '#9a9a9a'; rg.fillRect(rc.width * 0.978, 0, rc.width * 0.022, rc.height);
+  const roughnessMap = new THREE.CanvasTexture(rc);
 
   return {
     fuselageMap,
+    roughnessMap,
+    wingMap: generateWingTexture(texScale),
     tailMap: generateTailTexture(airline, texScale),
     engineColor: new THREE.Color(col.engine || col.fuselage),
     wingColor: new THREE.Color('#b7bbc0'),
+    tailColor: new THREE.Color(col.tail || col.fuselage),
     bellyColor: new THREE.Color(belly),
     label: `${airline.name} (tribute livery)`
   };
+}
+
+// Wing skin (u = chord LE->TE, v = root->tip, shared by top and bottom faces):
+// bare-metal leading-edge strip, spanwise panel lines, rib lines, the dark
+// walkway corridor at the root, fuel caps, hinge covers and a little grime.
+let _wingMapCache = null;
+export function generateWingTexture(texScale = 1) {
+  if (_wingMapCache && _wingMapCache.userData.texScale === texScale) return _wingMapCache;
+  const W = Math.round(1024 * texScale), H = Math.round(512 * texScale);
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#b7bbc0';
+  g.fillRect(0, 0, W, H);
+  // root-to-tip grime gradient + subtle mottling
+  const gr = g.createLinearGradient(0, 0, 0, H);
+  gr.addColorStop(0, 'rgba(60,64,70,0.10)');
+  gr.addColorStop(1, 'rgba(60,64,70,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 400; i++) {
+    g.fillStyle = `rgba(${Math.random() < 0.5 ? '255,255,255' : '40,44,50'},0.04)`;
+    g.fillRect(Math.random() * W, Math.random() * H, 2 + Math.random() * 20, 1 + Math.random() * 3);
+  }
+  // leading-edge strip (bare alloy) and darker trailing edge
+  g.fillStyle = '#d3d7db'; g.fillRect(0, 0, W * 0.05, H);
+  g.fillStyle = '#a4a8ad'; g.fillRect(W * 0.955, 0, W * 0.045, H);
+  // walkway corridor near the root
+  g.fillStyle = 'rgba(70,74,80,0.36)'; g.fillRect(W * 0.12, 0, W * 0.56, H * 0.15);
+  g.setLineDash([6, 5]); g.strokeStyle = 'rgba(30,34,40,0.55)'; g.lineWidth = 2;
+  g.strokeRect(W * 0.12, 2, W * 0.56, H * 0.15 - 2);
+  g.setLineDash([]);
+  // spanwise panel lines (chord stations) + rib lines
+  g.strokeStyle = 'rgba(40,46,54,0.24)'; g.lineWidth = Math.max(1, W / 1024);
+  for (const u of [0.05, 0.14, 0.28, 0.45, 0.62, 0.72, 0.955]) { g.beginPath(); g.moveTo(W * u, 0); g.lineTo(W * u, H); g.stroke(); }
+  g.strokeStyle = 'rgba(40,46,54,0.12)';
+  for (let k = 1; k < 14; k++) { g.beginPath(); g.moveTo(0, H * k / 14); g.lineTo(W, H * k / 14); g.stroke(); }
+  // fuel caps and hinge covers
+  g.strokeStyle = 'rgba(30,34,40,0.6)'; g.lineWidth = 2;
+  for (const v of [0.30, 0.48, 0.66, 0.84]) { g.beginPath(); g.arc(W * 0.40, H * v, H * 0.02, 0, Math.PI * 2); g.stroke(); }
+  g.fillStyle = 'rgba(90,94,100,0.5)';
+  for (const v of [0.22, 0.40, 0.58, 0.76]) g.fillRect(W * 0.69, H * v - H * 0.012, W * 0.05, H * 0.024);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.userData.texScale = texScale;
+  _wingMapCache = tex;
+  return tex;
 }
 
 export function generateTailTexture(airline, texScale = 1) {
