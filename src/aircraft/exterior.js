@@ -264,6 +264,7 @@ function detailWing(W, mats, parts, opt) {
 //      R, wingZ, rootChord, wingY, supersonic, deck }
 function detailFuselage(F, mats, group, opt) {
   const { len, at } = F;
+  const wsT = F.wsT ?? 0.047;
   const B = new PieceBatcher();
   const Z = (t) => -len / 2 + t * len;
   // Surface-mounted piece: local +X = outward normal, +Y = around the ring
@@ -302,7 +303,9 @@ function detailFuselage(F, mats, group, opt) {
   const R = F.R;
   const sideR = Math.PI / 2, sideL = -Math.PI / 2, top = Math.PI, bot = 0;
   if (!F.supersonic) {
-    const doorT = len > 60 ? [0.09, 0.28, 0.55, 0.86] : len > 40 ? [0.09, 0.62, 0.86] : [0.09, 0.86];
+    // the first door clears the flight-deck glazing (which sits at wsT)
+    const d0 = Math.max(0.09, wsT + 0.055);
+    const doorT = len > 60 ? [d0, 0.28, 0.55, 0.86] : len > 40 ? [d0, 0.62, 0.86] : [d0, 0.86];
     const dh = Math.min(1.9, R * 0.9), dw = Math.min(1.07, R * 0.55);
     for (const t of doorT) for (const phi of [sideR, sideL]) doorFrame(t, phi, dw, dh, at(t, phi).x * (phi > 0 ? 1 : -1) || R);
     // cargo doors: forward + aft holds, lower right
@@ -358,13 +361,102 @@ function detailFuselage(F, mats, group, opt) {
     mount(UNIT.box, mats.dark, 0.90, bot, { ox: 0.10, sx: 0.20, sy: 0.16, sz: 0.55 });
   }
   // windscreen posts + wipers, radome seam (all types)
-  for (const dphi of [-0.30, 0, 0.30]) mount(UNIT.box, mats.dark, 0.047, top + dphi, { ox: 0.012, sx: 0.025, sy: 0.05, sz: R * 0.55 });
-  for (const s of [-1, 1]) mount(UNIT.box, mats.dark, 0.05, top + s * 0.18, { ox: 0.03, sx: 0.02, sy: 0.03, sz: R * 0.32, ry: s * 0.4 });
+  // (Window posts are modelled by the flight deck itself, correctly raked in
+  // the plane of the glass — hull-frame strips here would hang in the view.)
   {
     const p = at(0.035, top), q = at(0.035, bot);
     const rr = (p.y - q.y) / 2;
     const seam = new THREE.TorusGeometry(1, 0.012, 4, 28);
     B.add(seam, mats.dark, { x: 0, y: (p.y + q.y) / 2, z: Z(0.035), sx: at(0.035, sideR).x, sy: rr });
+  }
+  const n = B.count;
+  B.flush(group);
+  return n;
+}
+
+// ------------------------------------------------------------------ nose
+// The nose is what the player sees most from the cockpit and in every
+// three-quarter shot, so it gets its own pass: radome joint and lightning
+// diverter strips, wiper arms with blades and rain-repellent nozzles, the
+// air-data probe cluster, taxi/turnoff lights, avionics-bay and ground-
+// service doors with their latches, and the towbar lug.
+function detailNose(F, mats, group) {
+  const { len, at, R, supersonic } = F;
+  const wsT = F.wsT ?? 0.062;
+  const B = new PieceBatcher();
+  const Z = (t) => -len / 2 + t * len;
+  const top = Math.PI, bot = 0, sideR = Math.PI / 2, sideL = -Math.PI / 2;
+  const mount = (geo, mat, t, phi, o = {}) => {
+    const p = at(t, phi);
+    const N = new THREE.Vector3(Math.sin(phi), -Math.cos(phi), 0);
+    const T = new THREE.Vector3(Math.cos(phi), Math.sin(phi), 0);
+    const basis = new THREE.Matrix4().makeBasis(N, T, new THREE.Vector3(0, 0, 1));
+    _o.position.set(0, 0, o.oz || 0);
+    _o.rotation.set(o.rx || 0, o.ry || 0, o.rz || 0);
+    _o.scale.set(o.sx ?? 1, o.sy ?? 1, o.sz ?? 1);
+    _o.updateMatrix();
+    _m.copy(basis).multiply(_o.matrix);
+    _m.setPosition(
+      p.x + N.x * (o.ox || 0) + T.x * (o.oy || 0),
+      p.y + N.y * (o.ox || 0) + T.y * (o.oy || 0),
+      Z(t) + (o.oz || 0));
+    return B.addM(geo, mat, _m);
+  };
+
+  // radome joint ring + quick-release latches
+  {
+    const t = supersonic ? 0.055 : 0.036;
+    const p = at(t, sideR), up = at(t, top), lo = at(t, bot);
+    B.add(new THREE.TorusGeometry(1, 0.016, 5, 30), mats.metal,
+      { y: (up.y + lo.y) / 2, z: Z(t), sx: p.x, sy: (up.y - lo.y) / 2 });
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      mount(UNIT.box, mats.metal, t, a, { ox: 0.015, sx: 0.03, sy: 0.05, sz: 0.05 });
+    }
+  }
+  // lightning diverter strips down the radome (segmented, as on the real part)
+  for (const a of [-0.9, -0.3, 0.3, 0.9]) {
+    for (let i = 0; i < 6; i++) {
+      const t = 0.004 + i * 0.0052;
+      mount(UNIT.box, mats.metal, t, top + a, { ox: 0.006, sx: 0.012, sy: 0.02, sz: 0.028 });
+    }
+  }
+  if (!supersonic) {
+    // windscreen wipers: pivot, arm, blade, park stop, rain-repellent nozzle
+    for (const s2 of [-1, 1]) {
+      // parked position: pivot at the windscreen sill, arm and blade lying
+      // along the bottom of the glass
+      const t = wsT + 0.010, phi = top + s2 * 0.62;
+      mount(UNIT.cyl, mats.metal, t, phi, { ox: 0.026, sx: 0.030, sy: 0.045, sz: 0.030, rx: Math.PI / 2 });
+      mount(UNIT.box, mats.dark, t, phi, { ox: 0.038, oz: -R * 0.12, sx: 0.018, sy: 0.018, sz: R * 0.30, ry: s2 * 0.18 });
+      mount(UNIT.box, mats.dark, t, phi, { ox: 0.032, oz: -R * 0.26, sx: 0.012, sy: 0.040, sz: R * 0.24, ry: s2 * 0.18 });
+      mount(UNIT.box, mats.metal, t, phi, { ox: 0.018, oy: s2 * 0.05, sx: 0.018, sy: 0.028, sz: 0.028 });
+      mount(UNIT.cyl6, mats.metal, t + 0.004, phi + s2 * 0.10, { ox: 0.018, sx: 0.007, sy: 0.026, sz: 0.007, rx: Math.PI / 2 });
+    }
+    // air-data cluster: TAT probe, ice detector, drain, windshield heat plug
+    mount(UNIT.cyl6, mats.metal, 0.10, sideR - 0.5, { ox: 0.05, sx: 0.012, sy: 0.10, sz: 0.012, rz: 0.5 });
+    mount(UNIT.box, mats.metal, 0.10, sideR - 0.5, { ox: 0.02, sx: 0.04, sy: 0.03, sz: 0.05 });
+    mount(UNIT.cyl6, mats.metal, 0.105, sideL + 0.5, { ox: 0.045, sx: 0.010, sy: 0.09, sz: 0.010, rz: -0.5 });
+    mount(UNIT.box, mats.metal, 0.105, sideL + 0.5, { ox: 0.018, sx: 0.04, sy: 0.03, sz: 0.05 });
+    for (const s2 of [sideR, sideL]) mount(UNIT.box, mats.metal, wsT, s2 + (s2 > 0 ? -0.9 : 0.9), { ox: 0.008, sx: 0.016, sy: 0.05, sz: 0.05 });
+    // taxi / runway turnoff lights either side of the nose
+    for (const s2 of [-1, 1]) {
+      mount(UNIT.box, mats.grey, 0.115, bot + s2 * 0.55, { ox: 0.02, sx: 0.05, sy: 0.16, sz: 0.20 });
+      mount(UNIT.box, mats.glass, 0.115, bot + s2 * 0.55, { ox: 0.045, sx: 0.012, sy: 0.12, sz: 0.16 });
+    }
+    // forward avionics-bay door, ground-service panel, external power door
+    const doorPanel = (t, phi, w, h, latches) => {
+      mount(UNIT.box, mats.dark, t, phi, { ox: 0.010, sx: 0.020, sy: h, sz: w });
+      for (let i = 0; i < latches; i++) {
+        mount(UNIT.box, mats.metal, t + (i - (latches - 1) / 2) * (w * 0.5 / len), phi, { ox: 0.016, sx: 0.02, sy: 0.05, sz: 0.05 });
+      }
+    };
+    doorPanel(0.155, bot + 0.25, R * 1.5, R * 0.9, 4);
+    doorPanel(0.135, sideL - 0.35, R * 0.7, R * 0.5, 3);
+    doorPanel(0.175, sideR + 0.30, R * 0.5, R * 0.4, 2);
+    // towbar lug under the nose gear bay
+    mount(UNIT.box, mats.metal, 0.145, bot, { ox: 0.05, sx: 0.10, sy: 0.06, sz: 0.14 });
+    mount(UNIT.cyl6, mats.metal, 0.145, bot, { ox: 0.075, sx: 0.03, sy: 0.09, sz: 0.03, rz: Math.PI / 2 });
   }
   const n = B.count;
   B.flush(group);
@@ -553,12 +645,13 @@ function detailGear(gear, mats) {
 // ------------------------------------------------------------------ main
 export function applyExterior(desc) {
   const { parts, mats } = desc;
-  const opt = { surfaces: true, fuselage: true, engines: true, tail: true, gear: true, ...(desc.options || {}) };
+  const opt = { surfaces: true, fuselage: true, nose: true, engines: true, tail: true, gear: true, ...(desc.options || {}) };
   parts.slats = parts.slats || [];
   parts.elevons = parts.elevons || [];
   let n = 0;
   for (const W of desc.wings || []) n += detailWing(W, mats, parts, { surfaces: opt.surfaces, fairings: W.fairings, vgs: W.vgs });
   if (opt.fuselage && desc.fus) n += detailFuselage(desc.fus, mats, desc.group, opt);
+  if (opt.nose && desc.fus) n += detailNose(desc.fus, mats, desc.group);
   if (opt.engines) for (const e of parts.engines) n += detailEngine(e, mats);
   if (opt.tail && desc.tail) n += detailTail(desc.tail, mats, parts);
   if (opt.gear) for (const g of desc.gears || []) n += detailGear(g, mats);

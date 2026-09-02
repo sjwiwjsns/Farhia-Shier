@@ -131,6 +131,39 @@ solid-colour skin materials — the lofted panels keep the textured ones, since 
 mapped material squashes the whole skin texture onto every small face. Parked
 and AI aircraft keep the coarse build (`detail < 0.9`).
 
+## Flight deck (`aircraft/cockpit.js`, `aircraft/cockpitDisplays.js`)
+
+A real, flyable-from interior built from a `Panel` helper: every sub-panel
+declares its own origin and orientation, then lays out switches, knobs,
+buttons, breakers, screws and legend plates on it — so the overhead faces down,
+the pedestal faces up and the side stacks face inboard without any per-piece
+trigonometry. Roughly 4 400 pieces per deck. Static pieces batch per material
+(a few dozen draw calls); levers, yokes, pedals and trim wheels stay separate
+and are animated by `AircraftEntity.syncCockpit` against bases stored at build
+time (`q0`/`p0` plus the panel's own axes), so they rotate and slide in their
+mounting frame. Displays are canvas textures redrawn at 12 Hz from flight-model
+state, only while the deck is visible.
+
+Three things the geometry has to respect, each of which bit us:
+
+- **Station.** `cockpitStation()` is the single source of truth: it walks the
+  hull profile for the first station at ~93 % of full radius, so a real-sized
+  deck fits the cross-section instead of poking through the nose taper. The
+  exterior window posts, the wipers and the *painted* windscreen all key off
+  the same number, and the forward door is pushed aft to clear it.
+- **Occlusion.** The fuselage loft is wound outward, so it back-face culls when
+  seen from inside — the exterior nose detail would otherwise hang in the
+  pilot's view. The deck therefore carries its own **nose cowl**, a swept
+  surface following the hull crown forward of the windscreen (clamped to the
+  sill, or it stands a wall of fuselage up inside the glass), plus a closed
+  roof, header and eyebrow panels.
+- **Near plane.** Deck structure sits within half a metre of the eye. The
+  camera's near plane was 0.5 m and clipped the roof away entirely; it is now
+  0.05 m, which the logarithmic depth buffer makes safe even at a 40 km far
+  plane. Relatedly, the sky dome's custom shader needed the `logdepthbuf_*`
+  chunks — without them its depth test disagreed with everything else and it
+  painted over near geometry.
+
 ## Flight model (`physics/flightModel.js`)
 
 Rigid-body-lite: body frame forward = −Z, right = +X, up = +Y; quaternion attitude,

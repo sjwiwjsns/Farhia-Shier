@@ -22,7 +22,7 @@ function shade(hex, f) {
   return '#' + c.getHexString();
 }
 
-export function generateLivery(airline, variant, texScale = 1) {
+export function generateLivery(airline, variant, texScale = 1, wsU = 0.045) {
   const isFreighter = (variant.flags || []).includes('freighter');
   const W = Math.round(2048 * texScale), H = Math.round(512 * texScale);
   const cv = document.createElement('canvas');
@@ -85,14 +85,16 @@ export function generateLivery(airline, variant, texScale = 1) {
     g.strokeRect(W * 0.16, H * 0.62, W * 0.10, H * 0.16);
   }
 
-  // Cockpit windscreen band near the nose, both sides + crown.
+  // Cockpit windscreen band, positioned at the same station as the modelled
+  // flight deck and its exterior window posts (see cockpitStation()).
   g.fillStyle = '#141a21';
+  const wu0 = W * Math.max(0.012, wsU - 0.020), wu1 = W * (wsU + 0.018);
   for (const fy of [0.66, 0.34]) {
     g.beginPath();
-    g.moveTo(W * 0.028, H * (fy - 0.02));
-    g.lineTo(W * 0.062, H * (fy - 0.045));
-    g.lineTo(W * 0.062, H * (fy + 0.01));
-    g.lineTo(W * 0.028, H * (fy + 0.02));
+    g.moveTo(wu0, H * (fy - 0.02));
+    g.lineTo(wu1, H * (fy - 0.045));
+    g.lineTo(wu1, H * (fy + 0.01));
+    g.lineTo(wu0, H * (fy + 0.02));
     g.closePath();
     g.fill();
   }
@@ -115,7 +117,8 @@ export function generateLivery(airline, variant, texScale = 1) {
   }
   // ---- door outlines at the same stations the exterior layer frames
   const len = variant.dims.len;
-  const doorT = len > 60 ? [0.09, 0.28, 0.55, 0.86] : len > 40 ? [0.09, 0.62, 0.86] : [0.09, 0.86];
+  const d0 = Math.max(0.09, wsU + 0.055);   // clear of the windscreen
+  const doorT = len > 60 ? [d0, 0.28, 0.55, 0.86] : len > 40 ? [d0, 0.62, 0.86] : [d0, 0.86];
   const outline = (u, y0, y1, wM, r = 3) => {
     const x0 = W * u - (W * wM / len) / 2, x1 = W * u + (W * wM / len) / 2;
     g.beginPath();

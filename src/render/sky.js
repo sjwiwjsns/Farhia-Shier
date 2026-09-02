@@ -100,10 +100,24 @@ export function createSky(scene, drawDist) {
       sunGlow: { value: new THREE.Color('#ffe6bd') },
       sunDir: { value: SUN_DIR.clone() }
     },
-    vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);}`,
+    // The renderer uses a logarithmic depth buffer, so this shader has to
+    // write log depth too — otherwise its depth test is inconsistent with
+    // every other material and the dome paints over near geometry (it was
+    // showing through the flight-deck roof).
+    vertexShader: `varying vec3 vDir;
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      void main(){
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
+        #include <logdepthbuf_vertex>
+      }`,
     fragmentShader: `varying vec3 vDir;
       uniform vec3 zenith; uniform vec3 mid; uniform vec3 horizon; uniform vec3 sunGlow; uniform vec3 sunDir;
+      #include <common>
+      #include <logdepthbuf_pars_fragment>
       void main(){
+        #include <logdepthbuf_fragment>
         vec3 d = normalize(vDir);
         float h = clamp(d.y, 0.0, 1.0);
         vec3 c = mix(horizon, mid, smoothstep(0.0, 0.16, h));

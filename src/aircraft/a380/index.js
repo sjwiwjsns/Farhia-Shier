@@ -5,13 +5,14 @@
 // animation and crash-breakup work unchanged.
 import * as THREE from 'three';
 import { A380 } from './spec.js';
-import { buildA380Fuselage, crownYAt } from './fuselage.js';
+import { buildA380Fuselage, crownYAt, sectionAt } from './fuselage.js';
 import { buildA380Wing, planformAt } from './wing.js';
 import { buildA380Engines } from './engines.js';
 import { buildA380Gear } from './gear.js';
 import { buildA380Tail } from './tail.js';
 import { buildA380Cabin, cabinInfo } from './cabin.js';
 import { applyExterior } from '../exterior.js';
+import { buildCockpit } from '../cockpit.js';
 import { lerp } from '../../core/math.js';
 
 function makeMaterials(livery, quality) {
@@ -122,6 +123,30 @@ export function buildA380(livery, opts = {}) {
     options: { surfaces: false, fuselage: false, engines: false, tail: false, gear: false }
   });
 
+  // flight deck (upper-deck cockpit; skipped on the Low tier)
+  let deckCount = 0;
+  if (quality !== 'low') {
+    const eyeY = A380.cockpit.eyePoint.y, eyeZ = -L / 2 + A380.cockpit.eyePoint.x;
+    const ck = buildCockpit({
+      style: 'airbus-fbw', nEng: 4, quality,
+      hull: {
+        tipZ: -L / 2 - eyeZ,
+        at: (zLocal) => {
+          const t = (eyeZ + zLocal + L / 2) / L;
+          if (t < 0 || t > 1) return null;
+          const sec = sectionAt(t);
+          return { hw: sec.w, crown: sec.yC + sec.up - eyeY, keel: sec.yC - sec.lo - eyeY };
+        }
+      }
+    });
+    ck.group.position.set(0, eyeY, eyeZ);
+    group.add(ck.group);
+    parts.cockpit = ck.group;
+    parts.cockpitParts = ck.parts;
+    parts.cockpitDisplays = ck.displays;
+    deckCount = ck.count;
+  }
+
   // full two-deck cabin interior (skipped on the Low tier)
   let cabin = null;
   if (quality !== 'low') {
@@ -135,8 +160,8 @@ export function buildA380(livery, opts = {}) {
   const wingY = A380.wing.rootY, wingZ = -L / 2 + A380.wing.rootX;
   const info = {
     gearHeight: A380.gear.height,
-    pieceCount,
-    cockpitPos: new THREE.Vector3(0, A380.cockpit.eyePoint.y, -L / 2 + A380.cockpit.eyePoint.x),
+    pieceCount: pieceCount + deckCount,
+    cockpitPos: new THREE.Vector3(-0.46, A380.cockpit.eyePoint.y, -L / 2 + A380.cockpit.eyePoint.x),
     engineOffsets: parts.engines.map((e) => e.pos.clone()),
     wingTipL: new THREE.Vector3(-tip.x, wingY + tip.y, wingZ + tip.zLE),
     wingTipR: new THREE.Vector3(tip.x, wingY + tip.y, wingZ + tip.zLE),

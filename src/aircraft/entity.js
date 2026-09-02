@@ -2,12 +2,14 @@
 // Handles surface/gear animation and physics-based crash breakup
 // (wing/engine/tail detachment + fire/smoke) when crash physics is ON.
 import * as THREE from 'three';
-import { buildAircraft } from './aircraftFactory.js';
+import { buildAircraft, cockpitStation } from './aircraftFactory.js';
 import { generateLivery } from './liveries.js';
 import { FlightModel } from '../physics/flightModel.js';
 import { clamp01, damp, lerp } from '../core/math.js';
 
 const _v = new THREE.Vector3();
+const _q2 = new THREE.Quaternion();
+const _q3 = new THREE.Quaternion();
 
 export class AircraftEntity {
   constructor({ variant, family, airline, scene, quality = 'high', texScale = 1 }) {
@@ -15,7 +17,8 @@ export class AircraftEntity {
     this.variant = variant;
     this.family = family;
     this.airline = airline;
-    this.livery = generateLivery(airline, variant, texScale);
+    // the painted windscreen must land where the modelled deck actually is
+    this.livery = generateLivery(airline, variant, texScale, cockpitStation(family, variant).wsT);
     const built = buildAircraft(variant, family, this.livery, { quality, detail: 1 });
     this.group = built.group;
     this.parts = built.parts;
@@ -82,7 +85,41 @@ export class AircraftEntity {
       if (e.sleeve) e.sleeve.position.z = damp(e.sleeve.position.z,
         e.sleeve.userData.baseZ + (fm.reversers ? 1.1 : 0), 6, dt);
     }
+    this.syncCockpit(dt);
     this.updateDebris(dt);
+  }
+
+  // Flight-deck animation: levers, yokes, pedals and trim wheels follow the
+  // same state the aerodynamic surfaces do. Only runs when the deck is
+  // visible (cockpit camera), which is also when the displays refresh.
+  syncCockpit(dt) {
+    const ck = this.parts.cockpitParts;
+    if (!ck || !this.parts.cockpit || !this.parts.cockpit.visible) return;
+    const fm = this.fm, c = fm.controls;
+    const rot = (obj, axis, ang) => {
+      obj.quaternion.copy(obj.userData.q0).multiply(_q2.setFromAxisAngle(axis, ang));
+    };
+    for (const l of ck.thrustLevers) rot(l, l.userData.axX, -0.62 + fm.throttle * 0.95);
+    if (ck.gearLever) rot(ck.gearLever, ck.gearLever.userData.axX, (fm.gearAnim - 0.5) * 0.85);
+    if (ck.flapLever) {
+      ck.flapLever.position.copy(ck.flapLever.userData.p0)
+        .addScaledVector(ck.flapLever.userData.axY, this.flapAnim * 0.21);
+    }
+    if (ck.speedbrakeLever) {
+      ck.speedbrakeLever.position.copy(ck.speedbrakeLever.userData.p0)
+        .addScaledVector(ck.speedbrakeLever.userData.axY, this.spoilerAnim * 0.145);
+    }
+    for (const w of ck.trimWheels) w.rotation.x += (c.pitch * 0.6 + fm.trim * 0.5) * dt * 6;
+    for (const y of ck.yokes) {
+      y.quaternion.copy(y.userData.q0)
+        .multiply(_q2.setFromAxisAngle(y.userData.axX, c.pitch * 0.20))
+        .multiply(_q3.setFromAxisAngle(y.userData.axZ, -c.roll * 0.85));
+    }
+    for (const p of ck.pedals) {
+      p.obj.position.copy(p.obj.userData.p0)
+        .addScaledVector(p.obj.userData.axZ, -c.yaw * p.foot * 0.045);
+    }
+    if (this.parts.cockpitDisplays) this.parts.cockpitDisplays.update(fm, dt);
   }
 
   worldPoint(local, out = new THREE.Vector3()) {

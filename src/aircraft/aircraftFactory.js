@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { DEG2RAD, clamp, lerp } from '../core/math.js';
 import { buildA380 } from './a380/index.js';
 import { applyExterior } from './exterior.js';
+import { buildCockpit } from './cockpit.js';
 
 function mergeGeo(family, variant) {
   const g = JSON.parse(JSON.stringify(family.geometry));
@@ -17,6 +18,25 @@ function mergeGeo(family, variant) {
     }
   }
   return g;
+}
+
+// Flight-deck station for a type: the first station where the hull has
+// reached nearly full radius (so a real-sized deck fits the cross-section),
+// plus the windscreen station ~1 m ahead of the eye. Single source of truth —
+// the deck, the exterior window posts/wipers and the painted windscreen all
+// key off this.
+export function cockpitStation(family, variant) {
+  const geo = mergeGeo(family, variant);
+  const { len } = variant.dims;
+  const R = geo.fusR;
+  const supersonic = (variant.flags || []).includes('supersonic');
+  let eyeFrac = supersonic ? 0.30 : 0.10;
+  if (!supersonic) {
+    for (let t = 0.04; t < 0.40; t += 0.004) {
+      if (fuselageProfile(t, R, geo, supersonic).r >= R * 0.93) { eyeFrac = t; break; }
+    }
+  }
+  return { eyeFrac, wsT: Math.max(0.02, eyeFrac - 1.0 / len) };
 }
 
 function mat(quality, params) {
@@ -458,6 +478,25 @@ export function buildAircraft(variant, family, livery, opts = {}) {
     parts.gearC = gc;
   }
 
+  // Flight-deck station: the first station where the hull has reached nearly
+  // full radius, so a real-sized deck fits inside the cross-section instead
+  // of poking through the taper. Supersonic types sit well aft of the needle.
+  const { eyeFrac, wsT } = cockpitStation(family, variant);
+  const eyeY = R * (geo.deck === 'hump' ? 1.15 : geo.deck === 'double' ? 0.95 : 0.55);
+  const eyeZ = -len / 2 + len * eyeFrac;
+  // the camera sits in the captain's seat, left of the deck centreline
+  const eyePoint = new THREE.Vector3(-0.46, eyeY, eyeZ);
+  // hull cross-section in deck-local coordinates, for the deck's nose cowl
+  const deckHull = {
+    tipZ: -len / 2 - eyeZ,
+    at: (zLocal) => {
+      const t = (eyeZ + zLocal + len / 2) / len;
+      if (t < 0 || t > 1) return null;
+      const p = fuselageProfile(t, R, geo, supersonic);
+      return { hw: p.r, crown: p.r * p.scaleY + p.yOff - eyeY, keel: -p.r * p.scaleY + p.yOff - eyeY };
+    }
+  };
+
   // ------------------------------------------------- exterior detail layer
   let pieceCount = 0;
   if (detail >= 0.9) {
@@ -477,7 +516,7 @@ export function buildAircraft(variant, family, livery, opts = {}) {
         navRed: lightMat(0xff3b2b), navGreen: lightMat(0x35e05a), strobe: lightMat(0xffffff), beacon: lightMat(0xff2a1a)
       },
       fus: {
-        len, R, wingZ, wingY, rootChord: wing.rootChord, supersonic, deck: geo.deck,
+        len, R, wingZ, wingY, rootChord: wing.rootChord, supersonic, deck: geo.deck, wsT,
         at: (t, phi) => {
           const p = fuselageProfile(t, R, geo, supersonic);
           return { x: p.r * Math.sin(phi), y: -p.r * Math.cos(phi) * p.scaleY + p.yOff };
@@ -495,12 +534,26 @@ export function buildAircraft(variant, family, livery, opts = {}) {
       gears: [parts.gearNose, parts.gearL, parts.gearR, parts.gearC].filter(Boolean)
     });
     pieceCount = base + added;
+
+    // ------------------------------------------------------- flight deck
+    if (quality !== 'low') {
+      const ck = buildCockpit({
+        style: family.cockpit, nEng: Math.max(parts.engines.length, 1), quality, hull: deckHull
+      });
+      // deck is centred on the fuselage; the camera is in the left seat
+      ck.group.position.set(0, eyeY, eyeZ);
+      group.add(ck.group);
+      parts.cockpit = ck.group;
+      parts.cockpitParts = ck.parts;
+      parts.cockpitDisplays = ck.displays;
+      pieceCount += ck.count;
+    }
   }
 
   const info = {
     gearHeight,
     pieceCount,
-    cockpitPos: new THREE.Vector3(0, R * (geo.deck === 'hump' ? 1.15 : 0.55), -len / 2 + len * 0.055),
+    cockpitPos: eyePoint.clone(),
     engineOffsets: parts.engines.map((e) => e.pos.clone()),
     wingTipL: new THREE.Vector3(-halfSpan, wingY + halfSpan * dihTan, wingZ + halfSpan * sweepTan),
     wingTipR: new THREE.Vector3(halfSpan, wingY + halfSpan * dihTan, wingZ + halfSpan * sweepTan),

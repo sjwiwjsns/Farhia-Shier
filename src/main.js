@@ -47,7 +47,11 @@ class Sim {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog('#cfd8dd', this.tier.draw * 0.30, this.tier.draw * 0.92);
     this.scene.background = new THREE.Color('#cfd8dd');
-    this.camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.5, this.tier.draw);
+    // Near plane at 5 cm: the flight deck puts structure within half a metre
+    // of the eye (roof, glareshield, yoke), which a 0.5 m near plane clipped
+    // clean away. The logarithmic depth buffer makes the tight near safe even
+    // with a 40 km far plane.
+    this.camera = new THREE.PerspectiveCamera(68, innerWidth / innerHeight, 0.05, this.tier.draw);
     this.lights = createLights(this.scene, this.tier);
     this.sky = createSky(this.scene, this.tier.draw);
     if (this.tier.reflections) this.scene.environment = makeEnvironment(renderer);
@@ -68,8 +72,14 @@ class Sim {
       });
     }
     this.fm = this.entity.fm;
+    if (this.entity.parts.cockpitDisplays) {
+      this.entity.parts.cockpitDisplays.ap = {
+        icao: config.airport.icao, rw: config.runwayEnd,
+        flt: (config.airline.callsign || 'FLT').slice(0, 3).toUpperCase() + (100 + Math.floor(Math.random() * 899))
+      };
+    }
     if (this.entity.info.pieceCount) {
-      toast(`${config.variant.name} — ${this.entity.info.pieceCount.toLocaleString()} exterior pieces`, 3200);
+      toast(`${config.variant.name} — ${this.entity.info.pieceCount.toLocaleString()} modelled pieces (press C for the flight deck)`, 3600);
     }
 
     // --- support systems ---
@@ -333,6 +343,13 @@ class Sim {
 
   frame(dt) {
     this.time += dt;
+    // the flight deck only exists for the cockpit camera — hidden elsewhere
+    // it costs nothing, and hiding it also skips the display redraws
+    if (this.entity.parts.cockpit) {
+      this.entity.parts.cockpit.visible = this.rig.mode === 'cockpit';
+      this.fm.windKts = this.windInfo.kts;
+      this.fm.windDir = this.windInfo.dirDeg;
+    }
     this.entity.syncVisual(dt);
     const blast = this.computeBlast();
     // live wind for grass / dust / windsocks / HUD

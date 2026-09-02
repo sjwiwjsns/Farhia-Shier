@@ -53,8 +53,22 @@ placement (wing pods, tail-mounted, 727 S-duct, DC-10 banjo, SST boxes), T-tails
 747 hump, A380/MD-12 double deck, winglet styles per variant, era-appropriate
 engine sound synthesis (turbojet / low-bypass / high-bypass).
 
-**Every airframe is built from hundreds of individually modelled pieces** (540–720
-on a typical airliner, counted live on the flight-start toast): six-segment
+**Every airframe is built from roughly 5 000 individually modelled pieces**
+(5 010–5 522 across the fleet, counted live on the flight-start toast) — about
+600 outside and the rest inside a **fully modelled flight deck** you fly from.
+Press `C` for the cockpit and you get six live glass displays (PFD with speed
+and altitude tapes, pitch ladder, flight director and FMA; ND with compass rose,
+range rings and route; EICAS/ECAM with per-engine N1 and EGT, fuel, flaps and
+gear), an integrated standby instrument, two FMC/CDUs with full 69-key boards
+and live route pages, the MCP/FCU with its digital windows, a fifteen-panel
+overhead of guarded switches and annunciators, P6/P18 circuit-breaker stacks
+running to ~550 breakers, a throttle quadrant whose levers track your throttle,
+flap and speedbrake levers that move with the surfaces, spinning trim wheels,
+yokes (or sidesticks) that follow your inputs, rudder pedals, and both pilot
+seats. The deck is hidden outside cockpit view, so it costs nothing in the
+other cameras.
+
+Outside, the same airframe carries: six-segment
 leading-edge slats that translate and droop with the flaps, double-slotted flaps
 with vanes and end ribs, six spoiler panels with actuators, ailerons with horns
 and tabs, flap-track canoes, rows of vortex generators, static wicks, fuel panels,

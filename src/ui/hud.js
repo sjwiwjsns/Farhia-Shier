@@ -36,9 +36,10 @@ export class HUD {
     g.clearRect(0, 0, W, H);
     this.blink += dt;
     if (camMode === 'cabin') { this.drawWarnings(fm, W, H); this.drawFps(extra.fps); return; }
-    if (this.mode === 'off' && camMode !== 'cockpit') { this.drawFps(extra.fps); return; }
+    const deck3d = !!entity.parts.cockpit;
+    if (this.mode === 'off' && (camMode !== 'cockpit' || deck3d)) { this.drawFps(extra.fps); return; }
 
-    if (camMode === 'cockpit') this.drawPanel(fm, entity, W, H);
+    if (camMode === 'cockpit' && !deck3d) this.drawPanel(fm, entity, W, H);
     if (this.mode === 'off') { this.drawFps(extra.fps); return; }
 
     g.font = '13px "Lucida Console", monospace';
@@ -149,6 +150,7 @@ export class HUD {
     // ---- engine + config block (bottom left) ----
     // (skipped in cockpit view — the panel below shows the same data)
     if (camMode === 'cockpit') { this.drawWarnings(fm, W, H); this.drawFps(extra.fps); return; }
+
     const ex = W * 0.05, ey = H * 0.78;
     const n = fm.engineCount;
     g.fillText(`N1 ${(fm.n1 * 100).toFixed(0)}%${fm.reversers ? '  REV' : ''}`, ex, ey - 46);
