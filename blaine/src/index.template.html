@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0a0d12">
+<meta name="description" content="Open-world 3D driving simulation of Blaine, Minnesota — dynamic weather, day/night cycle, traffic and four drivable vehicles. Runs in any modern browser, desktop or mobile.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230d1219'/%3E%3Crect x='8' y='26' width='48' height='10' fill='%233b3e44'/%3E%3Crect x='12' y='30' width='9' height='3' fill='%23eec43c'/%3E%3Crect x='27' y='30' width='9' height='3' fill='%23eec43c'/%3E%3Crect x='42' y='30' width='9' height='3' fill='%23eec43c'/%3E%3Ccircle cx='47' cy='16' r='7' fill='%2357d0ff'/%3E%3C/svg%3E">
+<title>Blaine, Minnesota — Open World Driving</title>
+<style>
+:root{
+  --bg:#05070b; --panel:rgba(10,14,20,.72); --panel-solid:#0d1219;
+  --stroke:rgba(255,255,255,.14); --stroke-strong:rgba(255,255,255,.26);
+  --text:#e8eef7; --dim:#9fb0c4; --accent:#57d0ff; --accent2:#ffcb57;
+  --good:#6ee7a0; --bad:#ff6b6b;
+  --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-l:env(safe-area-inset-left,0px); --safe-r:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas{display:block}
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+
+/* ---------- loading ---------- */
+#boot{position:fixed;inset:0;z-index:90;background:
+   radial-gradient(120% 80% at 50% 10%,#16283d 0%,#080c13 60%,#05070b 100%);
+   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+   text-align:center;padding:24px;transition:opacity .6s ease}
+#boot.gone{opacity:0;pointer-events:none}
+#boot h1{margin:0;font-size:clamp(26px,6vw,54px);letter-spacing:.14em;font-weight:800;
+   background:linear-gradient(180deg,#fff,#6fb6e8);-webkit-background-clip:text;background-clip:text;color:transparent}
+#boot .sub{color:var(--dim);font-size:clamp(11px,2.6vw,15px);letter-spacing:.34em;text-transform:uppercase;margin-top:-8px}
+#bootbar{width:min(420px,74vw);height:7px;border-radius:99px;background:rgba(255,255,255,.09);overflow:hidden;border:1px solid var(--stroke)}
+#bootbar i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#2b8fd6,#57d0ff,#a8e9ff);transition:width .25s ease}
+#boottip{color:var(--dim);font-size:13px;min-height:1.2em;max-width:min(560px,88vw);line-height:1.5}
+#bootgo{margin-top:6px;padding:16px 34px;font-size:17px;font-weight:700;letter-spacing:.12em;border-radius:14px;
+  border:1px solid var(--stroke-strong);background:linear-gradient(180deg,#1d5f8d,#123c5c);color:#fff;cursor:pointer;
+  display:none;min-height:56px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+#bootgo:active{transform:translateY(1px)}
+
+/* ---------- generic HUD chrome ---------- */
+.panel{background:var(--panel);border:1px solid var(--stroke);border-radius:14px;
+  backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);box-shadow:0 8px 26px rgba(0,0,0,.4)}
+#hud{position:fixed;inset:0;z-index:20;pointer-events:none;
+  padding:calc(10px + var(--safe-t)) calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l))}
+#hud>*{pointer-events:auto}
+
+/* top-left status */
+#status{position:absolute;top:calc(10px + var(--safe-t));left:calc(10px + var(--safe-l));
+  padding:9px 13px;min-width:186px}
+#status .row{display:flex;align-items:center;gap:9px;font-variant-numeric:tabular-nums}
+#status .row+.row{margin-top:5px}
+#wxicon{font-size:19px;line-height:1;width:22px;text-align:center}
+#wxname{font-size:14px;font-weight:650;letter-spacing:.02em}
+#clock{margin-left:auto;font-size:14px;color:var(--accent);font-weight:700}
+#wxsub{font-size:11px;color:var(--dim);letter-spacing:.05em}
+#place{font-size:11.5px;color:var(--accent2);letter-spacing:.06em;font-weight:600;text-transform:uppercase}
+
+/* top-right buttons */
+#topright{position:absolute;top:calc(10px + var(--safe-t));right:calc(10px + var(--safe-r));display:flex;gap:8px}
+.btn{min-width:46px;min-height:46px;padding:0 12px;border-radius:12px;border:1px solid var(--stroke);
+  background:var(--panel);color:var(--text);font-size:17px;font-weight:600;cursor:pointer;
+  backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:active{background:rgba(60,110,160,.5)}
+.btn.on{border-color:var(--accent);color:var(--accent)}
+.btn small{font-size:11px;color:var(--dim);font-weight:600;letter-spacing:.06em}
+
+/* speedo */
+#speedo{position:absolute;left:calc(10px + var(--safe-l));bottom:calc(10px + var(--safe-b));
+  width:172px;height:172px;padding:0;border-radius:50%;overflow:hidden}
+#speedoC{width:100%;height:100%;display:block}
+#gearbox{position:absolute;left:calc(192px + var(--safe-l));bottom:calc(10px + var(--safe-b));
+  padding:8px 12px;text-align:center;min-width:74px}
+#gear{font-size:26px;font-weight:800;line-height:1}
+#gearlbl{font-size:10px;color:var(--dim);letter-spacing:.18em;margin-top:2px}
+#surface{font-size:10.5px;color:var(--accent2);letter-spacing:.06em;margin-top:6px;white-space:nowrap}
+
+/* minimap */
+#mapwrap{position:absolute;right:calc(10px + var(--safe-r));bottom:calc(10px + var(--safe-b));
+  width:216px;height:216px;padding:6px}
+#mapC{width:100%;height:100%;display:block;border-radius:9px}
+#mapzoom{position:absolute;left:8px;top:8px;display:flex;flex-direction:column;gap:5px}
+#mapzoom .btn{min-width:34px;min-height:34px;padding:0;font-size:19px;border-radius:9px;background:rgba(6,10,16,.66)}
+#compass{position:absolute;right:10px;top:9px;font-size:11px;color:var(--dim);letter-spacing:.1em;font-weight:700}
+
+/* toast + help */
+#toast{position:absolute;left:50%;top:calc(16px + var(--safe-t));transform:translateX(-50%);
+  padding:10px 18px;font-size:14px;font-weight:600;letter-spacing:.02em;opacity:0;transition:opacity .35s;
+  text-align:center;max-width:min(560px,86vw)}
+#toast.show{opacity:1}
+#vname{position:absolute;left:50%;bottom:calc(10px + var(--safe-b));transform:translateX(-50%);
+  padding:7px 15px;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:650}
+#vname b{color:var(--text)}
+
+/* ---------- overlays ---------- */
+.overlay{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+  background:rgba(4,7,11,.74);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);padding:16px}
+.overlay.show{display:flex}
+.sheet{width:min(880px,96vw);max-height:92vh;overflow:auto;padding:20px;border-radius:18px;
+  background:linear-gradient(180deg,rgba(18,26,38,.97),rgba(9,13,19,.97));border:1px solid var(--stroke);
+  box-shadow:0 30px 90px rgba(0,0,0,.6);-webkit-overflow-scrolling:touch}
+.sheet h2{margin:0 0 4px;font-size:22px;letter-spacing:.05em}
+.sheet .lead{margin:0 0 16px;color:var(--dim);font-size:13.5px;line-height:1.5}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.card{padding:13px;border-radius:13px;border:1px solid var(--stroke);background:rgba(255,255,255,.035);
+  cursor:pointer;text-align:left;color:var(--text);min-height:56px}
+.card:active{background:rgba(90,160,220,.22)}
+.card.sel{border-color:var(--accent);background:rgba(50,140,200,.2)}
+.card h3{margin:0 0 3px;font-size:15.5px;display:flex;align-items:center;gap:8px}
+.card p{margin:0 0 8px;font-size:11.5px;color:var(--dim);line-height:1.45}
+.swatch{width:13px;height:13px;border-radius:4px;border:1px solid rgba(255,255,255,.35);flex:none}
+.stat{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:.04em}
+.stat span{width:62px;flex:none;text-transform:uppercase;white-space:nowrap}
+.bar{flex:1;height:5px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#2b8fd6,#57d0ff)}
+.rowbtns{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+.rowbtns .btn{flex:1 1 150px;min-height:52px;font-size:15px}
+.kbd{display:inline-block;min-width:24px;padding:2px 7px;margin:0 2px;border-radius:6px;background:rgba(255,255,255,.1);
+  border:1px solid var(--stroke);font-size:11.5px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:7px 20px;font-size:13px;color:var(--dim)}
+.keys div{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:3px 0}
+.keys b{color:var(--text);font-weight:600}
+.toggles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;margin-top:6px}
+.opt{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-radius:12px;
+  border:1px solid var(--stroke);background:rgba(255,255,255,.035);font-size:13.5px;cursor:pointer;min-height:50px}
+.opt em{font-style:normal;color:var(--accent);font-weight:700;font-size:12.5px}
+h4.sect{margin:20px 0 8px;font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+.legend{font-size:12px;color:var(--dim);line-height:1.65;margin:10px 0 0}
+.legend b{color:var(--text)}
+
+/* ---------- touch controls ---------- */
+#touch{position:fixed;inset:0;z-index:30;display:none;pointer-events:none}
+#touch.on{display:block}
+#wheel{position:absolute;left:calc(14px + var(--safe-l));bottom:calc(12px + var(--safe-b));
+  width:190px;height:190px;pointer-events:auto;touch-action:none}
+#wheelC{width:100%;height:100%;display:block;filter:drop-shadow(0 8px 20px rgba(0,0,0,.5))}
+#pedals{position:absolute;right:calc(14px + var(--safe-r));bottom:calc(12px + var(--safe-b));
+  display:flex;gap:12px;align-items:flex-end;pointer-events:auto}
+.pedal{width:96px;height:112px;border-radius:20px;border:1px solid var(--stroke-strong);
+  background:linear-gradient(180deg,rgba(24,34,48,.86),rgba(10,15,22,.86));backdrop-filter:blur(8px);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  font-size:12px;letter-spacing:.12em;font-weight:700;color:var(--dim);touch-action:none;pointer-events:auto}
+.pedal .ico{font-size:27px;line-height:1}
+.pedal.gas{height:136px;background:linear-gradient(180deg,rgba(22,60,42,.86),rgba(8,22,16,.86))}
+.pedal.down{border-color:var(--accent);color:var(--accent);background:linear-gradient(180deg,rgba(40,110,160,.7),rgba(14,40,62,.8))}
+#tsides{position:absolute;right:calc(122px + var(--safe-r));bottom:calc(150px + var(--safe-b));
+  display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+#tsides .btn{width:58px;height:58px;font-size:22px;background:rgba(10,15,22,.8)}
+#tleft{position:absolute;left:calc(214px + var(--safe-l));bottom:calc(20px + var(--safe-b));
+  display:flex;flex-direction:column;gap:10px;pointer-events:auto}
+#tleft .btn{width:58px;height:58px;font-size:20px;background:rgba(10,15,22,.8)}
+
+/* rotate prompt */
+#rotate{position:fixed;inset:0;z-index:80;display:none;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;background:rgba(4,7,11,.95);text-align:center;padding:26px}
+#rotate.show{display:flex}
+#rotate .ph{width:74px;height:120px;border:3px solid var(--accent);border-radius:12px;
+  animation:tip 1.9s ease-in-out infinite;position:relative}
+#rotate .ph:after{content:"";position:absolute;left:50%;bottom:6px;transform:translateX(-50%);
+  width:26px;height:3px;border-radius:9px;background:var(--accent)}
+@keyframes tip{0%,42%{transform:rotate(0)}62%,100%{transform:rotate(-90deg)}}
+#rotate h3{margin:0;font-size:20px;letter-spacing:.05em}
+#rotate p{margin:0;color:var(--dim);font-size:14px;max-width:340px;line-height:1.55}
+#rotate .btn{min-height:52px;padding:0 22px;font-size:14px}
+
+#mphbig{display:none;align-items:baseline;gap:5px}
+#mphbig b{font-size:26px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+#mphbig span{font-size:10px;color:var(--dim);letter-spacing:.14em}
+
+/* ---------- touch layout: thumbs bottom-left/right, readouts elsewhere ---- */
+body.touchui #speedo{display:none}
+body.touchui #topright{display:none}
+body.touchui #gearbox{
+  left:50%;right:auto;transform:translateX(-50%);bottom:calc(8px + var(--safe-b));
+  display:flex;align-items:center;gap:12px;padding:7px 15px;min-width:0;text-align:left}
+body.touchui #mphbig{display:flex}
+body.touchui #gear{font-size:19px}
+body.touchui #gearlbl{display:none}
+body.touchui #surface{margin-top:0;font-size:10px}
+body.touchui #mapwrap{
+  top:calc(10px + var(--safe-t));bottom:auto;right:calc(10px + var(--safe-r));
+  width:136px;height:136px}
+body.touchui #mapzoom .btn{min-width:30px;min-height:30px;font-size:16px}
+body.touchui #compass{display:none}
+body.touchui #vname{display:none}
+body.touchui #toast{top:auto;bottom:calc(96px + var(--safe-b))}
+body.touchui #tleft{left:calc(178px + var(--safe-l));bottom:calc(16px + var(--safe-b))}
+body.touchui #tsides{right:calc(16px + var(--safe-r));bottom:calc(160px + var(--safe-b));flex-direction:row}
+
+@media (max-width:820px){
+  #mapwrap{width:150px;height:150px}
+  #speedo{width:128px;height:128px}
+  #gearbox{left:calc(146px + var(--safe-l));min-width:62px;padding:6px 9px}
+  #gear{font-size:20px}
+  #status{min-width:150px;padding:7px 10px}
+  #wxname{font-size:12.5px}#clock{font-size:12.5px}
+  #vname{display:none}
+}
+@media (max-height:460px){
+  #speedo{width:112px;height:112px}
+  #mapwrap{width:120px;height:120px}
+  #wheel{width:146px;height:146px}
+  .pedal{width:84px;height:96px}.pedal.gas{height:118px}
+  body.touchui #tleft{left:calc(168px + var(--safe-l))}
+  body.touchui #tsides{bottom:calc(140px + var(--safe-b))}
+  body.touchui #mapwrap{width:114px;height:114px}
+  body.touchui #status{padding:6px 9px;min-width:0}
+  body.touchui #status .row:nth-child(2){display:none}
+}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud" hidden>
+  <div id="status" class="panel">
+    <div class="row"><span id="wxicon">☀️</span><span id="wxname">Clear</span><span id="clock">12:00</span></div>
+    <div class="row"><span id="wxsub">—</span></div>
+    <div class="row"><span id="place">Blaine, MN</span></div>
+  </div>
+
+  <div id="topright">
+    <button class="btn" id="btnCam" title="Camera (C)">🎥</button>
+    <button class="btn" id="btnMenu" title="Menu (Esc)">☰</button>
+  </div>
+
+  <div id="speedo" class="panel"><canvas id="speedoC" width="344" height="344"></canvas></div>
+  <div id="gearbox" class="panel">
+    <div id="mphbig"><b>0</b><span>MPH</span></div>
+    <div id="gear">N</div><div id="gearlbl">GEAR</div><div id="surface">ASPHALT · DRY</div>
+  </div>
+
+  <div id="mapwrap" class="panel">
+    <canvas id="mapC" width="432" height="432"></canvas>
+    <div id="mapzoom">
+      <button class="btn" id="mapIn">+</button>
+      <button class="btn" id="mapOut">−</button>
+    </div>
+    <div id="compass">N ↑</div>
+  </div>
+
+  <div id="toast" class="panel"></div>
+  <div id="vname" class="panel">Driving <b>—</b></div>
+</div>
+
+<div id="touch">
+  <div id="wheel"><canvas id="wheelC" width="380" height="380"></canvas></div>
+  <div id="tleft">
+    <button class="btn" id="tHand" title="Handbrake">✋</button>
+    <button class="btn" id="tHorn" title="Horn">📢</button>
+  </div>
+  <div id="tsides">
+    <button class="btn" id="tCam" title="Camera">🎥</button>
+    <button class="btn" id="tMenu" title="Menu">☰</button>
+  </div>
+  <div id="pedals">
+    <div class="pedal" id="pBrake"><span class="ico">⌄</span>BRAKE</div>
+    <div class="pedal gas" id="pGas"><span class="ico">⌃</span>GAS</div>
+  </div>
+</div>
+
+<div id="rotate">
+  <div class="ph"></div>
+  <h3>Rotate to landscape</h3>
+  <p>Blaine drives best in landscape — the wheel and pedals need the width. Turn your device sideways to start.</p>
+  <button class="btn" id="rotateAnyway">Drive in portrait anyway</button>
+</div>
+
+<div class="overlay" id="menu">
+  <div class="sheet">
+    <h2>Blaine, Minnesota</h2>
+    <p class="lead">Open-world drive through a recreation of Blaine's real street grid — Highway 65, University&nbsp;Ave,
+      Lexington, Radisson Rd, the numbered avenues, the National Sports Center, Northtown, Blaine High School and the
+      lakes on the north side. Weather rolls in on its own; so does nightfall.</p>
+
+    <h4 class="sect">Vehicle</h4>
+    <div class="grid" id="vehGrid"></div>
+
+    <h4 class="sect">Teleport</h4>
+    <div class="grid" id="spotGrid"></div>
+
+    <h4 class="sect">Settings</h4>
+    <div class="toggles" id="optGrid"></div>
+
+    <h4 class="sect">Controls</h4>
+    <div class="keys">
+      <div><b>Steer</b><span><span class="kbd">A</span><span class="kbd">D</span> / <span class="kbd">←</span><span class="kbd">→</span></span></div>
+      <div><b>Throttle / brake</b><span><span class="kbd">W</span><span class="kbd">S</span> / <span class="kbd">↑</span><span class="kbd">↓</span></span></div>
+      <div><b>Handbrake</b><span><span class="kbd">Space</span></span></div>
+      <div><b>Camera</b><span><span class="kbd">C</span></span></div>
+      <div><b>Look behind</b><span><span class="kbd">Shift</span></span></div>
+      <div><b>Headlights</b><span><span class="kbd">L</span></span></div>
+      <div><b>Horn</b><span><span class="kbd">H</span></span></div>
+      <div><b>Respawn on road</b><span><span class="kbd">R</span></span></div>
+      <div><b>Switch vehicle</b><span><span class="kbd">1</span>–<span class="kbd">4</span></span></div>
+      <div><b>Menu</b><span><span class="kbd">Esc</span></span></div>
+    </div>
+    <p class="legend">Minimap: <b style="color:#ffcb57">gold</b> arterials · <b style="color:#8fa6bd">grey</b> local streets ·
+      <b style="color:#57d0ff">blue</b> you · <b style="color:#ff6b6b">red</b> traffic · <b style="color:#6ee7a0">green</b> landmarks.</p>
+
+    <div class="rowbtns">
+      <button class="btn" id="btnClose">▶ Resume driving</button>
+    </div>
+  </div>
+</div>
+
+<div id="boot">
+  <h1>BLAINE</h1>
+  <div class="sub">Minnesota · Open World Drive</div>
+  <div id="bootbar"><i></i></div>
+  <div id="boottip">Warming up the engine…</div>
+  <button id="bootgo">▶ DRIVE</button>
+</div>
+
+<script>/*__THREE__*/</script>
+<script>/*__GAME__*/</script>
+</body>
+</html>
