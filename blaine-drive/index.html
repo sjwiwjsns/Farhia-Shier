@@ -5105,7 +5105,7 @@ $('mApply').onclick = function () {
   syncIndicators(); toggleMenu(); toast('Conditions applied', 1.5);
 };
 $('mGarage').onclick = function () { toggleMenu(); RUNNING = false; $('hud').classList.add('hidden'); $('touch').classList.add('hidden'); $('boot').classList.remove('hidden'); renderVehicles(); AUDIO.setOn(false); };
-$('mFull').onclick = function () { var d = document.documentElement; if (!document.fullscreenElement) { (d.requestFullscreen || d.webkitRequestFullscreen || function () { }).call(d); if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () { }); } else document.exitFullscreen(); };
+$('mFull').onclick = function () { var d = document.documentElement; if (!document.fullscreenElement) { var fp = (d.requestFullscreen || d.webkitRequestFullscreen || function () { }).call(d); if (fp && fp.catch) fp.catch(function () { toast('Fullscreen unavailable here', 2); }); if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () { }); } else document.exitFullscreen(); };
 $('bMenu').onclick = toggleMenu; $('bCam').onclick = cycleCamera; $('bMap').onclick = toggleMap; $('bReset').onclick = function () { resetPlayerToRoad(); }; $('bLights').onclick = cycleLights;
 $('mapClose').onclick = toggleMap; $('mapClear').onclick = function () { NAV.target = null; NAV.route = null; NAV.pts = null; $('nav').classList.add('hidden'); toggleMap(); };
 
