@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b1320">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Blaine Drive</title>
+<meta name="description" content="Open-world driving simulator set in Blaine, Minnesota: validated vehicle physics, Minnesota seasons, black ice, plows, the 2026 Hwy 65 work zone, USA Cup and 3M Open traffic.">
+<style>
+:root{--bg:#0b1320;--panel:rgba(12,20,34,.86);--panel2:rgba(20,31,50,.92);--line:rgba(160,190,230,.18);--ink:#e8eef7;--mute:#9fb0c6;--acc:#f2b705;--acc2:#4fa3ff;--ok:#3ecf8e;--bad:#ff5d5d;--warn:#ffb347}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden;overscroll-behavior:none;touch-action:none}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+#windshield{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;display:none;z-index:2}
+button{font:inherit;color:inherit}
+.hidden{display:none!important}
+/* ---------- boot / garage ---------- */
+#boot{position:fixed;inset:0;z-index:30;overflow:auto;touch-action:pan-y;background:radial-gradient(1200px 700px at 70% -10%,#1b3a63 0%,rgba(11,19,32,0) 60%),linear-gradient(180deg,#0b1320,#0a111c 60%,#0d1726);padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 24px max(16px,env(safe-area-inset-left))}
+.bwrap{max-width:1180px;margin:0 auto}
+.brand{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin:6px 0 14px}
+.brand h1{margin:0;font-size:clamp(30px,6vw,54px);letter-spacing:.06em;font-weight:900;line-height:1}
+.brand h1 span{color:var(--acc)}
+.brand p{margin:0 0 4px;color:var(--mute);max-width:640px}
+.grid{display:grid;grid-template-columns:1.05fr 1fr;gap:14px}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;backdrop-filter:blur(8px)}
+.card h2{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--mute);font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px}
+#vsum{font-size:12px;letter-spacing:0;text-transform:none;color:var(--ink)}
+#vtable{max-height:330px;overflow:auto;border-radius:8px;border:1px solid var(--line);touch-action:pan-y}
+#vtable table{width:100%;border-collapse:collapse;font-size:12px}
+#vtable td,#vtable th{padding:4px 7px;border-bottom:1px solid rgba(160,190,230,.08);white-space:nowrap}
+#vtable th{position:sticky;top:0;background:#101b2d;text-align:left;color:var(--mute);font-weight:600}
+#vtable td.v{text-align:right;font-variant-numeric:tabular-nums}
+.pass{color:var(--ok)}.fail{color:var(--bad)}
+.steps{list-style:none;margin:10px 0 0;padding:0;font-size:12px;color:var(--mute);display:grid;grid-template-columns:1fr 1fr;gap:2px 12px}
+.steps li.done{color:var(--ink)}.steps li.done::before{content:"✓ ";color:var(--ok)}.steps li::before{content:"· "}
+.vehs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.veh{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--panel2);cursor:pointer;text-align:left}
+.veh.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.veh b{display:block;font-size:14px}.veh small{display:block;color:var(--mute);font-size:11px;margin:2px 0 5px}
+.veh .st{display:grid;grid-template-columns:1fr 1fr;gap:1px 8px;font-size:11px;font-variant-numeric:tabular-nums}
+.veh .st span{color:var(--mute)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--panel2);border-radius:999px;padding:6px 10px;font-size:12px;cursor:pointer}
+.chip.sel{border-color:var(--acc);color:#111;background:var(--acc)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:9px}
+.row label{font-size:12px;color:var(--mute);display:flex;flex-direction:column;gap:3px;flex:1 1 130px}
+select,input[type=date],input[type=time],input[type=number]{background:#0f1a2b;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 8px;font:inherit;font-size:13px;width:100%}
+input[type=range]{width:100%}
+#go{margin-top:14px;width:100%;padding:15px;border:0;border-radius:12px;background:linear-gradient(90deg,#f2b705,#ffcf40);color:#111;font-weight:900;font-size:18px;letter-spacing:.08em;cursor:pointer}
+#go:disabled{background:#2a3445;color:#6f7f96;cursor:progress}
+.note{font-size:11px;color:var(--mute);margin-top:8px}
+.keys{font-size:12px;color:var(--mute);columns:2;column-gap:18px}
+.keys b{color:var(--ink);font-weight:600}
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5;font-variant-numeric:tabular-nums}
+.pnl{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px;backdrop-filter:blur(6px)}
+#tl{left:max(10px,env(safe-area-inset-left));top:max(10px,env(safe-area-inset-top));display:flex;gap:10px;align-items:center;max-width:52vw}
+#road{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#road small{display:block;font-weight:400;color:var(--mute);font-size:11px}
+#limit{background:#fff;color:#111;border-radius:5px;padding:2px 6px;text-align:center;font-weight:800;line-height:1;border:2px solid #111;min-width:42px}
+#limit small{display:block;font-size:7px;letter-spacing:.05em;font-weight:700}
+#limit b{font-size:19px}
+#limit.wz{border-color:#f97316;box-shadow:0 0 0 2px #f97316}
+#tr{right:max(10px,env(safe-area-inset-right));top:max(10px,env(safe-area-inset-top));text-align:right;min-width:190px}
+#clock{font-weight:800;font-size:17px}#date{font-size:11px;color:var(--mute)}
+#wx{font-size:12px;margin-top:3px}#surf{font-size:11px;color:var(--mute)}
+#event{display:inline-block;margin-top:4px;background:#b91c1c;color:#fff;border-radius:6px;padding:1px 6px;font-size:11px;font-weight:700}
+#br{right:max(10px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));min-width:176px;text-align:right}
+#spd{font-size:44px;font-weight:900;line-height:.95}
+#spdu{font-size:11px;color:var(--mute);letter-spacing:.1em}
+#gear{display:inline-block;margin-left:8px;font-size:20px;font-weight:800;color:var(--acc);vertical-align:top}
+#rpmbar{height:5px;border-radius:3px;background:#1d2a3e;margin:6px 0 5px;overflow:hidden}
+#rpmbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#3ecf8e,#f2b705 70%,#ff5d5d)}
+#ind{display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap}
+#ind span{font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;background:#1d2a3e;color:#5c6d86}
+#ind span.on{background:var(--warn);color:#111}#ind span.lit{background:#2a6fdb;color:#fff}
+#bl{left:max(10px,env(safe-area-inset-left));bottom:max(10px,env(safe-area-inset-bottom));padding:5px}
+#mini{display:block;width:180px;height:180px;border-radius:50%}
+#nav{left:max(10px,env(safe-area-inset-left));top:calc(max(10px,env(safe-area-inset-top)) + 58px);font-size:12px;max-width:52vw}
+#nav b{color:var(--acc)}
+#toast{position:absolute;left:50%;top:max(12px,env(safe-area-inset-top));transform:translateX(-50%);background:rgba(8,14,24,.9);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-weight:600;opacity:0;transition:opacity .3s;max-width:70vw;text-align:center}
+#toast.show{opacity:1}
+#btns{position:absolute;left:50%;transform:translateX(-50%);bottom:max(10px,env(safe-area-inset-bottom));display:flex;gap:6px;pointer-events:auto}
+.hb{pointer-events:auto;border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:7px 10px;font-size:13px;cursor:pointer;min-width:40px}
+/* ---------- touch controls ---------- */
+#touch{position:fixed;inset:0;z-index:6;pointer-events:none}
+#tsteer{position:absolute;left:0;bottom:0;width:46%;height:62%;pointer-events:auto}
+#knobBase{position:absolute;width:132px;height:132px;border-radius:50%;border:2px solid rgba(255,255,255,.2);background:rgba(10,18,30,.25);left:max(22px,env(safe-area-inset-left));bottom:max(18px,env(safe-area-inset-bottom));pointer-events:none}
+#knob{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px;border-radius:50%;background:rgba(242,183,5,.8);box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.pedal{position:absolute;pointer-events:auto;border-radius:16px;border:2px solid rgba(255,255,255,.22);background:rgba(10,18,30,.45);display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px;font-weight:900;letter-spacing:.08em;font-size:13px;user-select:none;-webkit-user-select:none}
+#tgas{right:max(14px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));width:88px;height:160px;background:rgba(62,207,142,.25)}
+#tbrake{right:calc(max(14px,env(safe-area-inset-right)) + 100px);bottom:max(14px,env(safe-area-inset-bottom));width:92px;height:108px;background:rgba(255,93,93,.25)}
+.pedal.on{filter:brightness(1.8);border-color:#fff}
+#thand{right:calc(max(14px,env(safe-area-inset-right)) + 100px);bottom:calc(max(14px,env(safe-area-inset-bottom)) + 116px);width:92px;height:44px;align-items:center;padding:0;font-size:11px}
+#tsh{position:absolute;right:calc(max(14px,env(safe-area-inset-right)) + 202px);bottom:max(14px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:6px;pointer-events:auto}
+#tsh .hb{min-width:44px;padding:6px 8px}
+body.touch #br{right:calc(max(14px,env(safe-area-inset-right)) + 256px);bottom:max(8px,env(safe-area-inset-bottom));min-width:112px;padding:6px 8px}
+body.touch #spd{font-size:32px}
+body.touch #bl{bottom:auto;top:calc(max(8px,env(safe-area-inset-top)) + 52px)}
+body.touch #mini{width:120px;height:120px}
+body.touch #nav{top:calc(max(8px,env(safe-area-inset-top)) + 186px)}
+body.touch #btns{bottom:auto;top:max(8px,env(safe-area-inset-top))}
+body.touch #tr{min-width:0;max-width:40vw;padding:6px 8px}
+body.touch #surf{display:none}
+body.touch #tl{max-width:34vw}
+@media (max-width:640px){#tr{min-width:0;max-width:44vw}#clock{font-size:14px}#road{font-size:13px}#spd{font-size:34px}#br{min-width:132px}.keys{columns:1}}
+@media (orientation:portrait) and (max-width:640px){#rot{display:flex!important}}
+#rot{position:fixed;left:50%;bottom:40%;transform:translateX(-50%);z-index:7;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:12px;display:none;pointer-events:none}
+/* ---------- overlays: menu + full map ---------- */
+#menu,#mapov{position:fixed;inset:0;z-index:20;background:rgba(5,9,16,.72);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:14px;touch-action:pan-y}
+#menu .card{max-width:760px;width:100%;max-height:92vh;overflow:auto}
+#mapov{flex-direction:column}
+#bigmap{max-width:96vw;max-height:78vh;border-radius:12px;border:1px solid var(--line);touch-action:none}
+#maplist{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px;max-width:960px}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:12px}
+.stat div{background:var(--panel2);border-radius:8px;padding:6px 8px}.stat b{display:block;font-size:16px}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="windshield"></canvas>
+
+<div id="boot">
+ <div class="bwrap">
+  <div class="brand"><h1>BLAINE <span>DRIVE</span></h1>
+   <p>Open-world driving in Blaine, Minnesota &mdash; Hwy 65 and its 2026 work zone, US-10, I-35W, the National Sports Center, TPC Twin Cities, Laddie Lake and Rice Creek, through all four Minnesota seasons.</p></div>
+  <div class="grid">
+   <div class="card">
+    <h2>Physics validation <span id="vsum">starting…</span></h2>
+    <div id="vtable"><table><thead><tr><th>Vehicle</th><th>Test</th><th class="v">Result</th><th class="v">Target</th><th></th></tr></thead><tbody id="vrows"></tbody></table></div>
+    <div class="note">Headless suite: every archetype must land in published-class tolerances (0&ndash;60, top speed, 60&ndash;0, 200 ft skid-pad, understeer gradient, coast-down, sine-with-dwell, lap regression, snow/ice/wet braking, hydroplaning) before the renderer draws a single frame.</div>
+    <ul class="steps" id="steps">
+     <li id="s-three">Three.js r128</li><li id="s-net">Road network &amp; interchanges</li><li id="s-land">Land use &amp; terrain</li><li id="s-bld">Neighbourhoods &amp; landmarks</li><li id="s-mesh">Roads, overpasses, markings</li><li id="s-obj">Buildings, trees, lights</li><li id="s-ai">Traffic &amp; plows</li><li id="s-env">Sky, weather, particles</li>
+    </ul>
+   </div>
+   <div class="card">
+    <h2>Garage &amp; scenario</h2>
+    <div class="vehs" id="vehs"></div>
+    <div class="row">
+     <label>Tyres<select id="tyres"><option value="default">Stock</option><option value="winter">Winter (studless)</option><option value="allseason">All-season</option><option value="summer">Summer performance</option></select></label>
+     <label>Start<select id="start"></select></label>
+    </div>
+    <div class="note" style="margin-top:10px">Scenario</div>
+    <div class="chips" id="scen"></div>
+    <details style="margin-top:8px"><summary style="cursor:pointer;color:var(--mute);font-size:12px">Custom date, time, weather &amp; options</summary>
+     <div class="row">
+      <label>Date<input type="date" id="cdate" min="2026-01-01" max="2029-12-31"></label>
+      <label>Time<input type="time" id="ctime"></label>
+     </div>
+     <div class="row">
+      <label>Weather<select id="cwx"><option value="auto">Auto (climatology)</option><option value="clear">Clear</option><option value="partly">Partly cloudy</option><option value="overcast">Overcast</option><option value="lightsnow">Light snow</option><option value="heavysnow">Heavy snow</option><option value="blizzard">Blizzard</option><option value="drizzle">Drizzle / freezing drizzle</option><option value="rain">Rain</option><option value="storm">Thunderstorm</option><option value="fog">Fog</option></select></label>
+      <label>Events<select id="cev"><option value="auto">By calendar</option><option value="usacup">Force USA Cup weekend</option><option value="open3m">Force 3M Open week</option><option value="none">None</option></select></label>
+     </div>
+     <div class="row">
+      <label>Time speed<select id="cts"><option value="0">Paused</option><option value="0.25">15 s per game minute</option><option value="1" selected>1 s per game minute</option><option value="4">4 game min / s</option><option value="15">15 game min / s</option></select></label>
+      <label>Traffic<select id="ctr"><option value="0.5">Light</option><option value="1" selected>Normal</option><option value="1.4">Heavy</option></select></label>
+     </div>
+     <div class="row">
+      <label>Quality<select id="cq"><option value="auto">Auto</option><option value="low">Low (phones)</option><option value="medium">Medium</option><option value="high">High</option></select></label>
+      <label>Units<select id="cu"><option value="mph">mph / °F</option><option value="kmh">km/h / °C</option></select></label>
+     </div>
+     <div class="row"><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="caids" checked> Driver aids as equipped (ABS/TC/ESC)</label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="cman"> Manual shifting</label></div>
+    </details>
+    <button id="go" disabled>LOADING…</button>
+    <div class="note" id="bootnote"></div>
+   </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+   <h2>Controls</h2>
+   <div class="keys">
+    <div><b>W / ↑</b> throttle &nbsp; <b>S / ↓</b> brake (hold at a stop: reverse)</div>
+    <div><b>A D / ← →</b> steer &nbsp; <b>Space</b> handbrake</div>
+    <div><b>C</b> camera &nbsp; <b>M</b> map &amp; navigation &nbsp; <b>R</b> reset to road</div>
+    <div><b>H</b> headlights auto/on/high &nbsp; <b>F</b> max defrost &nbsp; <b>G</b> wipers</div>
+    <div><b>Q / E</b> shift down / up (switches to manual) &nbsp; <b>X</b> 4H (pickup)</div>
+    <div><b>T</b> time speed &nbsp; <b>[ ]</b> −/+ 30 min &nbsp; <b>Esc / P</b> menu</div>
+    <div><b>Gamepad</b>: RT/LT pedals, left stick steer, A handbrake, Y camera, LB/RB shift</div>
+    <div><b>Touch</b>: drag left side to steer, pedals on the right; tilt steering in the menu</div>
+   </div>
+  </div>
+ </div>
+</div>
+
+<div id="hud" class="hidden">
+ <div id="tl" class="pnl"><div id="limit"><small>SPEED LIMIT</small><b>55</b></div><div id="road">—<small></small></div></div>
+ <div id="nav" class="pnl hidden"></div>
+ <div id="tr" class="pnl"><div id="clock">—</div><div id="date"></div><div id="wx"></div><div id="surf"></div><div id="event" class="hidden"></div></div>
+ <div id="bl" class="pnl"><canvas id="mini" width="360" height="360"></canvas></div>
+ <div id="br" class="pnl"><div><span id="spd">0</span><span id="gear">D</span></div><div id="spdu">MPH</div><div id="rpmbar"><i id="rpm"></i></div>
+  <div id="ind"><span id="iABS">ABS</span><span id="iTC">TC</span><span id="iESC">ESC</span><span id="i4H" class="hidden">4H</span><span id="iLT">LIGHTS</span><span id="iDEF">DEF</span><span id="iMAN" class="hidden">MAN</span></div></div>
+ <div id="toast"></div>
+ <div id="btns"><button class="hb" id="bMenu" aria-label="Menu">☰</button><button class="hb" id="bCam" aria-label="Camera">🎥</button><button class="hb" id="bMap" aria-label="Map">🗺</button><button class="hb" id="bReset" aria-label="Reset">↺</button><button class="hb" id="bLights" aria-label="Headlights">💡</button></div>
+</div>
+<div id="rot">Rotate to landscape for the best view</div>
+
+<div id="touch" class="hidden">
+ <div id="tsteer"></div><div id="knobBase"><div id="knob"></div></div>
+ <div class="pedal" id="tgas">GAS</div><div class="pedal" id="tbrake">BRAKE</div><div class="pedal" id="thand">HANDBRAKE</div>
+ <div id="tsh"><button class="hb" id="tUp">▲</button><button class="hb" id="tDn">▼</button><button class="hb hidden" id="t4h">4H</button></div>
+</div>
+
+<div id="menu" class="hidden"><div class="card">
+ <h2>Paused <button class="hb" id="mClose">Resume ▶</button></h2>
+ <div class="tabs"><button class="chip sel" data-tab="tSet">Conditions</button><button class="chip" data-tab="tStats">Trip</button><button class="chip" data-tab="tVal">Physics report</button><button class="chip" data-tab="tAbout">About the model</button></div>
+ <div id="tSet">
+  <div class="row">
+   <label>Date<input type="date" id="mdate" min="2026-01-01" max="2029-12-31"></label>
+   <label>Time<input type="time" id="mtime"></label>
+   <label>Time speed<select id="mts"><option value="0">Paused</option><option value="0.25">Slow</option><option value="1">1 game min / s</option><option value="4">4 min / s</option><option value="15">15 min / s</option></select></label>
+  </div>
+  <div class="row">
+   <label>Weather<select id="mwx"></select></label>
+   <label>Events<select id="mev"><option value="auto">By calendar</option><option value="usacup">Force USA Cup</option><option value="open3m">Force 3M Open</option><option value="none">None</option></select></label>
+   <label>Traffic<select id="mtr"><option value="0.5">Light</option><option value="1">Normal</option><option value="1.4">Heavy</option></select></label>
+  </div>
+  <div class="row">
+   <label>Tyres<select id="mty"><option value="default">Stock</option><option value="winter">Winter</option><option value="allseason">All-season</option><option value="summer">Summer</option></select></label>
+   <label>Camera<select id="mcam"></select></label>
+   <label>Steering (touch)<select id="mtilt"><option value="drag">Drag</option><option value="tilt">Tilt device</option></select></label>
+  </div>
+  <div class="row"><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="mabs" checked> ABS</label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="mtc" checked> Traction control</label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="mesc" checked> Stability control</label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="mman"> Manual shifting</label><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" id="msnd" checked> Sound</label></div>
+  <div class="row"><button class="hb" id="mApply">Apply conditions</button><button class="hb" id="mGarage">Change vehicle…</button><button class="hb" id="mFull">Fullscreen</button></div>
+ </div>
+ <div id="tStats" class="hidden"><div class="stat" id="statGrid"></div></div>
+ <div id="tVal" class="hidden"><div id="valReport" style="font-size:12px"></div></div>
+ <div id="tAbout" class="hidden" style="font-size:12px;color:var(--mute)"><div id="about"></div></div>
+</div></div>
+
+<div id="mapov" class="hidden"><canvas id="bigmap" width="1100" height="1130"></canvas><div id="maplist"></div><div class="row"><button class="hb" id="mapClose">Close map (M)</button><button class="hb" id="mapClear">Clear route</button></div></div>

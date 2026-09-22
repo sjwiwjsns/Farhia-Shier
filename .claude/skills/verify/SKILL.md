@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Build/launch/drive recipe for verifying static pages in this repo (currently musagpt/index.html) in headless Chromium.
+description: Build/launch/drive recipe for verifying static pages in this repo (musagpt/index.html and blaine-drive/index.html) in headless Chromium.
 ---
 
 # Verifying this repo's static apps
@@ -224,3 +224,13 @@ Translated AJ headlines join the **main wire and the war map**, not just their o
 - Live-mode failure shows "Live mode hiccuped … local core" and the error banner stays OUT of replayed history.
 
 Collect `pageerror` + console errors — must be empty except deliberate live-mode probe network noise.
+
+# Blaine Drive (blaine-drive/index.html)
+
+Single-file Three.js r128 driving sim. `index.html` is **generated**: edit `blaine-drive/src/*` then `sh blaine-drive/build.sh` (CI fails if it is stale).
+
+- **Physics first**: `node blaine-drive/validate.mjs` (65 checks, ~2 s, exit 1 on any out-of-tolerance result). It evaluates the `#bd-physics` + `#bd-validate` blocks of the built file via `new Function` — do not switch to `node:vm` (global interception makes the 480 Hz integrator ~10x slower). Lap-time baselines live in `LAP_BASELINE` in `src/validate.js`; update them only for an intended handling change.
+- **Browser**: the sandbox blocks cdnjs/jsDelivr, so route `**/three.min.js` to a local `three@0.128.0` (`npm i three@0.128.0` in the scratchpad). The Playwright `chromium` binary rejects old headless mode; launch `/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell` with `--use-angle=swiftshader --enable-unsafe-swiftshader`.
+- SwiftShader renders ~1 fps, so drive the sim with the debug hooks instead of real time: wait for `!#go.disabled` (world built **and** validation done), `BD.start({scen, veh, start})`, then `BD.drive({gas, brake, steer, hand})` + `BD.sim(seconds)` (fixed-step updates, one render) → returns `BD.state()` (player pose/surface/μ, AI count, plows, weather, draw calls, triangles). `BD.teleport(x,z,yaw,v)`, `BD.setCam(0..3)`, `BD.freeCam=[x,y,z,tx,ty,tz,fov]` for landmark screenshots.
+- Scenario ids: live, whiteout, blackice, blizzard, thaw, work, usacup, open3m, dusk, storm, leaves, curling. Mobile: context `{viewport:{width:844,height:390}, hasTouch:true, isMobile:true}` → touch UI + low quality.
+- Things that broke before and are worth re-checking: road ribbons culled by winding (roads must be visible, not just markings); new AI cars must get a pose before the despawn check; parked-car `instanceColor` must be allocated before `count=0`; lit windows must not speckle (per-instance seed hashed in the vertex shader); `pageerror` must stay empty.

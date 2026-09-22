@@ -1,0 +1,27 @@
+# Headless physics regression for Blaine Drive (blaine-drive/index.html)
+name: Blaine Drive physics
+
+on:
+  push:
+    paths: ['blaine-drive/**', '.github/workflows/blaine-drive.yml']
+  pull_request:
+    paths: ['blaine-drive/**', '.github/workflows/blaine-drive.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: index.html is an up-to-date build of src/
+        run: |
+          sh blaine-drive/build.sh /tmp/built.html
+          cmp /tmp/built.html blaine-drive/index.html || { echo "blaine-drive/index.html is stale: run sh blaine-drive/build.sh"; exit 1; }
+      - name: Vehicle physics validation suite
+        run: node blaine-drive/validate.mjs
