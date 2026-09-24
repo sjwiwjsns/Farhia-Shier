@@ -488,6 +488,7 @@ function applyWeatherToWorld() {
   MATS.grass.color.setRGB(1, 1, 1).lerp(_c2.setRGB(1.9, 1.95, 2.1), WX.snowCover * 0.5);
   MATS.field.color.setRGB(1, 1, 1).lerp(_c2.setRGB(1.9, 1.95, 2.1), WX.snowCover * 0.45);
   MATS.shingle.color.setRGB(1, 1, 1).lerp(_c2.setRGB(1.8, 1.85, 2.0), WX.snowCover * 0.5);
+  MATS.roofdeck.color.setRGB(1, 1, 1).lerp(_c2.setRGB(1.8, 1.85, 2.0), WX.snowCover * 0.6);
   MATS.water.roughness = lerp(0.06, 0.22, WX.rain);
   MATS.water.normalScale.set(0.4 + WX.wind * 0.07, 0.4 + WX.wind * 0.07);
 

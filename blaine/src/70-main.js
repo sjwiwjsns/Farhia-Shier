@@ -241,7 +241,12 @@ function updateCamera(dt, lookBack) {
   var snap = CAMERA_STATE.snap;
   CAMERA_STATE.snap = false;
 
-  if (GAME.camMode === 1) {
+  if (GAME.camMode === 3 && CAMERA_STATE.fixed) {
+    // Debug/screenshot camera parked by BLAINE.lookAt().
+    CAMERA_STATE.pos.copy(CAMERA_STATE.fixed.pos);
+    CAMERA_STATE.look.copy(CAMERA_STATE.fixed.look);
+    cam.up.set(0, 1, 0);
+  } else if (GAME.camMode === 1) {
     // Hood/first-person: sits on the bonnet, rolls slightly with the body.
     var s = p.spec.size;
     _camPos.set(p.x + fx * (s.l * 0.14), p.y + s.wheel + s.h + 0.42, p.z + fz * (s.l * 0.14));
@@ -439,7 +444,9 @@ function frame(now) {
     TEX.rippleNormal.offset.x = (Math.sin(t * 0.2) * 0.1) % 1;
   }
 
-  updateChunks(PLAYER.x, PLAYER.z, false);
+  // Stream around the camera when it is parked away from the car (debug view).
+  if (GAME.camMode === 3) updateChunks(RENDER.camera.position.x, RENDER.camera.position.z, false);
+  else updateChunks(PLAYER.x, PLAYER.z, false);
 
   // Environment probe: refresh a couple of times a second as the sky drifts.
   _envTimer -= dt;
@@ -561,6 +568,7 @@ window.BLAINE = {
   get TRAFFIC() { return TRAFFIC; },
   get PEDS() { return PEDS; },
   get CHUNKS() { return CHUNKS; },
+  get COLLIDERS() { return COLLIDERS; },
   get RENDER() { return RENDER; },
   get QUALITY() { return QUALITY_NAME; },
   setWeather: function (n, instant) { setWeather(n, instant !== false); },
@@ -578,10 +586,74 @@ window.BLAINE = {
     return null;
   },
   landmarks: function () { return CITY.landmarks.map(function (l) { return l.name; }); },
+  // Audit: building masses that intersect each other or a landmark, and any
+  // that sit on a road. Counts pairs deeper than 0.5 m.
+  overlapReport: function () {
+    var seen = [], uniq = new Set();
+    for (var k in COLLIDERS.grid) COLLIDERS.grid[k].forEach(function (b) {
+      if (uniq.has(b)) return; uniq.add(b);
+      if (b.h > 3 && b.hw * b.hd > 12) seen.push(b);
+    });
+    var sameChunk = 0, crossChunk = 0, vsLandmark = 0, onRoad = 0, n = seen.length;
+    for (var i = 0; i < n; i++) {
+      var a = seen[i];
+      if (a.owner !== undefined) {
+        var ri = nearestRoadInfo(a.x, a.z);
+        if (ri.road && ri.d < -0.5) onRoad++;
+      }
+      for (var j = i + 1; j < n; j++) {
+        var b = seen[j];
+        if (Math.abs(a.x - b.x) > a.hw + a.hd + b.hw + b.hd) continue;
+        if (Math.abs(a.z - b.z) > a.hw + a.hd + b.hw + b.hd) continue;
+        var o = obbOverlap(a.x, a.z, a.hw, a.hd, a.rot, b.x, b.z, b.hw, b.hd, b.rot);
+        if (!o || o.depth < 0.5) continue;
+        if (a.owner === undefined || b.owner === undefined) { if (a.owner !== b.owner) vsLandmark++; }
+        else if (a.owner === b.owner) sameChunk++;
+        else crossChunk++;
+      }
+    }
+    return { buildings: n, sameChunk: sameChunk, crossChunk: crossChunk, vsLandmark: vsLandmark, centreOnRoad: onRoad };
+  },
+  // Park the camera somewhere specific (world coords); BLAINE.GAME.camMode = 0
+  // hands it back to the chase camera.
+  lookAt: function (px, py, pz, tx, ty, tz) {
+    CAMERA_STATE.fixed = { pos: new T.Vector3(px, py, pz), look: new T.Vector3(tx, ty, tz) };
+    GAME.camMode = 3;
+    updateChunks(px, pz, true);
+  },
+  // First building of a given kind near a point, for framing screenshots.
+  findBuilding: function (x, z, r) {
+    var best = null, bd = 1e9;
+    for (var k in COLLIDERS.grid) {
+      var list = COLLIDERS.grid[k];
+      for (var i = 0; i < list.length; i++) {
+        var b = list[i], d = Math.hypot(b.x - x, b.z - z);
+        if (d < r && b.hw * b.hd > (arguments[3] || 0) && d < bd) { bd = d; best = b; }
+      }
+    }
+    return best && { x: best.x, z: best.z, hw: best.hw, hd: best.hd, rot: best.rot, h: best.h };
+  },
   // Test hooks: advance the traffic sim without rendering, and ask a signal
   // whether a given approach may proceed.
   stepTraffic: function (dt, n) { for (var i = 0; i < (n || 1); i++) updateTraffic(dt, PLAYER); },
   signalAllows: function (node, edge) { return signalAllows(node, edge); },
+  // Profiling hook: build one chunk off-scene and report time and triangles
+  // per material batch.
+  profileChunk: function (cx, cz, lod) {
+    var t0 = performance.now();
+    var ch = buildChunk(cx, cz, lod);
+    var ms = performance.now() - t0, per = {}, total = 0;
+    ch.group.traverse(function (o) {
+      if (!o.isMesh || !o.geometry) return;
+      var n = (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
+      if (o.isInstancedMesh) n *= o.count;
+      var k = o.material && o.material.map ? (o.material.map.image ? 'tex' + o.material.map.image.width : 'tex') : 'plain';
+      k = (o.material.name || o.material.type) + ':' + k + (o.isInstancedMesh ? ':inst' : '');
+      per[k] = (per[k] || 0) + n; total += n;
+    });
+    disposeChunk(ch);
+    return { ms: Math.round(ms), tris: Math.round(total), per: per };
+  },
   state: function () {
     return {
       fps: Math.round(GAME.fps), quality: QUALITY_NAME,

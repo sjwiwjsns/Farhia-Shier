@@ -276,94 +276,6 @@ function buildTextures() {
   speckle(x, S, 2400, ['#3f5d2c', '#54793a'], 0.5, 2.0, 0.4);
   TEX.field = finishTex(c, 1, true, 8);
 
-  // --- roof: gravel / membrane -------------------------------------------
-  c = makeCanvas(128); x = c.getContext('2d');
-  x.fillStyle = '#55565a'; x.fillRect(0, 0, 128, 128);
-  speckle(x, 128, 1600, ['#45464a', '#65666a', '#3a3b3f'], 0.6, 2.0, 0.8);
-  TEX.roof = finishTex(c, 1, true, 4);
-
-  // --- asphalt shingles ---------------------------------------------------
-  c = makeCanvas(128); x = c.getContext('2d');
-  x.fillStyle = '#5a5148'; x.fillRect(0, 0, 128, 128);
-  for (j = 0; j < 8; j++) {
-    for (i = 0; i < 8; i++) {
-      var sh = 70 + ((i * 7 + j * 13) % 5) * 8 + Math.random() * 12;
-      x.fillStyle = 'rgb(' + (sh | 0) + ',' + ((sh - 6) | 0) + ',' + ((sh - 14) | 0) + ')';
-      x.fillRect(i * 16 + (j % 2 ? 8 : 0), j * 16, 15, 15);
-    }
-  }
-  TEX.shingle = finishTex(c, 1, true, 4);
-
-  // --- brick --------------------------------------------------------------
-  c = makeCanvas(S); x = c.getContext('2d');
-  x.fillStyle = '#9c9188'; x.fillRect(0, 0, S, S);
-  for (j = 0; j < 16; j++) {
-    for (i = 0; i < 8; i++) {
-      var r0 = 140 + Math.random() * 40, g0 = 78 + Math.random() * 26, b0 = 62 + Math.random() * 22;
-      x.fillStyle = 'rgb(' + (r0 | 0) + ',' + (g0 | 0) + ',' + (b0 | 0) + ')';
-      x.fillRect(i * 32 + (j % 2 ? 16 : 0) + 1.5, j * 16 + 1.5, 29, 13);
-    }
-  }
-  TEX.brick = finishTex(c, 1, true, 8);
-
-  // --- horizontal vinyl siding (houses) ----------------------------------
-  c = makeCanvas(128); x = c.getContext('2d');
-  x.fillStyle = '#d7d3cb'; x.fillRect(0, 0, 128, 128);
-  for (j = 0; j < 16; j++) {
-    x.fillStyle = 'rgba(255,255,255,0.35)'; x.fillRect(0, j * 8, 128, 6);
-    x.fillStyle = 'rgba(0,0,0,0.16)'; x.fillRect(0, j * 8 + 6, 128, 2);
-  }
-  speckle(x, 128, 500, ['#c9c5bd', '#e6e2da'], 0.5, 1.4, 0.35);
-  TEX.siding = finishTex(c, 1, true, 8);
-
-  // --- stucco / EIFS (strip malls, big box) -------------------------------
-  c = makeCanvas(128); x = c.getContext('2d');
-  x.fillStyle = '#cfc6b8'; x.fillRect(0, 0, 128, 128);
-  speckle(x, 128, 2600, ['#c2b9ab', '#ded6c9', '#b6ad9f'], 0.5, 2.0, 0.6);
-  TEX.stucco = finishTex(c, 1, true, 8);
-
-  // --- glass curtain wall + its emissive twin -----------------------------
-  // Windows are dark by day; the emissive map is what lights up after dusk.
-  function windowWall(cols, rows, base, glass, litChance) {
-    var W = 256, H = 256;
-    var a = makeCanvas(W), ac = a.getContext('2d');
-    var e = makeCanvas(W), ec = e.getContext('2d');
-    ac.fillStyle = base; ac.fillRect(0, 0, W, H);
-    ec.fillStyle = '#000'; ec.fillRect(0, 0, W, H);
-    var cw = W / cols, ch = H / rows;
-    for (var jj = 0; jj < rows; jj++) {
-      for (var ii = 0; ii < cols; ii++) {
-        var px = ii * cw + cw * 0.16, py = jj * ch + ch * 0.16;
-        var pw = cw * 0.68, ph = ch * 0.62;
-        var shade = 0.75 + Math.random() * 0.5;
-        ac.fillStyle = glass;
-        ac.globalAlpha = clamp01(shade * 0.9);
-        ac.fillRect(px, py, pw, ph);
-        ac.globalAlpha = 1;
-        ac.strokeStyle = 'rgba(0,0,0,0.35)'; ac.lineWidth = 1.5;
-        ac.strokeRect(px, py, pw, ph);
-        if (Math.random() < litChance) {
-          var warm = Math.random();
-          ec.fillStyle = warm < 0.72 ? 'rgb(255,' + (200 + Math.random() * 40 | 0) + ',' + (140 + Math.random() * 60 | 0) + ')'
-                                     : 'rgb(' + (180 + Math.random() * 50 | 0) + ',215,255)';
-          ec.globalAlpha = 0.55 + Math.random() * 0.45;
-          ec.fillRect(px, py, pw, ph);
-          ec.globalAlpha = 1;
-        }
-      }
-    }
-    return { albedo: finishTex(a, 1, true, 8), emissive: finishTex(e, 1, true, 4) };
-  }
-
-  var office = windowWall(6, 6, '#5b6773', '#2a3d4d', 0.5);
-  TEX.office = office.albedo; TEX.officeLit = office.emissive;
-  var apt = windowWall(5, 5, '#8d8378', '#3a4450', 0.42);
-  TEX.apartment = apt.albedo; TEX.apartmentLit = apt.emissive;
-  var shop = windowWall(4, 2, '#b9b0a2', '#37474f', 0.6);
-  TEX.retail = shop.albedo; TEX.retailLit = shop.emissive;
-  var house = windowWall(3, 2, '#d7d3cb', '#3d4a55', 0.35);
-  TEX.houseWin = house.albedo; TEX.houseLit = house.emissive;
-
   // --- parking lot with painted stalls ------------------------------------
   c = makeCanvas(S); x = c.getContext('2d');
   x.fillStyle = '#41444a'; x.fillRect(0, 0, S, S);
@@ -442,34 +354,49 @@ function buildTextures() {
   var st = finishTex(c, 0, true, 1); st.wrapS = st.wrapT = T.ClampToEdgeWrapping;
   TEX.snowFlake = st;
 
-  // --- tree foliage card (crossed billboards for distant trees) -----------
-  c = makeCanvas(128); x = c.getContext('2d');
-  x.clearRect(0, 0, 128, 128);
-  for (i = 0; i < 260; i++) {
-    var a2 = Math.random() * TAU, rr2 = Math.pow(Math.random(), 0.6) * 58;
-    var lx = 64 + Math.cos(a2) * rr2, ly = 62 + Math.sin(a2) * rr2 * 0.92;
-    x.fillStyle = 'rgba(' + (36 + Math.random() * 44 | 0) + ',' + (74 + Math.random() * 60 | 0) + ',' + (28 + Math.random() * 34 | 0) + ',' + (0.55 + Math.random() * 0.45) + ')';
-    x.beginPath(); x.ellipse(lx, ly, 5 + Math.random() * 9, 4 + Math.random() * 7, Math.random() * TAU, 0, TAU); x.fill();
+  // --- sign atlas: shopfront and landmark signs ---------------------------
+  // Generic business names (no real brands) on backlit panels; the same
+  // texture is the emissive map, so signs glow after dark.
+  var SA = SIGN_ATLAS, W = 1024, H = 1024;
+  c = makeCanvas(W); c.height = H; x = c.getContext('2d');
+  var cw = W / SA.cols, chh = H / SA.rows;
+  var looks = [['#b3261e', '#ffffff'], ['#f4f1ea', '#1d2a3a'], ['#1f4e8c', '#ffd24a'], ['#1b1d21', '#f2efe6'],
+               ['#2e6b3f', '#ffffff'], ['#f2c230', '#1d1d1d'], ['#6b2a7a', '#ffffff'], ['#0f6d74', '#f7f3e8']];
+  for (i = 0; i < SA.names.length; i++) {
+    var col = i % SA.cols, row = Math.floor(i / SA.cols);
+    var cx0 = col * cw, cy0 = row * chh, look = looks[i % looks.length];
+    x.fillStyle = look[0]; x.fillRect(cx0, cy0, cw, chh);
+    x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 4;
+    x.strokeRect(cx0 + 5, cy0 + 5, cw - 10, chh - 10);
+    x.fillStyle = look[1];
+    var size = Math.floor(chh * 0.56);
+    x.font = '800 ' + size + 'px "Helvetica Neue", Arial, sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    var tw = x.measureText(SA.names[i]).width, maxW = cw * 0.86;
+    x.save();
+    x.translate(cx0 + cw / 2, cy0 + chh / 2 + 2);
+    if (tw > maxW) x.scale(maxW / tw, 1);
+    x.fillText(SA.names[i], 0, 0);
+    x.restore();
   }
-  var tt = finishTex(c, 0, true, 4); tt.wrapS = tt.wrapT = T.ClampToEdgeWrapping;
-  TEX.leaf = tt;
+  TEX.signage = finishTex(c, 0, true, 8);
+}
 
-  // --- generic storefront signage band ------------------------------------
-  c = makeCanvas(256); x = c.getContext('2d');
-  x.fillStyle = '#1b2027'; x.fillRect(0, 0, 256, 256);
-  // Muted storefront lettering on a dark fascia rather than a rainbow.
-  var signColors = ['#d8d2c4', '#e6c88a', '#9fc4dd', '#d7a2a2', '#b9d7a8'];
-  for (j = 0; j < 8; j++) {
-    x.fillStyle = signColors[(Math.random() * signColors.length) | 0];
-    x.globalAlpha = 0.75;
-    var sw = 40 + Math.random() * 90, sx = 20 + Math.random() * (200 - sw);
-    for (var w2 = 0; w2 < 4; w2++) {
-      if (Math.random() < 0.25) continue;
-      x.fillRect(sx + w2 * (sw / 4), j * 32 + 11, sw / 4 - 4, 11);
-    }
-  }
-  x.globalAlpha = 1;
-  TEX.signage = finishTex(c, 1, true, 4);
+// Sign atlas layout: shopfront names first, then big-box and landmark signs.
+var SIGN_ATLAS = {
+  cols: 2, rows: 12,
+  names: ['PIZZA', 'NAILS & SPA', 'FAMILY DENTAL', 'PHARMACY', 'LIQUORS', 'SUB SHOP', 'INSURANCE',
+          'HAIR STUDIO', 'DRY CLEANERS', 'PHO & NOODLE', 'TAQUERIA', 'FITNESS', 'MATTRESS', 'TAX SERVICE',
+          'DONUTS', 'BARBER',
+          'GROCERY', 'HOME CENTER', 'SUPERSTORE', 'ELECTRONICS', 'SPORTING GOODS', 'PET SUPPLY',
+          'NORTHTOWN', 'SUPER RINK'],
+  stores: 16, bigbox: 16, northtown: 22, rink: 23
+};
+// UV rectangle [u0, u1, v0, v1] of a sign cell (canvas rows run top-down).
+function signUV(i) {
+  var SA = SIGN_ATLAS, col = i % SA.cols, row = Math.floor(i / SA.cols);
+  var pu = 0.004, pv = 0.006;                     // keep mip filtering inside the cell
+  return [col / SA.cols + pu, (col + 1) / SA.cols - pu, 1 - (row + 1) / SA.rows + pv, 1 - row / SA.rows - pv];
 }
 
 // ------------------------------------------------------------------ utilities

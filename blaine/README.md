@@ -48,6 +48,40 @@ Housing density follows the real city: tight post-war blocks in the south,
 1990s subdivisions through the middle, looping cul-de-sacs and then farm fields
 and silos toward the rural northern edge.
 
+## Buildings
+
+Every building is a closed, solid volume — about 6,900 of them across the city,
+each facing the street it fronts:
+
+- **Houses** — one and two storeys on a foundation, gable or hip roofs with real
+  overhangs, fascia, soffits and ridge caps, shuttered windows, corner boards,
+  chimneys, front doors with stoops and walks, porches, attached garages with
+  sectional doors, driveways, and often a car in the drive.
+- **Townhomes** — rows of units, each with its own colour, door, hood and stoop.
+- **Apartments** — brick blocks with floor bands, balconies, a parapet, rooftop
+  plant, a stair penthouse, an entrance canopy and a residents' lot.
+- **Strip retail** — recessed glass shopfronts between pilasters, awnings, named
+  backlit signs on a false-front parapet, shop interiors that glow after dark,
+  and a striped parking lot out front.
+- **Offices** — reflective curtain walls with mullions and spandrels, vertical
+  fins, a cornice, a mechanical penthouse and a visitors' lot.
+- **Warehouses** — corrugated cladding, skylights, loading docks with trailers
+  on a truck court, and an office annex.
+- **Farms** — barns with corner trim and big doors, grain silos.
+
+Facades are neutral textures carrying window frames, sills, siding laps and
+brick courses in a matching normal map, plus a roughness/metalness map so glass
+reflects the sky while walls stay matte; per-vertex colour paints the street.
+Windows light up at night from the same maps.
+
+Placement is audited: every footprint is kept off roads, lots, lakes, landmarks
+and its neighbours (including those in adjacent streaming chunks), and a chunk's
+decisions are frozen on first build so it always rebuilds identically.
+`BLAINE.overlapReport()` re-runs that audit in the console. Chunks next to the
+car are built at full detail; farther ones keep the same buildings without the
+small trim and parked cars (about a third of the triangles) and upgrade in place
+as you approach.
+
 ## Driving
 
 Four vehicles, each on the same single-track physics model but with genuinely
@@ -123,6 +157,8 @@ BLAINE.setTimeScale(600)             // game-seconds per real second
 BLAINE.teleport('velodrome')         // fuzzy landmark match
 BLAINE.vehicle(2)                    // 0 sedan, 1 pickup, 2 sports, 3 SUV
 BLAINE.setQuality('ultra')
+BLAINE.lookAt(px, py, pz, tx, ty, tz) // park the camera; GAME.camMode = 0 to return
+BLAINE.overlapReport()               // building overlap / road-clearance audit
 ```
 
 ## Building
@@ -133,7 +169,8 @@ BLAINE.setQuality('ultra')
 blaine/src/index.template.html   markup + CSS shell
 blaine/src/00-core.js            config, device tiers, math, procedural textures
 blaine/src/10-city.js            the map of Blaine and the road-network graph
-blaine/src/20-world.js           roads, landmarks, chunked building generation
+blaine/src/20-world.js           roads, landmarks, chunk streaming and placement
+blaine/src/25-buildings.js       the building kit: facades, roofs, generators
 blaine/src/30-sky.js             sun, sky shader, weather engine, precipitation
 blaine/src/40-vehicle.js         vehicle dynamics and the four cars
 blaine/src/50-traffic.js         AI traffic, signals, pedestrians

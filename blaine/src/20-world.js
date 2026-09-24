@@ -15,20 +15,25 @@ var CHUNK_QUEUE = [];
 var COLLIDERS = { cell: 44, grid: {} };   // static boxes for vehicle collision
 
 // ------------------------------------------------------------- small geometry
-// Vertical wall quad from (ax,az) to (bx,bz) between y0 and y1, UVs scaled so
-// the texture keeps a constant world size.
+// Vertical wall quad from (ax,az) to (bx,bz) between y0 and y1; the outward
+// side is to the right of a->b. UVs keep the texture at a constant world size
+// (tile is metres, or [u, v] metres). The triangles are wound so their front
+// face points along the outward normal — the other way round, back-face
+// culling hides every wall from outside and buildings turn to see-through
+// shells.
 function vwall(ax, az, bx, bz, y0, y1, tile) {
   var len = Math.hypot(bx - ax, bz - az), h = y1 - y0;
   var g = new T.BufferGeometry();
   var nx = (bz - az) / len, nz = -(bx - ax) / len;
   var p = new Float32Array([
-    ax, y0, az, bx, y0, bz, bx, y1, bz,
-    ax, y0, az, bx, y1, bz, ax, y1, az
+    ax, y0, az, bx, y1, bz, bx, y0, bz,
+    ax, y0, az, ax, y1, az, bx, y1, bz
   ]);
   var n = new Float32Array(18);
   for (var i = 0; i < 6; i++) { n[i * 3] = nx; n[i * 3 + 1] = 0; n[i * 3 + 2] = nz; }
-  var u = len / tile, v = h / tile;
-  var uvs = new Float32Array([0, 0, u, 0, u, v, 0, 0, u, v, 0, v]);
+  var tu = tile.length ? tile[0] : tile, tv = tile.length ? tile[1] : tile;
+  var u = len / tu, v = h / tv;
+  var uvs = new Float32Array([0, 0, u, v, u, 0, 0, 0, 0, v, u, v]);
   g.setAttribute('position', new T.BufferAttribute(p, 3));
   g.setAttribute('normal', new T.BufferAttribute(n, 3));
   g.setAttribute('uv', new T.BufferAttribute(uvs, 2));
@@ -236,24 +241,8 @@ function buildMaterials() {
     normalMap: TEX.waterNormal, normalScale: new T.Vector2(0.55, 0.55), envMapIntensity: 1.5
   });
 
-  // Building shells. vertexColors lets one material tint hundreds of buildings.
-  function facade(map, litMap, rough) {
-    var m = new T.MeshStandardMaterial({
-      map: map, emissiveMap: litMap || null, emissive: litMap ? 0xffffff : 0x000000,
-      emissiveIntensity: 0, roughness: rough === undefined ? 0.82 : rough, metalness: 0.02,
-      vertexColors: true, envMapIntensity: 0.5
-    });
-    if (litMap) NIGHT_MATS.push(m);
-    return m;
-  }
-  MATS.house = facade(TEX.houseWin, TEX.houseLit, 0.86);
-  MATS.apartment = facade(TEX.apartment, TEX.apartmentLit, 0.8);
-  MATS.retail = facade(TEX.retail, TEX.retailLit, 0.78);
-  MATS.office = facade(TEX.office, TEX.officeLit, 0.42);
-  MATS.brick = facade(TEX.brick, null, 0.88);
-  MATS.stucco = facade(TEX.stucco, null, 0.85);
-  MATS.shingle = facade(TEX.shingle, null, 0.9);
-  MATS.roofdeck = facade(TEX.roof, null, 0.93);
+  // Building facades, roofs and trim come from the building kit (25-buildings).
+  buildBuildingMaterials();
   MATS.metal = new T.MeshStandardMaterial({ color: 0xb8bcc2, roughness: 0.36, metalness: 0.82, vertexColors: true, envMapIntensity: 1.0 });
   MATS.accent = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.1, vertexColors: true, envMapIntensity: 0.6 });
   MATS.glass = new T.MeshPhysicalMaterial({
@@ -267,7 +256,10 @@ function buildMaterials() {
   NIGHT_MATS.push(MATS.sign);
 
   MATS.trunk = new T.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.95, metalness: 0 });
-  MATS.leaf = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0, vertexColors: true });
+  // Canopies are tinted per tree through instanceColor. vertexColors must stay
+  // off: the foliage geometry has no colour attribute, and WebGL feeds a
+  // missing one as black, which multiplied every tree to a silhouette.
+  MATS.leaf = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0, flatShading: true });
   MATS.pole = new T.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.55, metalness: 0.7 });
   MATS.lamp = new T.MeshStandardMaterial({ color: 0x2a2f36, emissive: 0xffe2b0, emissiveIntensity: 0, roughness: 0.4 });
   NIGHT_MATS.push(MATS.lamp);
@@ -544,11 +536,17 @@ function buildLandmarks() {
   var walls = [], roofs = [], metal = [], accent = [], glass = [], brick = [], signs = [];
   var g;
 
+  var LK = newBatches();
   function block(cx, cz, w, d, h, rot, wallArr, color, tile, roofColor) {
-    var wl = [], rf = [];
-    boxShell(cx, cz, w, d, 0, h, rot, tile || 4, wl, rf, 6);
-    var mw = mergeGeos(wl); paintGeo(mw, color); wallArr.push(mw);
-    var mr = mergeGeos(rf); paintGeo(mr, roofColor || 0x54565a); roofs.push(mr);
+    var F = new Frame(cx, cz, rot || 0);
+    var isBrick = wallArr === brick;
+    var wallC = rgb(color);
+    LK.trim.box(F, 0, 0, 0, w + 0.6, 0.7, d + 0.6, rgb(0x8f8c86), false);
+    LK[isBrick ? 'brick' : 'stucco'].shell(F, 0, 0, w, d, 0.7, h, isBrick ? FACADES.brick : FACADES.stucco, wallC, null);
+    LK.trim.box(F, 0, h - 0.6, 0, w + 0.5, 0.6, d + 0.5, shade(wallC, 0.9), true);       // cornice
+    LK.roofdeck.flat(F, 0, h, 0, w, d, rgb(roofColor || 0x9a9ca0), true, FACADES.deck.tile[0]);
+    parapetB(LK, F, 0, 0, w + 0.5, d + 0.5, h, 1.0, 0.45, shade(wallC, 0.95), 1, 0);
+    rooftopUnits(LK, F, 0, 0, w, d, h, Math.random, Math.min(8, 1 + Math.floor(w * d / 2500)));
     addColliderBox(cx, cz, w / 2, d / 2, rot, h);
   }
 
@@ -563,8 +561,7 @@ function buildLandmarks() {
     vault.translate(x, 12, z);
     scaleUV(vault, 14, 8);
     var vm = mergeGeos([vault]); paintGeo(vm, 0xc3ccd4); metal.push(vm);
-    signs.push(hquad(x, z - d / 2 - 0.4, 46, 6, 0, 0, 0));
-    var sg = new T.PlaneGeometry(46, 6); sg.translate(x, 16, z - d / 2 - 0.5); signs.push(sg);
+    signPanel(LK, x, 16.5, z - d / 2 - 0.6, 34, 5.6, 0, -1, SIGN_ATLAS.rink);   // over the lot entrance
   })();
 
   // TCO Stadium: an oval bowl of raked seating around a pitch.
@@ -674,8 +671,13 @@ function buildLandmarks() {
     block(x + 160, z + 118, 100, 64, 16, 0, walls, 0xb9a893, 6, 0x5b5d61);
     // Entry canopies + pylon sign.
     var can = boxGeo(60, 1.4, 14, x, 7.6, z - 112, 0); paintGeo(can, 0x3a6ea8); accent.push(can);
-    var pyl = boxGeo(6, 18, 2.2, x - 190, 9, z - 130, 0); paintGeo(pyl, 0x2a3038); accent.push(pyl);
-    var face = new T.PlaneGeometry(5.4, 12); face.translate(x - 190, 11, z - 131.2); signs.push(face);
+    // Pylon out by 85th Ave with the name on both faces.
+    var pz = avZ(85) - 55;
+    var pyl = boxGeo(1.4, 13, 1.4, x - 190, 6.5, pz, 0); paintGeo(pyl, 0x2a3038); accent.push(pyl);
+    var cab = boxGeo(12.4, 3.6, 1.2, x - 190, 14.6, pz, 0); paintGeo(cab, 0x2a3038); accent.push(cab);
+    signPanel(LK, x - 190, 14.6, pz + 0.62, 12, 3.2, 0, 1, SIGN_ATLAS.northtown);
+    signPanel(LK, x - 190, 14.6, pz - 0.62, 12, 3.2, 0, -1, SIGN_ATLAS.northtown);
+    addColliderBox(x - 190, pz, 0.8, 0.8, 0, 13);
   })();
 
   // ---- Blaine High School --------------------------------------------------
@@ -782,13 +784,16 @@ function buildLandmarks() {
       var bw = (w / n) * 0.82, bd = Math.min(d * 0.55, 90);
       var bx = z.x0 + (w * (i + 0.5)) / n, bz = z.z1 - bd / 2 - 12;
       block(bx, bz, bw, bd, 10.5, 0, walls, [0xd4cbb8, 0xc2c8cc, 0xd8c9b0][i % 3], 6, 0x54565a);
-      var band = new T.PlaneGeometry(bw * 0.5, 4.2);
-      band.translate(bx, 7.4, bz - bd / 2 - 0.35);
-      signs.push(band);
+      // Store sign over the entrance on the parking-lot (north) face.
+      signPanel(LK, bx, 7.6, bz - bd / 2 - 0.3, Math.min(30, bw * 0.4), 4.6, 0, -1,
+        SIGN_ATLAS.bigbox + ((i + Math.round(bx)) % 6));
     }
   });
 
   // ---- push everything into the scene -------------------------------------
+  var lkGroup = new T.Group();
+  emitBatches(LK, lkGroup);
+  SCENE_ROOT.add(lkGroup);
   function push(list, mat, cast) {
     if (!list.length) return;
     var m = new T.Mesh(mergeGeos(list), mat);
@@ -801,10 +806,7 @@ function buildLandmarks() {
   push(metal, MATS.metal);
   push(accent, MATS.accent);
   push(glass, MATS.glass, false);
-  if (signs.length) {
-    var sgm = new T.Mesh(mergeGeos(signs), MATS.sign);
-    sgm.matrixAutoUpdate = false; SCENE_ROOT.add(sgm);
-  }
+
 }
 // ============================================================ chunk streaming
 function zoneAt(x, z) {
@@ -832,143 +834,84 @@ function inLot(x, z, pad) {
   return false;
 }
 
-// --- individual building generators -----------------------------------------
-function genHouse(out, x, z, rot, rng) {
-  var w = 10 + rng() * 5, d = 8 + rng() * 4.5, h = rng() < 0.32 ? 6.2 : 3.5;
-  var wl = [];
-  boxShell(x, z, w, d, 0, h, rot, 3.4, wl, null);
-  var body = mergeGeos(wl);
-  paintGeo(body, [0xe4e0d6, 0xd8cdb8, 0xc8d2d6, 0xb9c4b0, 0xe0d2c0, 0xcfc4bb, 0xa9b6bd][(rng() * 7) | 0]);
-  out.house.push(body);
-  var rr = [];
-  gableRoof(x, z, w, d, h, 1.9 + rng() * 1.2, rot, rr);
-  var rm = mergeGeos(rr); paintGeo(rm, [0x5a5148, 0x4a443d, 0x6a5c4c, 0x3f4448][(rng() * 4) | 0]);
-  out.shingle.push(rm);
-  // Attached garage facing the street.
-  if (rng() < 0.75) {
-    var gw = 6, gd = 6.4, gOff = (w / 2 + gw / 2 - 0.4) * (rng() < 0.5 ? 1 : -1);
-    var gx = x + Math.cos(rot) * gOff, gz = z - Math.sin(rot) * gOff;
-    var gl = [];
-    boxShell(gx, gz, gw, gd, 0, 3.0, rot, 3.4, gl, null);
-    var gm = mergeGeos(gl); paintGeo(gm, 0xdcd6c9); out.house.push(gm);
-    var gr = [];
-    gableRoof(gx, gz, gw, gd, 3.0, 1.2, rot, gr);
-    var grm = mergeGeos(gr); paintGeo(grm, 0x4f4941); out.shingle.push(grm);
-    addColliderBox(gx, gz, gw / 2, gd / 2, rot, 3);
-  }
-  addColliderBox(x, z, w / 2, d / 2, rot, h + 2);
-}
+// --- building placement -----------------------------------------------------
+var BLD_GEN = {
+  house: genHouse, townhome: genTownhome, apartment: genApartment, strip: genStrip,
+  office: genOffice, warehouse: genWarehouse, farm: genFarm
+};
+// Distance from building centre to the kerb, per type (plus up to 3 m random).
+var BLD_SETBACK = { house: 13, townhome: 12.5, apartment: 25, strip: 31, office: 28, warehouse: 31, farm: 27 };
+// Conservative footprints for the pre-check before a building is generated.
+var BLD_TYPICAL = {
+  house: { hw: 8, hd: 4.5, cx: 0 }, townhome: { hw: 10, hd: 5, cx: 0 }, apartment: { hw: 15, hd: 8, cx: 0 },
+  strip: { hw: 16, hd: 8, cx: 0 }, office: { hw: 11, hd: 9, cx: 0 }, warehouse: { hw: 25, hd: 16, cx: 0 },
+  farm: { hw: 9, hd: 6, cx: 0 }
+};
 
-function genTownhome(out, x, z, rot, rng) {
-  var units = 3 + ((rng() * 3) | 0), uw = 6.6, d = 11, h = 6.6;
-  var w = units * uw;
-  var wl = [];
-  boxShell(x, z, w, d, 0, h, rot, 3.4, wl, null);
-  var body = mergeGeos(wl); paintGeo(body, [0xd0c7b6, 0xbfc7c9, 0xc9b9a6][(rng() * 3) | 0]);
-  out.house.push(body);
-  var rr = [];
-  gableRoof(x, z, w, d, h, 2.1, rot, rr);
-  var rm = mergeGeos(rr); paintGeo(rm, 0x4a443d); out.shingle.push(rm);
-  addColliderBox(x, z, w / 2, d / 2, rot, h + 2);
-}
-
-function genApartment(out, x, z, rot, rng) {
-  var w = 26 + rng() * 22, d = 15 + rng() * 8, floors = 3 + ((rng() * 3) | 0), h = floors * 3.1;
-  var wl = [], rf = [];
-  boxShell(x, z, w, d, 0, h, rot, 3.2, wl, rf, 6);
-  var body = mergeGeos(wl); paintGeo(body, [0xc9b9a2, 0xb8b0a4, 0xa89c8c][(rng() * 3) | 0]);
-  out.apartment.push(body);
-  var rm = mergeGeos(rf); paintGeo(rm, 0x50525a); out.roofdeck.push(rm);
-  addColliderBox(x, z, w / 2, d / 2, rot, h);
-}
-
-function genStrip(out, x, z, rot, rng, face) {
-  var w = 30 + rng() * 40, d = 16 + rng() * 8, h = 5.2 + rng() * 2.4;
-  face = face || 1;
-  var wl = [], rf = [];
-  boxShell(x, z, w, d, 0, h, rot, 3.6, wl, rf, 6);
-  var body = mergeGeos(wl); paintGeo(body, [0xd8cfbc, 0xc6ccd0, 0xd4c0aa, 0xbfc9bd][(rng() * 4) | 0]);
-  out.retail.push(body);
-  var rm = mergeGeos(rf); paintGeo(rm, 0x54565a); out.roofdeck.push(rm);
-  // Parapet + illuminated sign band on the street face.
-  var par = [];
-  boxShell(x, z, w + 0.5, d + 0.5, h, h + 1.1, rot, 3, par, null);
-  var pm = mergeGeos(par); paintGeo(pm, 0x8f8578); out.retail.push(pm);
-  // The street side is local +Z * face -> world (sin rot, cos rot) * face.
-  var fx = Math.sin(rot) * face, fz = Math.cos(rot) * face;
-  var band = new T.PlaneGeometry(w * 0.66, 1.5);
-  band.rotateY(rot + (face > 0 ? 0 : PI));
-  band.translate(x + fx * (d / 2 + 0.34), h - 1.4, z + fz * (d / 2 + 0.34));
-  out.sign.push(band);
-  // Awning over the shopfronts.
-  var aw = boxGeo(w * 0.9, 0.3, 2.4, x + fx * (d / 2 + 1.1), 3.4, z + fz * (d / 2 + 1.1), rot);
-  paintGeo(aw, [0x2f5d8f, 0x8f3f3a, 0x2f6d4a][(rng() * 3) | 0]);
-  out.accent.push(aw);
-  addColliderBox(x, z, w / 2, d / 2, rot, h);
-}
-
-function genOffice(out, x, z, rot, rng) {
-  var w = 24 + rng() * 18, d = 18 + rng() * 12, floors = 2 + ((rng() * 4) | 0), h = floors * 3.7;
-  var wl = [], rf = [];
-  boxShell(x, z, w, d, 0, h, rot, 3.5, wl, rf, 6);
-  var body = mergeGeos(wl); paintGeo(body, [0x9fb0bd, 0x8d9aa6, 0xb4bcc4][(rng() * 3) | 0]);
-  out.office.push(body);
-  var rm = mergeGeos(rf); paintGeo(rm, 0x4d5157); out.roofdeck.push(rm);
-  // Rooftop plant.
-  var hv = boxGeo(4 + rng() * 4, 1.6, 3 + rng() * 3, x + (rng() - 0.5) * w * 0.4, h + 0.8, z + (rng() - 0.5) * d * 0.4, rot);
-  paintGeo(hv, 0x9aa0a6); out.metal.push(hv);
-  addColliderBox(x, z, w / 2, d / 2, rot, h);
-}
-
-function genWarehouse(out, x, z, rot, rng) {
-  var w = 48 + rng() * 60, d = 30 + rng() * 26, h = 8 + rng() * 3;
-  var wl = [], rf = [];
-  boxShell(x, z, w, d, 0, h, rot, 6, wl, rf, 8);
-  var body = mergeGeos(wl); paintGeo(body, [0xb6bcc0, 0xa8aeb4, 0xc4c8cb][(rng() * 3) | 0]);
-  out.metal.push(body);
-  var rm = mergeGeos(rf); paintGeo(rm, 0x6a6e73); out.roofdeck.push(rm);
-  // Loading docks.
-  for (var i = 0; i < 4; i++) {
-    var dk = boxGeo(3.2, 3.4, 0.4, x - w / 2 + 8 + i * 7, 1.7, z + d / 2 + 0.2, rot);
-    paintGeo(dk, 0x3a4046); out.accent.push(dk);
-  }
-  addColliderBox(x, z, w / 2, d / 2, rot, h);
-}
-
-function genFarm(out, x, z, rot, rng) {
-  if (rng() < 0.45) {
-    var w = 16 + rng() * 10, d = 11 + rng() * 6, h = 5.5;
-    var wl = [];
-    boxShell(x, z, w, d, 0, h, rot, 3.4, wl, null);
-    var body = mergeGeos(wl); paintGeo(body, 0x8a3b30); out.house.push(body);
-    var rr = []; gableRoof(x, z, w, d, h, 3.4, rot, rr);
-    var rm = mergeGeos(rr); paintGeo(rm, 0x4a4a4e); out.shingle.push(rm);
-    addColliderBox(x, z, w / 2, d / 2, rot, h + 3);
-    if (rng() < 0.6) {   // grain silo
-      var sil = new T.CylinderGeometry(3, 3, 13, 12, 1, true);
-      sil.translate(x + w * 0.75, 6.5, z);
-      scaleUV(sil, 6, 4);
-      var sm = mergeGeos([sil]); paintGeo(sm, 0xc8ccd0); out.metal.push(sm);
-      var cap = new T.ConeGeometry(3.2, 2.4, 12); cap.translate(x + w * 0.75, 14.2, z);
-      var cm = mergeGeos([cap]); paintGeo(cm, 0xaeb3b8); out.metal.push(cm);
-      addColliderBox(x + w * 0.75, z, 3, 3, 0, 14);
+// A footprint is clear when its corners and edge midpoints are off every road,
+// parking lot and lake, and it does not overlap a building already placed.
+// Samples run round the perimeter no more than 8 m apart, plus an interior
+// grid, so even a narrow cul-de-sac stub cannot slip between them.
+function footprintClear(x, z, rot, fp, placed, ownerKey) {
+  var c = Math.cos(rot), s = Math.sin(rot);
+  var cx = x + fp.cx * c, cz = z - fp.cx * s;
+  var nx = Math.max(2, Math.ceil(fp.hw * 2 / 8)), nz = Math.max(2, Math.ceil(fp.hd * 2 / 8));
+  for (var i = 0; i <= nx; i++) {
+    for (var j = 0; j <= nz; j++) {
+      var edge = i === 0 || j === 0 || i === nx || j === nz;
+      if (!edge && (i % 2 || j % 2)) continue;          // interior: every other sample
+      var lx = (i / nx * 2 - 1) * fp.hw, lz = (j / nz * 2 - 1) * fp.hd;
+      var wx = cx + lx * c + lz * s, wz = cz - lx * s + lz * c;
+      var ri = nearestRoadInfo(wx, wz);
+      if (ri.road && ri.d < 1.2) return false;
+      if (inLot(wx, wz, 1) || inLake(wx, wz, 3)) return false;
     }
-  } else {
-    genHouse(out, x, z, rot, rng);
   }
+  for (var j = 0; j < placed.length; j++) {
+    var p = placed[j];
+    if (Math.abs(p.x - cx) > p.hw + p.hd + fp.hw + fp.hd + 3) continue;
+    if (Math.abs(p.z - cz) > p.hw + p.hd + fp.hw + fp.hd + 3) continue;
+    if (obbOverlap(cx, cz, fp.hw + 1.2, fp.hd + 1.2, rot, p.x, p.z, p.hw, p.hd, p.rot)) return false;
+  }
+  // Landmarks, and buildings that neighbouring chunks have already placed.
+  var r = Math.hypot(fp.hw, fp.hd);
+  for (var sx = -1; sx <= 1; sx++) for (var sz = -1; sz <= 1; sz++) {
+    collidersNear(cx + sx * r, cz + sz * r, _fpCols);
+    for (var k = 0; k < _fpCols.length; k++) {
+      var L = _fpCols[k];
+      if (L.owner === ownerKey || L.h < 3 || L.hw * L.hd < 12) continue;
+      if (obbOverlap(cx, cz, fp.hw + 2, fp.hd + 2, rot, L.x, L.z, L.hw, L.hd, L.rot)) return false;
+    }
+  }
+  return true;
 }
+var _fpCols = [];
 
 // --- chunk assembly ---------------------------------------------------------
 function chunkKey(cx, cz) { return cx + ':' + cz; }
 
-function buildChunk(cx, cz) {
+// Colliders are world-global; remember which a chunk has already registered so
+// rebuilding it (detail upgrade, or after cache eviction) never doubles them.
+var CHUNK_COLS = {};
+// Placement decisions per chunk, recorded on its first build and replayed on
+// every rebuild. The first build checks its footprints against buildings that
+// neighbouring chunks have already placed, which makes the outcome depend on
+// streaming order — so it is decided once and then frozen.
+var CHUNK_LAYOUT = {};
+
+// lod 0: full detail (the chunk you are in and its neighbours); lod 1: same
+// buildings, trees and lights without the small trim and parked cars.
+function buildChunk(cx, cz, lod) {
+  lod = lod ? 1 : 0;
+  var colRec = CHUNK_COLS[chunkKey(cx, cz)] || (CHUNK_COLS[chunkKey(cx, cz)] = { base: false, detail: false });
+  var doBase = !colRec.base, doDetail = !lod && !colRec.detail;
   var x0 = cx * CHUNK, z0 = cz * CHUNK;
   var rng = mulberry32(((cx & 1023) << 10 ^ (cz & 1023)) + 7771);
-  var out = {
-    house: [], shingle: [], apartment: [], retail: [], office: [], metal: [],
-    roofdeck: [], accent: [], sign: [], brick: [], stucco: []
-  };
-  var trees = [], lights = [], pools = [], props = [];
+  var K = newBatches(lod);
+  var placed = [];
+  var key = chunkKey(cx, cz), layout = CHUNK_LAYOUT[key], record = !layout, cand = 0;
+  if (record) layout = [];
+  var trees = [], lights = [];
 
   var zoneStep = { 'res-dense': 23, 'res-med': 29, 'res-sparse': 38, 'rural': 74, 'strip': 34, 'industrial': 64 };
   var step = 23;
@@ -989,37 +932,46 @@ function buildChunk(cx, cz) {
 
       var info = nearestRoadInfo(px, pz);
       if (!info.road) continue;
-      var frontage = zn.type === 'rural' ? 90 : (zn.type === 'strip' ? 46 : 34);
+      var frontage = zn.type === 'rural' ? 90 : (zn.type === 'strip' ? 52 : 34);
       if (info.d < 7 || info.d > frontage) continue;
-      if (info.road.cls === 'freeway') continue;
+      if (info.road.cls === 'freeway' || info.road.cls === 'ramp') continue;
 
-      // Face the street: rotate so the building's long axis parallels the road,
-      // then push it back from the kerb by the zone's setback.
+      var t = zn.type, roll = rng(), kind = null;
+      if (t === 'res-dense') kind = roll < 0.12 ? 'townhome' : 'house';
+      else if (t === 'res-med') kind = roll < 0.07 ? 'apartment' : 'house';
+      else if (t === 'res-sparse') kind = 'house';
+      else if (t === 'rural') kind = 'farm';
+      else if (t === 'strip') kind = roll < 0.58 ? 'strip' : (roll < 0.84 ? 'office' : 'apartment');
+      else if (t === 'industrial') kind = roll < 0.7 ? 'warehouse' : 'office';
+      if (!kind) continue;
+
+      // Face the street: long axis parallel to the road, set back from the
+      // kerb by that building type's setback.
       var rot = rotFromDir(info.dx, info.dz);
       var side = ((px - info.cx) * -info.dz + (pz - info.cz) * info.dx) > 0 ? 1 : -1;
-      var setback = zn.type === 'strip' ? 22 : 13;
+      var setback = BLD_SETBACK[kind] + rng() * 3;
       var bx = info.cx + (-info.dz) * side * (info.hw + setback);
       var bz = info.cz + (info.dx) * side * (info.hw + setback);
-      if (Math.abs(bx - px) > 40 || Math.abs(bz - pz) > 40) { bx = px; bz = pz; }
-      if (bx < x0 - 30 || bx > x0 + CHUNK + 30 || bz < z0 - 30 || bz > z0 + CHUNK + 30) continue;
-      if (inLot(bx, bz, 6) || inLake(bx, bz, 20)) continue;
-      // The setback is measured from one street; make sure the footprint has
-      // not landed on a *crossing* street (or in an intersection).
-      var clear = nearestRoadInfo(bx, bz);
-      if (clear.road && clear.d < (zn.type === 'strip' ? 13 : 9)) continue;
+      if (Math.abs(bx - px) > 45 || Math.abs(bz - pz) > 45) continue;
+      // A building belongs to the chunk its centre falls in, so two neighbouring
+      // chunks can never both build on the same frontage.
+      if (bx < x0 || bx >= x0 + CHUNK || bz < z0 || bz >= z0 + CHUNK) continue;
 
-      var t = zn.type, roll = rng();
-      if (t === 'res-dense') { roll < 0.12 ? genTownhome(out, bx, bz, rot, rng) : genHouse(out, bx, bz, rot, rng); }
-      else if (t === 'res-med') { roll < 0.08 ? genApartment(out, bx, bz, rot, rng) : genHouse(out, bx, bz, rot, rng); }
-      else if (t === 'res-sparse') { genHouse(out, bx, bz, rot, rng); }
-      else if (t === 'rural') { genFarm(out, bx, bz, rot, rng); }
-      else if (t === 'strip') {
-        if (roll < 0.62) genStrip(out, bx, bz, rot, rng, -side);
-        else if (roll < 0.85) genOffice(out, bx, bz, rot, rng);
-        else genApartment(out, bx, bz, rot, rng);
-      } else if (t === 'industrial') {
-        roll < 0.7 ? genWarehouse(out, bx, bz, rot, rng) : genOffice(out, bx, bz, rot, rng);
+      // Cheap pre-check with a typical footprint, then the real one
+      // (0 = rejected early, 1 = rejected after generating, 2 = built).
+      var idx = cand++;
+      if (record ? !footprintClear(bx, bz, rot, BLD_TYPICAL[kind], placed, key) : layout[idx] === 0) {
+        layout[idx] = 0;
+        continue;
       }
+      var mark = markBatches(K);
+      var fp = BLD_GEN[kind](K, bx, bz, rot, rng, -side, setback);
+      var ok = record ? !!fp && footprintClear(bx, bz, rot, fp, placed, key) : layout[idx] === 2;
+      layout[idx] = ok ? 2 : 1;
+      if (!ok) { rollbackBatches(K, mark); continue; }
+      commitColliders(K, mark.col, doBase, doDetail, key);
+      var pc = Math.cos(rot), ps = Math.sin(rot);
+      placed.push({ x: bx + fp.cx * pc, z: bz - fp.cx * ps, hw: fp.hw, hd: fp.hd, rot: rot });
     }
   }
 
@@ -1070,19 +1022,10 @@ function buildChunk(cx, cz) {
 
   // --- assemble meshes -----------------------------------------------------
   var group = new T.Group();
-  var matFor = {
-    house: MATS.house, shingle: MATS.shingle, apartment: MATS.apartment, retail: MATS.retail,
-    office: MATS.office, metal: MATS.metal, roofdeck: MATS.roofdeck, accent: MATS.accent,
-    sign: MATS.sign, brick: MATS.brick, stucco: MATS.stucco
-  };
-  for (var k2 in out) {
-    if (!out[k2].length) continue;
-    var geo = mergeGeos(out[k2]);
-    if (!geo.attributes.color && matFor[k2].vertexColors) paintGeo(geo, 0xffffff);
-    var mesh = new T.Mesh(geo, matFor[k2]);
-    mesh.castShadow = true; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false;
-    group.add(mesh);
-  }
+  emitBatches(K, group);
+  if (record) CHUNK_LAYOUT[key] = layout;
+  colRec.base = true;
+  if (!lod) colRec.detail = true;
 
   if (trees.length) {
     var trunkG = new T.CylinderGeometry(0.19, 0.28, 3.4, 6);
@@ -1130,14 +1073,17 @@ function buildChunk(cx, cz) {
   }
 
   group.matrixAutoUpdate = false;
-  return { group: group, cx: cx, cz: cz, x: x0 + CHUNK / 2, z: z0 + CHUNK / 2 };
+  return { group: group, cx: cx, cz: cz, x: x0 + CHUNK / 2, z: z0 + CHUNK / 2, lod: lod };
 }
 
-var chunkBudget = 2;
+// One chunk generation per frame keeps streaming hitch-free; nearest first,
+// and upgrading a distant-detail chunk you have driven up to comes first of all.
+var chunkBudget = 1;
 function updateChunks(px, pz, force) {
   var r = Q.chunkRadius;
   var pcx = Math.floor(px / CHUNK), pcz = Math.floor(pz / CHUNK);
   var built = 0, budget = force ? 999 : chunkBudget;
+  var todo = [];
   for (var i = -r; i <= r; i++) {
     for (var j = -r; j <= r; j++) {
       if (i * i + j * j > (r + 0.4) * (r + 0.4)) continue;
@@ -1146,16 +1092,25 @@ function updateChunks(px, pz, force) {
       if (cz * CHUNK > WORLD.maxZ || (cz + 1) * CHUNK < WORLD.minZ) continue;
       var key = chunkKey(cx, cz);
       var ch = CHUNKS[key];
-      if (!ch) {
-        if (built >= budget) continue;
-        ch = buildChunk(cx, cz);
-        CHUNKS[key] = ch;
-        SCENE_ROOT.add(ch.group);
-        built++;
+      var ring = Math.max(Math.abs(i), Math.abs(j));
+      var wantLod = ring <= 1 ? 0 : 1;
+      if (ch) {
+        ch.group.visible = true;
+        ch.seen = 1;
+        if (ch.lod > wantLod) todo.push({ key: key, cx: cx, cz: cz, lod: wantLod, pri: ring - 10, old: ch });
+      } else {
+        todo.push({ key: key, cx: cx, cz: cz, lod: wantLod, pri: i * i + j * j });
       }
-      ch.group.visible = true;
-      ch.seen = 1;
     }
+  }
+  todo.sort(function (a, b) { return a.pri - b.pri; });
+  for (var t = 0; t < todo.length && built < budget; t++) {
+    var job = todo[t];
+    var nch = buildChunk(job.cx, job.cz, job.lod);
+    if (job.old) disposeChunk(job.old);
+    CHUNKS[job.key] = nch;
+    SCENE_ROOT.add(nch.group);
+    built++;
   }
   // Hide (but keep) chunks that fell out of range; drop the far ones if the
   // cache grows too large for the device.
