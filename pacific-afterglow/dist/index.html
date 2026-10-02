@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#151b24"><meta name="description" content="Explore a sunset coastal city in Pacific Afterglow, an original 3D driving playground.">
+<title>Pacific Afterglow — Drive the coast</title><link rel="icon" href="./favicon.svg"><link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main id="game" aria-label="Pacific Afterglow driving game">
+<canvas id="world" aria-label="3D driving world"></canvas>
+<div class="vignette"></div>
+<header class="topbar"><div class="brand"><span class="brand-mark">P<span> / </span>A</span><div class="brand-title">PACIFIC <b>AFTERGLOW</b><span>WEST COAST · OPEN WORLD</span></div></div><div class="toolbar"><span class="world-time"><span class="sun-icon">☀</span> 19:42 <i></i> 24°</span><button id="sound" class="icon-button" aria-label="Enable engine sound" title="Engine sound">♪<span class="sound-slash"></span></button><button id="settings" class="icon-button" aria-label="Open settings" title="Settings">⚙</button><button id="pause" class="icon-button" aria-label="Pause game" title="Pause (Esc)">Ⅱ</button></div></header>
+<section id="intro" class="intro">
+<div class="eyebrow"><span></span> THE CITY IS YOURS</div>
+<h1>CHASE THE<br><em>AFTERGLOW.</em></h1>
+<p>A full tank. An open coast.<br>Nowhere you have to be.</p>
+<div class="start-actions"><button id="drive" class="primary">ENTER THE CITY <span class="button-key">↵</span></button><button id="trial" class="secondary">SUNSET RUN <span>TIME TRIAL</span></button></div>
+<div class="car-select"><span>YOUR RIDE</span><b>CALDERA GT</b><div class="swatches" role="group" aria-label="Car color"><button data-color="#df6339" class="swatch active" style="--swatch:#df6339" aria-label="Burnt orange" aria-pressed="true"></button><button data-color="#c7d6d3" class="swatch" style="--swatch:#c7d6d3" aria-label="Arctic silver" aria-pressed="false"></button><button data-color="#24475b" class="swatch" style="--swatch:#24475b" aria-label="Deep ocean" aria-pressed="false"></button></div></div>
+</section>
+<div id="intro-location" class="intro-location"><span>34° 01′ N &nbsp; 118° 29′ W</span><b>VISTA PACÍFICA</b><span>GOLDEN HOUR / FREE ROAM</span></div>
+<div id="intro-footer" class="intro-footer"><span>AN ORIGINAL DRIVING PLAYGROUND</span><span>HEADPHONES ON. WORLD OFF.</span></div>
+<section id="hud" class="hud hidden" aria-label="Driving information">
+<div class="mission"><div class="mission-tag" id="mode-label">FREE ROAM</div><strong id="mission-title">Take the long way home.</strong><span id="mission-subtitle">Explore Vista Pacífica at your own pace.</span><button id="start-trial" class="small-link">Start Sunset Run <span>8 CHECKPOINTS</span></button></div>
+<div id="race" class="race hidden"><span>SUNSET RUN</span><b id="race-time">00:00.00</b><div><span>CHECKPOINT <strong id="checkpoint-count">1 / 8</strong></span><span id="checkpoint-distance"></span></div></div>
+<div class="map-panel"><div class="map-wrap"><canvas id="minimap" width="480" height="360" aria-label="City map showing your position and next checkpoint"></canvas><span class="north">N</span><button id="map-button" aria-label="Expand map" title="Map (M)">⛶</button></div><div class="map-caption"><span class="location-icon">⌖</span><div><b id="district">OCEAN DRIVE</b><span id="road-name">Vista Pacífica</span></div><span id="heading">N</span></div><div class="health-line"><i></i><i></i><i></i></div></div>
+<div class="speed-panel"><div class="speed-top"><span>CALDERA GT</span><span id="gear">N</span></div><div class="speed-value"><b id="speed">000</b><span>KM/H</span></div><div class="tach"><i id="tach-fill"></i></div><div class="boost-label"><span>NITRO</span><span>SHIFT</span></div><div class="boost-track"><i id="boost-fill"></i></div></div>
+<div class="control-strip"><span><kbd>W A S D</kbd> DRIVE</span><span><kbd>SPACE</kbd> HANDBRAKE</span><span><kbd>C</kbd> CAMERA</span><span><kbd>R</kbd> RESET</span><span><kbd>ESC</kbd> PAUSE</span></div>
+<div id="touch-controls" class="touch-controls"><div><button data-key="KeyA" aria-label="Steer left">◀</button><button data-key="KeyD" aria-label="Steer right">▶</button></div><div><button data-key="Space" class="touch-drift" aria-label="Handbrake">DRIFT</button><button data-key="KeyS" aria-label="Brake and reverse">BRAKE</button><button data-key="KeyW" class="touch-gas" aria-label="Accelerate">GAS</button></div></div>
+</section>
+<div id="toast" class="toast" role="status"></div>
+<div id="checkpoint-flash" class="checkpoint-flash"></div>
+<div id="loading" class="loading"><span class="loader"></span><b>FINDING THE COAST</b><span>Warming up the engine…</span></div>
+<dialog id="menu"><div class="dialog-top"><span>PACIFIC / AFTERGLOW</span><button id="close-menu" class="icon-button" aria-label="Close menu">×</button></div><h2 id="menu-title">Take a breather.</h2><p id="menu-description">The coast will be right here.</p><div class="menu-actions"><button id="resume" class="primary">BACK TO THE DRIVE</button><button id="restart-race" class="secondary">START SUNSET RUN</button><button id="back-title" class="text-button">Return to title</button></div><div class="options"><label>GRAPHICS<select id="quality"><option value="high">Cinematic</option><option value="medium">Balanced</option><option value="low">Performance</option></select></label><label>CAMERA<select id="camera-select"><option value="0">Chase</option><option value="1">Wide chase</option><option value="2">Hood</option></select></label></div><div class="menu-controls"><span><kbd>W / ↑</kbd> Accelerate</span><span><kbd>S / ↓</kbd> Brake / reverse</span><span><kbd>A D / ← →</kbd> Steer</span><span><kbd>SHIFT</kbd> Nitro</span><span><kbd>M</kbd> Map</span><span><kbd>R</kbd> Reset car</span></div><p class="prototype-note">An original browser driving prototype.</p></dialog>
+<dialog id="result"><div class="eyebrow">SUNSET RUN COMPLETE</div><h2>Coast. Cleared.</h2><div id="final-time">01:24.56</div><p id="best-time"></p><div class="menu-actions"><button id="race-again" class="primary">RUN IT BACK</button><button id="free-roam" class="secondary">KEEP EXPLORING</button></div></dialog>
+<div id="error" class="error hidden"><h2>This coast needs WebGL 2.</h2><p>Try a current browser with hardware acceleration enabled.</p><button onclick="location.reload()" class="primary">TRY AGAIN</button></div>
+</main>
+<script type="module" src="./game.js"></script>
+</body></html>

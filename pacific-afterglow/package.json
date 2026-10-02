@@ -1,0 +1,1 @@
+{"name":"pacific-afterglow","version":"1.0.0","private":true,"type":"module","scripts":{"build":"esbuild main.js --bundle --minify --format=esm --outfile=dist/game.js","start":"python -m http.server 4173 --directory dist"},"dependencies":{"three":"0.180.0"},"devDependencies":{"esbuild":"0.25.10"}}
