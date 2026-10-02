@@ -25,7 +25,7 @@ Rebuild `dist/game.js` after editing anything in `src/`; never edit the bundle.
 | `src/world/knockables.js` | Physics for street furniture the car hits: small props fly and tumble, posts topple, everything respawns once you have left. |
 | `src/world/pedestrians.js` | Instanced pedestrians animated in the vertex shader: walking, waiting, crossing at the lights, dodging and getting knocked down. |
 | `src/vehicles/carModel.js` | Lofted car bodies for eight types (three player cars), wheels (with a cheap variant for traffic), lights, shared materials. |
-| `src/vehicles/player.js` | `CARS` roster and handling, gearbox, collisions, suspension, dents and broken lamps, headlights. |
+| `src/vehicles/player.js` | `CARS` roster and handling (with the Easy assists behind `player.assist`), gearbox, collisions, suspension, dents and broken lamps, headlights. |
 | `src/vehicles/traffic.js` | Instanced AI traffic: lanes, signals, turns, following, parked cars, police pursuit, player collisions. |
 | `src/wanted.js` | Wanted level: witnesses, crimes, units, evading and busted. |
 | `src/gps.js` | Shortest route along the road grid, for the minimap and map. |
@@ -52,6 +52,9 @@ Rebuild `dist/game.js` after editing anything in `src/`; never edit the bundle.
 - The road shader samples the mirror's render target, so the mirror swaps in a blank
   texture while it renders (otherwise WebGL reports a feedback loop). The mirror is skipped
   while roads are dry and the sea is out of view.
+- Touch: the steering stick in `#steer-zone` writes `input.touchSteer` (null when no thumb
+  is on it); pedals and NOS/DRIFT are ordinary `data-key` buttons, so they multi-touch.
+  All touch layout lives in the `(pointer:coarse)` blocks at the end of `style.css`.
 - The player car's body parts are its own geometry copies so dents never touch the cached
   geometry that traffic shares.
 
@@ -74,7 +77,9 @@ different speeds and handling; dents and repair; knocking over hydrants, bins, s
 lamp posts; the countdown, GPS route and a complete time trial with the result screen;
 speeding past police, ramming a cruiser, evading and getting busted; waypoints on the full
 map; audio start on input, radio stations and engine voices; the pause menu, time-of-day and
-quality switches; and no runtime errors.
+quality switches; Easy against Sport handling; an emulated phone in landscape and portrait
+with two-thumb multi-touch (stick plus GAS), the touch buttons and the pause menu; and no
+runtime errors.
 
 Frame rate could not be measured in that software renderer. On High the scene draws about
 480 to 620 calls and 3.2 million triangles per frame across the camera, shadow and

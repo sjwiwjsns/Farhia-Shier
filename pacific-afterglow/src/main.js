@@ -24,6 +24,8 @@ const $ = id => document.getElementById(id);
 // How busy the background traffic hum is in each district.
 const CITY_NOISE = { 'DOWNTOWN': 1, 'PALM DISTRICT': 0.65, 'SEAVIEW': 0.5, 'SOUTHBANK': 0.4, 'OCEAN DRIVE': 0.3 };
 const mobile = matchMedia('(pointer:coarse)').matches;
+// Phones get the lightest graphics by default; tablets one step up.
+const phone = mobile && Math.min(screen.width, screen.height) < 600;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
@@ -119,7 +121,7 @@ async function main() {
     splits: [], topSpeed: 0, crashes: 0, waypoint: null,
     lastX: spawn.x, lastZ: spawn.z, time: 0, frame: 0, flash: 0,
   };
-  let qualityName = store.get('pacific-quality') || (mobile ? 'medium' : 'high');
+  let qualityName = store.get('pacific-quality') || (phone ? 'low' : mobile ? 'medium' : 'high');
   if (!['ultra', 'high', 'medium', 'low'].includes(qualityName)) qualityName = 'high';
   let timeName = store.get('pacific-time') || 'cycle';
   let roadSetting = store.get('pacific-road') || 'auto';
@@ -378,8 +380,8 @@ async function main() {
   }
   renderSoundButton();
 
-  $('drive').onclick = () => begin('free');
-  $('trial').onclick = () => begin('race');
+  $('drive').onclick = () => { goImmersive(); begin('free'); };
+  $('trial').onclick = () => { goImmersive(); begin('race'); };
   $('start-trial').onclick = () => begin('race');
   $('pause').onclick = () => pauseGame();
   $('settings').onclick = () => pauseGame(true);
@@ -418,6 +420,14 @@ async function main() {
     if (announce && game.state === 'play') toast(index < 0 ? 'RADIO OFF' : `♪ ${STATIONS[index].name}`);
   }
   $('radio-select').onchange = e => setRadio(Number(e.target.value), false);
+  // Handling: Easy (assists on, the default) or Sport (the raw car).
+  function setHandling(name) {
+    player.assist = name !== 'sport';
+    store.set('pacific-handling', player.assist ? 'easy' : 'sport');
+    $('handling-select').value = player.assist ? 'easy' : 'sport';
+  }
+  $('handling-select').onchange = e => { setHandling(e.target.value); if (game.state === 'play') toast(player.assist ? 'EASY HANDLING' : 'SPORT HANDLING'); };
+  setHandling(store.get('pacific-handling') || 'easy');
   // Optional frame-rate readout (settings menu).
   let fpsOn = store.get('pacific-fps') === 'on';
   const fpsEl = $('fps');
@@ -434,8 +444,7 @@ async function main() {
   setRadio(Number.isInteger(savedRadio) && savedRadio < STATIONS.length ? savedRadio : 0, false);
   // Browsers only allow sound after a gesture, so the audio graph is built on the first one.
   const unlock = () => audio.unlock();
-  addEventListener('pointerdown', unlock, { once: true });
-  addEventListener('keydown', unlock, { once: true });
+  for (const type of ['pointerdown', 'keydown', 'touchend', 'click']) addEventListener(type, unlock, { once: true });
   $('car-prev').onclick = () => stepCar(-1);
   $('car-next').onclick = () => stepCar(1);
   $('car-menu').onchange = e => selectCar(e.target.value, game.state === 'play');
@@ -490,6 +499,60 @@ async function main() {
     btn.addEventListener('lostpointercapture', clear);
   }
   addEventListener('resize', () => pipeline.applySize());
+
+  // --- Touch -------------------------------------------------------------
+  // Steering: put a thumb anywhere in the left zone and slide it; the stick follows.
+  const zone = $('steer-zone'), knob = $('steer-knob');
+  let steerPointer = null, steerX = 0, steerY = 0;
+  const STICK = 62; // px of travel for full lock
+  zone.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (game.paused || steerPointer !== null) return;
+    steerPointer = e.pointerId;
+    zone.setPointerCapture(e.pointerId);
+    const r = zone.getBoundingClientRect();
+    steerX = e.clientX;
+    steerY = e.clientY;
+    zone.classList.add('active');
+    zone.style.setProperty('--sx', `${e.clientX - r.left}px`);
+    zone.style.setProperty('--sy', `${e.clientY - r.top}px`);
+    knob.style.transform = 'translate(-50%, -50%)';
+    input.touchSteer = 0;
+  });
+  zone.addEventListener('pointermove', e => {
+    if (e.pointerId !== steerPointer) return;
+    const dx = THREE.MathUtils.clamp(e.clientX - steerX, -STICK, STICK);
+    // A little dead zone in the middle, then a smooth curve to full lock.
+    const t = Math.max(0, Math.abs(dx) / STICK - 0.08) / 0.92;
+    input.touchSteer = -Math.sign(dx) * Math.pow(t, 1.3);
+    knob.style.transform = `translate(calc(-50% + ${dx}px), -50%)`;
+  });
+  const releaseSteer = e => {
+    if (e.pointerId !== steerPointer) return;
+    steerPointer = null;
+    input.touchSteer = null;
+    zone.classList.remove('active');
+  };
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) zone.addEventListener(type, releaseSteer);
+  $('touch-cam').onclick = () => cameraSwitch();
+  $('touch-radio').onclick = () => setRadio(audio.station + 1 >= STATIONS.length ? -1 : audio.station + 1);
+  $('touch-reset').onclick = () => { if (game.state === 'play' && !game.paused) resetCar(); };
+  // No long-press menus, pinch zoom or pull-to-refresh while driving.
+  addEventListener('contextmenu', e => { if (mobile) e.preventDefault(); });
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  addEventListener('touchmove', e => { if (game.state === 'play' && !e.target.closest('dialog, .map-panel.expanded')) e.preventDefault(); }, { passive: false });
+  // Phones: go full screen in landscape when the drive starts (where the browser allows it).
+  function goImmersive() {
+    if (!mobile) return;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req && !document.fullscreenElement) {
+      Promise.resolve(req.call(el, { navigationUI: 'hide' }))
+        .then(() => screen.orientation?.lock?.('landscape'))
+        .catch(() => {});
+    }
+    if (innerHeight > innerWidth) setTimeout(() => toast('TURN YOUR PHONE SIDEWAYS'), 2600);
+  }
 
   // --- Simulation -------------------------------------------------------
   const tmpV = new THREE.Vector3();
@@ -854,7 +917,7 @@ async function main() {
     traffic: () => traffic.cars.map(c => ({ x: +c.x.toFixed(1), z: +c.z.toFixed(1), speed: +c.speed.toFixed(1), axis: c.axis, turn: !!c.turn, hit: !!c.hit })),
     reset: resetCar,
     camera: cameraSwitch,
-    debug: { scene, atmosphere, pipeline, renderer, camera, rig, traffic, pedestrians, player, knock, world, audio, wanted, hud, game },
+    debug: { scene, atmosphere, pipeline, renderer, camera, rig, traffic, pedestrians, player, knock, world, audio, wanted, hud, game, input },
     selectCar,
   };
 }

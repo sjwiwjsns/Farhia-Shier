@@ -70,6 +70,7 @@ function splitSides(geo) {
 // --- Player car ---------------------------------------------------------------
 export class PlayerCar {
   constructor(scene, renderer, key = 'coupe') {
+    this.assist = true; // Easy handling; false is the original Sport feel
     this.mats = carMaterials(renderer);
     this.paint = paintMaterial('#df6339');
     this.group = new THREE.Group();
@@ -257,7 +258,9 @@ export class PlayerCar {
     this.brake = input.brake;
     this.handbrake = input.handbrake;
     const steerTarget = input.steer;
-    const steerRate = Math.abs(steerTarget) > Math.abs(this.steer) ? 5.5 : 8;
+    // Easy handling turns in a touch more gently and lets go faster, so taps don't overshoot.
+    const easy = this.assist;
+    const steerRate = Math.abs(steerTarget) > Math.abs(this.steer) ? (easy ? 4.2 : 5.5) : (easy ? 10 : 8);
     this.steer = damp(this.steer, steerTarget, steerRate, dt);
 
     // Nitro.
@@ -302,30 +305,43 @@ export class PlayerCar {
     vLong = clamp(vLong, -14, D.maxSpeed + (this.boosting ? 10 : 0));
 
     // Lateral grip: strong normally, breaks away with the handbrake or on sand.
-    let grip = D.grip - loose * 6;
-    if (this.handbrake) grip = 1.2;
+    let grip = D.grip * (easy ? 1.5 : 1) - loose * (easy ? 3 : 6);
+    if (this.handbrake) grip = easy ? 1.8 : 1.2;
     const slipRatio = Math.abs(vLat) / (absV + 4);
-    if (slipRatio > 0.18 && !this.handbrake) grip *= D.slideHold; // already sliding: hold the drift
+    if (slipRatio > 0.18 && !this.handbrake) grip *= easy ? 0.9 : D.slideHold; // already sliding: hold the drift
     // Rear-drive torque breaks the tail loose in low gears.
-    if (D.powerSlide && this.gear > 0 && this.gear <= 2) {
+    if (D.powerSlide && !easy && this.gear > 0 && this.gear <= 2) {
       grip *= 1 - D.powerSlide * this.throttle * Math.abs(this.steer) * clamp(absV / 14, 0, 1);
     }
     vLat *= Math.exp(-grip * dt);
+    // Stability control: once the handbrake is off, a slide straightens itself out.
+    if (easy && !this.handbrake) vLat *= Math.exp(-(slipRatio > 0.08 ? 7 : 2) * dt);
     this.slip = Math.abs(vLat);
 
     // Bicycle-model yaw with speed-sensitive steering.
     const wheelbase = (this.dims.wheels[1] - this.dims.wheels[0]) * this.dims.length;
-    const maxSteer = D.steer / (1 + absV * 0.04);
+    const maxSteer = D.steer / (1 + absV * (easy ? 0.05 : 0.04));
     this.wheelAngle = this.steer * maxSteer;
     let targetYaw = (vLong * Math.tan(this.wheelAngle)) / wheelbase;
     // Tires can only hold so much cornering force; past that the car understeers.
-    const latLimit = (this.handbrake ? D.latDrift : D.lat) * (1 - loose * 0.4);
+    const latLimit = (this.handbrake ? D.latDrift : D.lat) * (easy ? 1.3 : 1) * (1 - loose * 0.4);
     const maxYaw = latLimit / Math.max(absV, 4);
     targetYaw = clamp(targetYaw, -maxYaw, maxYaw);
     if (this.handbrake && absV > 6) targetYaw *= 1.5;
     if (slipRatio > 0.18) targetYaw += this.steer * 0.6 * Math.min(absV / 20, 1); // counter-steer authority mid-drift
-    this.yawRate = damp(this.yawRate, targetYaw, D.yawDamp, dt);
+    this.yawRate = damp(this.yawRate, targetYaw, easy ? Math.max(D.yawDamp, 9.5) : D.yawDamp, dt);
     this.heading += this.yawRate * dt;
+    // Road assist: with the wheel centred on a street, the car settles parallel to it, so
+    // nudges with the keys or a thumb never leave it crabbing toward the curb.
+    if (easy && Math.abs(input.steer) < 0.05 && Math.abs(this.steer) < 0.15 && absV > 5 && !this.handbrake && this.surface === 'road') {
+      const quarter = Math.PI / 2;
+      const along = Math.round(this.heading / quarter) * quarter;
+      const off = this.heading - along;
+      if (Math.abs(off) < 0.4) {
+        this.heading -= off * Math.min(1, 2.2 * dt);
+        this.yawRate *= Math.exp(-4 * dt);
+      }
+    }
 
     // Recombine in world space; the next step sees the slip angle that results.
     this.vx = fx * vLong + rx * vLat;
@@ -451,10 +467,21 @@ export class PlayerCar {
       const tx = this.vx - vn * nx, tz = this.vz - vn * nz;
       const tangent = Math.hypot(tx, tz);
       if (tangent > 6 && (!this.scrape || tangent > this.scrape.speed)) this.scrape = { x: px, z: pz, speed: tangent, nx, nz };
-      this.vx -= (1 + bounce) * vn * nx;
-      this.vz -= (1 + bounce) * vn * nz;
-      this.vx *= 0.9;
-      this.vz *= 0.9;
+      const glancing = this.assist && tangent > -vn * 1.2;
+      // Easy handling: a glancing hit slides along the wall instead of stopping dead.
+      const b = glancing ? 0 : bounce;
+      this.vx -= (1 + b) * vn * nx;
+      this.vz -= (1 + b) * vn * nz;
+      const keep = glancing ? 0.985 : 0.9;
+      this.vx *= keep;
+      this.vz *= keep;
+      if (glancing && tangent > 4) {
+        // Turn the nose to follow the wall.
+        const along = Math.atan2(-tx, -tz);
+        let d = along - this.heading;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        if (Math.abs(d) < 1.2) this.heading += d * 0.08;
+      }
       this.impact = Math.max(this.impact, -vn);
       if (!this.contact || -vn > this.contact.speed) this.contact = { x: px, z: pz, speed: -vn, nx, nz };
       this.registerHit(px, pz, -vn);

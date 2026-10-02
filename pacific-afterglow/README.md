@@ -36,11 +36,20 @@ Then open http://localhost:4173. Opening `index.html` straight from disk will no
 | Esc / P | Start | Pause and settings |
 | ← → on the title screen | | Choose a car |
 
-Touch controls appear on phones and tablets.
+**Phones and tablets:** put your left thumb anywhere on the left side of the screen and
+slide it to steer; hold GAS and BRAKE on the right, with NOS and DRIFT beside them. CAM,
+FM (radio) and ↺ (reset) sit at the top right, and the Ⅱ button pauses and opens settings. The game goes full
+screen in landscape where the browser allows it, and plays in portrait too. Phones start
+on the Performance graphics setting.
+
+**Handling:** Easy (the default) adds stability control, extra grip, calmer steering at
+speed, a gentle pull that keeps the car parallel to the street when you let go of the
+wheel, and glancing off walls instead of stopping dead. Sport in settings is the raw car.
 
 ## What is in it
 
 **Cars**
+- Easy handling by default (see above), or Sport for the unassisted car.
 - Three cars with their own engines, gearboxes and handling: the Caldera GT grand tourer
   (balanced), the Vanta SS muscle car (big torque, a tail that steps out under power) and
   the Ventus R mid-engine supercar (220 km/h, the most grip). Pick one on the title screen
@@ -110,8 +119,8 @@ directional when the camera swings round, keeping the car sharp), road rumble, i
 | Performance | 1× | 1024 shadows, no bloom or grading |
 
 Desktop defaults to High and touch devices to Balanced. Dynamic resolution lowers the
-render scale when the frame rate drops. Settings also cover time of day, wet roads, radio,
-car, camera and an FPS counter (frame time, draw calls, triangles, render scale). Choices
+render scale when the frame rate drops. Settings also cover handling, time of day, wet
+roads, radio, car, camera and an FPS counter (frame time, draw calls, triangles, render scale). Choices
 and the best time are stored in the current browser only.
 
 Performance work: everything repeated is instanced; the city is split into chunks whose
