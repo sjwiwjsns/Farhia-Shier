@@ -1,4 +1,5 @@
 import { roadsX, roadsZ, ROAD_HALF, SHORE_X, BEACH_START, PROMENADE, PIER, blockCentersX, blockCentersZ, BLOCK_SIZE, districtAt, streetName } from './world/layout.js';
+import { routeBetween, routeLength } from './gps.js';
 
 const $ = id => document.getElementById(id);
 const MAP = { x0: -760, x1: 420, z0: -640, z1: 640 };
@@ -38,6 +39,10 @@ export class Hud {
     this.ctx = this.canvas.getContext('2d');
     this.mapImage = drawStaticMap(colliders);
     this.expanded = false;
+    this.route = null; // GPS polyline to the current target
+    this.routeKey = '';
+    this.routeAt = [0, 0];
+    this.raceRoute = null; // the rest of the Sunset Run, road by road
     this.els = {};
     for (const id of ['speed', 'gear', 'tach-fill', 'boost-fill', 'district', 'road-name', 'heading', 'race-time', 'checkpoint-distance', 'clock', 'rpm-readout']) this.els[id] = $(id);
     this.last = {};
@@ -49,12 +54,48 @@ export class Hud {
     if (this.els[id]) this.els[id].textContent = value;
   }
 
-  update(car, game, traffic, atmosphere) {
+  // Recompute the GPS line when the target changes or the car has moved on.
+  updateRoute(car, game) {
+    let target = null;
+    if (game.mode === 'race' && game.checkpoint < game.route.length) target = game.route[game.checkpoint];
+    else if (game.waypoint) target = game.waypoint;
+    if (!target) { this.route = null; this.routeKey = ''; return; }
+    const key = target.join(',') + (game.mode === 'race' ? ':' + game.checkpoint : '');
+    const moved = Math.hypot(car.x - this.routeAt[0], car.z - this.routeAt[1]);
+    if (key !== this.routeKey || moved > 12) {
+      this.route = routeBetween(car.x, car.z, target[0], target[1]);
+      this.routeKey = key;
+      this.routeAt = [car.x, car.z];
+      if (game.mode === 'race') {
+        const rest = [];
+        for (let i = game.checkpoint; i < game.route.length - 1; i++) rest.push(routeBetween(...game.route[i], ...game.route[i + 1]));
+        this.raceRoute = rest;
+      } else this.raceRoute = null;
+    }
+  }
+
+  get routeDistance() {
+    return this.route ? routeLength(this.route) : 0;
+  }
+
+  // Wanted stars: lit up to the level, flashing while the police search for you.
+  setWanted(level, evading) {
+    const key = level + (evading ? 'e' : '');
+    if (this.last.wanted === key) return;
+    this.last.wanted = key;
+    const el = $('wanted');
+    el.classList.toggle('hidden', level === 0);
+    el.classList.toggle('evading', evading);
+    el.querySelectorAll('i').forEach((star, i) => star.classList.toggle('on', i < level));
+  }
+
+  update(car, game, traffic, atmosphere, wanted) {
     const kph = Math.round(car.kmh);
     this.set('speed', String(kph).padStart(3, '0'));
     this.set('gear', car.gear < 0 ? 'R' : kph < 1 && !car.throttle ? 'N' : String(car.gear));
-    this.els['tach-fill'].style.width = Math.min(100, (car.rpm / 7400) * 100).toFixed(1) + '%';
-    this.els['tach-fill'].classList.toggle('redline', car.rpm > 6600);
+    const redline = car.def?.redline ?? 7400;
+    this.els['tach-fill'].style.width = Math.min(100, (car.rpm / redline) * 100).toFixed(1) + '%';
+    this.els['tach-fill'].classList.toggle('redline', car.rpm > redline - 800);
     this.els['boost-fill'].style.width = car.nitro.toFixed(1) + '%';
     this.els['boost-fill'].classList.toggle('active', car.boosting);
     this.set('rpm-readout', (car.rpm / 1000).toFixed(1));
@@ -64,16 +105,42 @@ export class Hud {
     const dirs = ['N', 'NW', 'W', 'SW', 'S', 'SE', 'E', 'NE'];
     this.set('heading', dirs[((Math.round(car.heading / (Math.PI / 4)) % 8) + 8) % 8]);
     this.set('clock', atmosphere.clockLabel);
+    this.updateRoute(car, game);
     if (game.mode === 'race') {
       this.set('race-time', formatTime(game.raceTime));
-      const cp = game.route[game.checkpoint];
-      if (cp) this.set('checkpoint-distance', Math.round(Math.hypot(cp[0] - car.x, cp[1] - car.z)) + ' M');
+      if (game.route[game.checkpoint]) this.set('checkpoint-distance', Math.round(this.routeDistance) + ' M');
     }
-    this.drawMap(car, game, traffic);
+    if (wanted) this.setWanted(wanted.level, wanted.evading);
+    this.drawMap(car, game, traffic, wanted);
   }
 
-  drawMap(car, game, traffic) {
+  // Click on the full-screen map: set (or clear) a waypoint.
+  pick(clientX, clientY, game) {
+    if (!this.expanded) return;
+    const r = this.canvas.getBoundingClientRect();
+    const px = ((clientX - r.left) / r.width) * this.canvas.width, py = ((clientY - r.top) / r.height) * this.canvas.height;
+    const scale = Math.min(this.canvas.width / (MAP.x1 - MAP.x0), this.canvas.height / (MAP.z1 - MAP.z0));
+    const x = (px - this.canvas.width / 2) / scale + (MAP.x0 + MAP.x1) / 2;
+    const z = (py - this.canvas.height / 2) / scale + (MAP.z0 + MAP.z1) / 2;
+    if (game.waypoint && Math.hypot(game.waypoint[0] - x, game.waypoint[1] - z) < 30) game.waypoint = null;
+    else game.waypoint = [Math.min(Math.max(x, roadsX[0]), roadsX[roadsX.length - 1]), Math.min(Math.max(z, roadsZ[0]), roadsZ[roadsZ.length - 1])];
+    this.routeKey = '';
+  }
+
+  polyline(ctx, pts) {
+    ctx.beginPath();
+    pts.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z)));
+    ctx.stroke();
+  }
+
+  drawMap(car, game, traffic, wanted) {
     const { canvas: cv, ctx } = this;
+    if (this.expanded) {
+      // Match the canvas to its on-screen box so the big map is never stretched.
+      const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+      const W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
+      if (W > 0 && H > 0 && (cv.width !== W || cv.height !== H)) { cv.width = W; cv.height = H; }
+    }
     const w = cv.width, h = cv.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#16343f';
@@ -91,26 +158,68 @@ export class Hud {
       ctx.translate(-car.x, -car.z);
     }
     ctx.drawImage(this.mapImage, MAP.x0, MAP.z0);
-    // Traffic.
+    const z = this.expanded ? 1.6 : 1; // line widths scale up on the big map
+    ctx.lineJoin = ctx.lineCap = 'round';
+    // The rest of the Sunset Run, faint, then the GPS line to the next target on top.
+    if (this.raceRoute) {
+      ctx.strokeStyle = '#ffc68650';
+      ctx.lineWidth = 5 * z;
+      for (const leg of this.raceRoute) this.polyline(ctx, leg);
+    }
+    if (this.route) {
+      const color = game.mode === 'race' ? '#ffb46b' : '#c690ff';
+      ctx.strokeStyle = '#0b141acc';
+      ctx.lineWidth = 11 * z;
+      this.polyline(ctx, this.route);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 7 * z;
+      this.polyline(ctx, this.route);
+    }
+    // Traffic, then police with their search rings while you are wanted.
     ctx.fillStyle = '#c9d3d6';
-    for (const t of traffic.cars) ctx.fillRect(t.x - 2, t.z - 2, 4, 4);
-    if (game.mode === 'race' && game.checkpoint < game.route.length) {
-      const [gx, gz] = game.route[game.checkpoint];
-      ctx.strokeStyle = '#ffc686cc';
-      ctx.lineWidth = this.expanded ? 4 : 3;
-      ctx.setLineDash([7, 6]);
+    for (const t of traffic.cars) if (!t.police) ctx.fillRect(t.x - 2.5, t.z - 2.5, 5, 5);
+    const flash = Math.floor(performance.now() / 180) % 2;
+    for (const t of traffic.police) {
+      const chasing = t.mode === 'chase';
+      if (chasing && wanted) {
+        ctx.fillStyle = wanted.evading ? '#3a6cff14' : '#ff3a4a12';
+        ctx.beginPath();
+        ctx.arc(t.x, t.z, wanted.sightRange(), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = chasing ? (flash ? '#ff4458' : '#4a7dff') : '#5f8dff';
       ctx.beginPath();
-      ctx.moveTo(car.x, car.z);
-      ctx.lineTo(gx, gz);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      game.route.forEach(([x, z], i) => {
+      ctx.arc(t.x, t.z, (chasing ? 6 : 4) * z, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (game.mode === 'race' && game.checkpoint < game.route.length) {
+      game.route.forEach(([x, cz], i) => {
         if (i < game.checkpoint) return;
         ctx.beginPath();
-        ctx.arc(x, z, i === game.checkpoint ? 11 : 6, 0, Math.PI * 2);
-        ctx.fillStyle = i === game.checkpoint ? '#ffc686' : '#ffc68666';
+        ctx.arc(x, cz, (i === game.checkpoint ? 11 : 6) * z, 0, Math.PI * 2);
+        ctx.fillStyle = i === game.checkpoint ? '#ffc686' : '#ffc68677';
         ctx.fill();
+        if (this.expanded) {
+          ctx.fillStyle = '#17212a';
+          ctx.font = '700 22px Barlow, Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(i + 1), x, cz + 1);
+        }
       });
+    }
+    if (game.waypoint && game.mode !== 'race') {
+      const [wx, wz] = game.waypoint;
+      ctx.fillStyle = '#c690ff';
+      ctx.beginPath();
+      ctx.arc(wx, wz - 14 * z, 9 * z, Math.PI, 0);
+      ctx.lineTo(wx, wz);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(wx, wz - 14 * z, 3.5 * z, 0, Math.PI * 2);
+      ctx.fill();
     }
     // Player arrow.
     ctx.translate(car.x, car.z);
@@ -127,6 +236,18 @@ export class Hud {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+    if (this.expanded) {
+      ctx.fillStyle = '#fff4dccc';
+      ctx.font = '600 20px Barlow, Arial';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(game.mode === 'race' ? 'SUNSET RUN · FOLLOW THE ORANGE LINE' : 'CLICK THE MAP TO SET A WAYPOINT · CLICK IT AGAIN TO CLEAR', 24, 22);
+      ctx.fillStyle = '#5f8dff'; ctx.fillRect(24, h - 44, 14, 14);
+      ctx.fillStyle = '#c9d3d6'; ctx.fillRect(170, h - 44, 14, 14);
+      ctx.fillStyle = '#fff4dccc';
+      ctx.fillText('POLICE', 46, h - 46);
+      ctx.fillText('TRAFFIC', 192, h - 46);
+    }
     // North marker on the radar edge.
     if (!this.expanded) {
       const a = car.heading;

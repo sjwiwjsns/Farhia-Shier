@@ -50,14 +50,82 @@ vec4 paRoadMarkings(vec2 p, out float wear, out float onRoad) {
 }
 `;
 
+// Shared by the road and sidewalk shaders; the ocean feeds in its mirror image.
+export const roadUniforms = {
+  wetness: { value: 0 },
+  mirrorTex: { value: null },
+  mirrorMatrix: { value: new THREE.Matrix4() },
+  useMirror: { value: 0 },
+  worldTime: { value: 0 },
+};
+
+// Manhole covers and old skid marks, placed per road cell by hash.
+const ROAD_DETAIL_GLSL = /* glsl */`
+float paRoadDetail(vec2 p, float fw, out float manhole) {
+  manhole = 0.0;
+  float skid = 0.0;
+  float dx = p.x - paRoadNearest(p.x, -320.0, 4.0);
+  float dz = p.y - paRoadNearest(p.y, -480.0, 6.0);
+  for (int axis = 0; axis < 2; axis++) {
+    float a = axis == 0 ? dx : dz;
+    float b = axis == 0 ? dz : dx;
+    float along = axis == 0 ? p.y : p.x;
+    float road = axis == 0 ? p.x - dx : p.y - dz;
+    if (abs(a) > ${ROAD_HALF.toFixed(1)} || abs(b) < ${ROAD_HALF.toFixed(1)}) continue;
+    float cell = floor(along / 23.0);
+    float h = pa_hash12(vec2(cell, road * 0.37 + float(axis) * 11.0));
+    if (h > 0.62) {
+      vec2 c = vec2((h > 0.81 ? 5.9 : -5.9), (cell + 0.3 + h * 0.4) * 23.0);
+      float d = length(vec2(a, along) - c);
+      manhole = max(manhole, 1.0 - smoothstep(0.42 - fw, 0.42 + fw, d));
+    }
+    // Skid marks: twin streaks along a lane, fading out at both ends.
+    float hs = pa_hash12(vec2(cell * 1.7 + 4.0, road * 0.11 + float(axis) * 5.0));
+    if (hs > 0.78) {
+      float lane = (hs > 0.89 ? 1.0 : -1.0) * (hs > 0.84 ? 9.2 : 3.4);
+      float t = fract(along / 23.0);
+      float curve = sin(t * 3.14159) * (hs - 0.85) * 6.0;
+      float off = abs(abs(a - lane - curve) - 0.78);
+      float streak = (1.0 - smoothstep(0.08, 0.14 + fw, off)) * smoothstep(0.05, 0.3, t) * (1.0 - smoothstep(0.65, 0.95, t));
+      skid = max(skid, streak * (0.55 + 0.45 * pa_noise(vec2(along * 0.8, a * 3.0))));
+    }
+  }
+  return skid;
+}
+`;
+
+const WET_PARS = /* glsl */`
+uniform float wetness;
+uniform sampler2D mirrorTex;
+uniform mat4 mirrorMatrix;
+uniform float useMirror;
+uniform float worldTime;
+float paPuddle;
+// Reflection of the city in wet ground, from the ocean's mirror render. A few
+// taps stretched vertically turn point lights into the long streaks of a wet street.
+vec3 paWetReflection(vec3 worldPos, float puddle) {
+  vec4 mc = mirrorMatrix * vec4(worldPos, 1.0);
+  vec2 uv = mc.xy / mc.w;
+  vec2 ripple = vec2(pa_noise(worldPos.xz * 2.2 + worldTime * 0.6), pa_noise(worldPos.xz * 2.2 + 17.0 - worldTime * 0.4)) - 0.5;
+  uv += ripple * mix(0.0045, 0.002, puddle);
+  vec3 sharp = texture2D(mirrorTex, uv).rgb;
+  vec3 streak = (sharp + texture2D(mirrorTex, uv + vec2(0.0, 0.012)).rgb + texture2D(mirrorTex, uv + vec2(0.0, 0.03)).rgb
+    + texture2D(mirrorTex, uv - vec2(0.0, 0.014)).rgb) * 0.25;
+  return mix(streak * 0.85, sharp, puddle);
+}
+`;
+
 function makeRoadMaterial() {
   return proceduralMaterial('road', { color: 0xffffff, roughness: 0.85, metalness: 0.0 }, {
-    fragmentPars: ROAD_GLSL + `
-      float paPaint; float paWear; float paOnRoad;`,
+    uniforms: roadUniforms,
+    fragmentPars: ROAD_GLSL + ROAD_DETAIL_GLSL + WET_PARS + `
+      float paPaint; float paWear; float paOnRoad; float paManhole;`,
     color: `
       {
         vec2 p = vPaWorld.xz;
+        float fwp = max(max(fwidth(p.x), fwidth(p.y)), 0.002);
         vec4 paint = paRoadMarkings(p, paWear, paOnRoad);
+        float skid = paRoadDetail(p, fwp, paManhole);
         float big = pa_fbm3(p * 0.035);
         float grain = pa_noise(p * 7.0) * 0.5 + pa_noise(p * 23.0) * 0.5;
         // Repaired patches: random rectangles of fresher or older asphalt.
@@ -66,19 +134,33 @@ function makeRoadMaterial() {
         vec2 cf = fract(p / vec2(7.0, 11.0));
         float patchMask = step(0.86, patchSel) * step(0.12, cf.x) * step(cf.x, 0.88) * step(0.15, cf.y) * step(cf.y, 0.8);
         vec3 asphalt = vec3(0.118, 0.115, 0.112) * (0.78 + big * 0.45) * (0.85 + grain * 0.3);
-        asphalt = mix(asphalt, asphalt * (patchSel > 0.93 ? 0.72 : 1.25), patchMask);
+        asphalt = mix(asphalt, asphalt * mix(1.25, 0.72, step(0.93, patchSel)), patchMask);
         // Cracks from a ridged noise field.
         float crack = 1.0 - abs(pa_noise(p * 0.9) * 2.0 - 1.0);
         asphalt *= 1.0 - smoothstep(0.93, 0.99, crack) * 0.35 * smoothstep(0.4, 0.7, big);
         asphalt *= 1.0 - paWear * 0.18;
+        asphalt *= 1.0 - skid * 0.45;
+        // Manhole covers: dark iron.
+        asphalt = mix(asphalt, vec3(0.07, 0.065, 0.06) * (0.8 + 0.4 * pa_noise(p * 30.0)), paManhole);
         // Off-road ground beyond the city edges.
         vec3 dirt = mix(vec3(0.17, 0.2, 0.11), vec3(0.24, 0.22, 0.15), big);
         asphalt = mix(dirt, asphalt, paOnRoad);
         float worn = smoothstep(0.25, 0.65, pa_noise(p * 1.7) * 0.6 + big * 0.6);
-        paPaint = paint.a * (0.55 + 0.45 * worn) * paOnRoad;
-        diffuseColor.rgb = mix(asphalt, paint.rgb, paPaint);
+        paPaint = paint.a * (0.55 + 0.45 * worn) * paOnRoad * (1.0 - paManhole);
+        vec3 col = mix(asphalt, paint.rgb, paPaint);
+        // Wet: darker overall, puddles in dips and along the tire tracks.
+        float dips = pa_fbm3(p * 0.055 + 13.0) + paWear * 0.12;
+        paPuddle = smoothstep(0.6, 0.67, dips) * paOnRoad * wetness;
+        col *= mix(1.0, 0.58, wetness * paOnRoad);
+        col = mix(col, col * 0.55, paPuddle);
+        diffuseColor.rgb = col;
       }`,
-    roughness: `roughnessFactor = mix(mix(0.9, 0.62, paWear), 0.55, paPaint);`,
+    roughness: `
+      roughnessFactor = mix(mix(0.9, 0.62, paWear), 0.55, paPaint);
+      roughnessFactor = mix(roughnessFactor, 0.5, paManhole);
+      roughnessFactor = mix(roughnessFactor, 0.3, wetness * paOnRoad);
+      // With a mirror image available, puddles take their reflection from it instead.
+      roughnessFactor = mix(roughnessFactor, useMirror > 0.5 ? 0.85 : 0.03, paPuddle);`,
     normal: `
       {
         vec2 p = vPaWorld.xz * 9.0;
@@ -86,8 +168,14 @@ function makeRoadMaterial() {
         float n0 = pa_noise(p), nx = pa_noise(p + vec2(e, 0.0)), nz = pa_noise(p + vec2(0.0, e));
         vec3 bump = normalize(vec3((n0 - nx) * 0.22, 1.0, (n0 - nz) * 0.22));
         float fade = 1.0 - smoothstep(12.0, 35.0, length(vPaWorld - cameraPosition));
-        bump = normalize(mix(vec3(0.0, 1.0, 0.0), bump, fade * (1.0 - paPaint)));
+        bump = normalize(mix(vec3(0.0, 1.0, 0.0), bump, fade * (1.0 - paPaint) * (1.0 - paPuddle)));
         normal = normalize((viewMatrix * vec4(bump, 0.0)).xyz);
+      }`,
+    emissive: `
+      if (useMirror > 0.5 && wetness > 0.01 && paOnRoad > 0.5) {
+        vec3 V = normalize(cameraPosition - vPaWorld);
+        float fres = min(0.04 + 0.96 * pow(1.0 - clamp(V.y, 0.0, 1.0), 4.0), 0.7);
+        totalEmissiveRadiance += paWetReflection(vPaWorld, paPuddle / max(wetness, 0.01)) * fres * wetness * mix(0.65, 1.1, paPuddle);
       }`,
   });
 }
@@ -95,12 +183,13 @@ function makeRoadMaterial() {
 // Raised blocks: curb stones, a paved sidewalk ring and the lot surface inside.
 function makeSlabMaterial() {
   return proceduralMaterial('slab', { color: 0xffffff, roughness: 0.85, metalness: 0.0 }, {
+    uniforms: { wetness: roadUniforms.wetness },
     vertexPars: 'attribute float aLot; flat varying float vLot; flat varying vec3 vSlabCenter; flat varying vec2 vSlabHalf;',
     vertex: `
       vLot = aLot;
       vSlabCenter = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
       vSlabHalf = vec2(length(instanceMatrix[0].xyz), length(instanceMatrix[2].xyz)) * 0.5;`,
-    fragmentPars: 'flat varying float vLot; flat varying vec3 vSlabCenter; flat varying vec2 vSlabHalf; float paSlabRough;',
+    fragmentPars: 'flat varying float vLot; flat varying vec3 vSlabCenter; flat varying vec2 vSlabHalf; float paSlabRough; uniform float wetness;',
     color: `
       {
         vec2 p = vPaWorld.xz;
@@ -160,7 +249,8 @@ function makeSlabMaterial() {
         }
         diffuseColor.rgb = col;
       }`,
-    roughness: 'roughnessFactor = paSlabRough;',
+    // Wet paving turns glossy after dark; grass stays matte.
+    roughness: 'roughnessFactor = mix(paSlabRough, 0.42, wetness * (abs(vLot - 1.0) < 0.5 ? 0.0 : 1.0));',
   });
 }
 
@@ -262,6 +352,9 @@ export function buildGround(scene, renderer) {
   });
   slabGeo.setAttribute('aLot', new THREE.InstancedBufferAttribute(lots, 1));
   slabMesh.receiveShadow = true;
+  // Kept out of the mirror: seen from under the water plane, the slabs' undersides would
+  // hide every building base that wet streets need to reflect.
+  slabMesh.layers.set(1);
   scene.add(slabMesh);
 
   // Beach: sand that slopes under the water.

@@ -180,7 +180,7 @@ export class Atmosphere {
     this.scene = scene;
     this.hours = TIME_PRESETS.golden;
     this.cycle = false; // when true time advances
-    this.cycleSpeed = 24 / (18 * 60); // full day in 18 real minutes
+    this.cycleSpeed = 24 / (48 * 60); // a full day in 48 real minutes; sunset to night takes about four
 
     this.sky = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), makeSkyMaterial(true));
     this.sky.scale.setScalar(2000);

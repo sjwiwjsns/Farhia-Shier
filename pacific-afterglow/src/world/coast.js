@@ -5,6 +5,8 @@ import { atmoUniforms } from './atmosphere.js';
 import { proceduralMaterial, canvasTexture } from '../core/materials.js';
 import { SHORE_X, WATER_Y, PIER, BEACH_START, pierHeight } from './layout.js';
 import { range, pick } from '../core/rng.js';
+import { roadUniforms } from './ground.js';
+import { batchStatic } from '../core/batch.js';
 
 const oceanVertex = /* glsl */`
 uniform mat4 textureMatrix;
@@ -136,8 +138,43 @@ export function buildCoast(scene, renderer) {
   reflector.userData.noAO = true;
   reflector.camera.layers.set(0); // props on layer 1 are skipped in reflections
   reflector.renderOrder = 1;
+  // Always render the mirror, even facing away from the sea: wet streets reuse it.
+  reflector.frustumCulled = false;
   scene.add(reflector);
-  const mirrorRender = reflector.onBeforeRender;
+  const oceanInverse = new THREE.Matrix4();
+  const blankMirror = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+  blankMirror.needsUpdate = true;
+  const reflectorRender = reflector.onBeforeRender;
+  // The road samples the mirror, so it must not be bound while the mirror itself renders
+  // (that is a framebuffer feedback loop). The matrix is refreshed right after the mirror
+  // camera moves, so wet streets never lag a frame behind.
+  // Objects to leave out of the mirror (the player's car when the camera sits inside it).
+  const mirrorHide = [];
+  // The mirror is needed when the sea is on screen or the streets are wet; otherwise the
+  // whole reflection pass is skipped and the last image is kept.
+  reflector.updateMatrixWorld();
+  reflector.geometry.computeBoundingBox();
+  const oceanBox = reflector.geometry.boundingBox.clone().applyMatrix4(reflector.matrixWorld);
+  oceanBox.expandByVector(new THREE.Vector3(0, 2, 0));
+  const frustum = new THREE.Frustum(), projView = new THREE.Matrix4();
+  const mirrorRender = function (...args) {
+    const camera = args[2];
+    if (camera && roadUniforms.wetness.value < 0.02) {
+      projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      frustum.setFromProjectionMatrix(projView);
+      if (!frustum.intersectsBox(oceanBox)) return;
+    }
+    roadUniforms.mirrorTex.value = blankMirror;
+    roadUniforms.useMirror.value = 0;
+    for (const o of mirrorHide) o.visible = false;
+    reflectorRender.apply(this, args);
+    for (const o of mirrorHide) o.visible = true;
+    oceanInverse.copy(reflector.matrixWorld).invert();
+    roadUniforms.mirrorMatrix.value.copy(mirrorUniforms.textureMatrix.value).multiply(oceanInverse);
+    roadUniforms.mirrorTex.value = reflector.getRenderTarget().texture;
+    roadUniforms.useMirror.value = 1;
+  };
+  reflector.onBeforeRender = mirrorRender;
   let mirrorEnabled = true;
 
   const pier = buildPier(scene, renderer);
@@ -146,6 +183,7 @@ export function buildCoast(scene, renderer) {
   return {
     ocean: reflector,
     pier,
+    mirrorHide,
     setReflections(on, scale = 0.5) {
       mirrorEnabled = on;
       uniforms.useMirror.value = on ? 1 : 0;
@@ -159,6 +197,8 @@ export function buildCoast(scene, renderer) {
     },
     update(time, atmosphere) {
       uniforms.time.value = time;
+      if (!mirrorEnabled) { roadUniforms.mirrorTex.value = blankMirror; roadUniforms.useMirror.value = 0; }
+      roadUniforms.worldTime.value = time;
       uniforms.sunLight.value.copy(atmosphere.sun.color).multiplyScalar(atmosphere.elevation > -1 ? atmosphere.sun.intensity : 0);
       uniforms.ambient.value.copy(atmosphere.hemi.color).multiplyScalar(atmosphere.hemi.intensity * 0.6);
       pier.update(time, atmosphere.lampFactor);
@@ -363,6 +403,7 @@ function buildPier(scene, renderer) {
   });
   group.add(lampPole, lampHead);
 
+  batchStatic(group, { exclude: [wheel] }); // planks, rails, shops and legs: one draw per material
   scene.add(group);
   const hsl = new THREE.Color();
   const dummy = new THREE.Object3D();
@@ -455,6 +496,7 @@ function buildBeachProps(scene) {
   towels.receiveShadow = true;
   group.add(canopy, pole, towels);
   for (const o of [canopy, pole, towels]) o.layers.set(1);
+  batchStatic(group);
   scene.add(group);
   return { update() {} };
 }

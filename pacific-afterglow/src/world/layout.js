@@ -33,6 +33,17 @@ export const route = [
   [160, -10], [10, 160], [-300, 160],
 ];
 export const CHECKPOINT_RADIUS = 15;
+
+// Bus stops sit mid-block on the sidewalk. side is which side of the road (+/-).
+export const BUS_STOPS = [
+  { axis: 'ns', road: -160, s: -240, side: 1 }, { axis: 'ns', road: 0, s: -80, side: -1 }, { axis: 'ns', road: 160, s: 80, side: 1 },
+  { axis: 'ns', road: 0, s: 400, side: 1 }, { axis: 'ns', road: -320, s: -400, side: 1 }, { axis: 'ns', road: 320, s: -240, side: -1 },
+  { axis: 'ew', road: -320, s: -80, side: 1 }, { axis: 'ew', road: 0, s: 80, side: -1 }, { axis: 'ew', road: 160, s: -240, side: 1 },
+  { axis: 'ew', road: 320, s: 240, side: -1 }, { axis: 'ew', road: -160, s: 240, side: 1 }, { axis: 'ew', road: 480, s: -80, side: -1 },
+];
+export function busStopPos(b, offset = 15.4) {
+  return b.axis === 'ns' ? [b.road + b.side * offset, b.s] : [b.s, b.road + b.side * offset];
+}
 export const spawn = { x: -320 + LANES[0], z: 246, heading: 0 };
 
 export function nearestRoad(list, v) {

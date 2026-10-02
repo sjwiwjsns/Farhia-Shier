@@ -34,6 +34,45 @@ export const CAR_TYPES = {
       taper: 0.3, exp: 2.6, roof: [0.33, 0.64],
     },
     spoiler: true,
+    exhaust: [-0.42, 0.42],
+  },
+  // Long hood, short deck, boxy flanks: a seventies-style muscle car.
+  muscle: {
+    length: 4.92, wheelR: 0.37, wheelW: 0.3, track: 0.86, wheels: [0.17, 0.8],
+    body: {
+      top: [[0, 0.72], [0.04, 0.84], [0.12, 0.89], [0.4, 0.93], [0.86, 0.96], [0.96, 0.95], [1, 0.84]],
+      bottom: [[0, 0.32], [0.05, 0.26], [0.95, 0.27], [1, 0.36]],
+      width: [[0, 0.88], [0.05, 0.96], [0.5, 0.98], [0.95, 0.97], [1, 0.9]],
+      exp: 5.2, taper: 0.05,
+    },
+    cabin: {
+      from: 0.43, to: 0.87,
+      top: [[0, 0.91], [0.3, 1.31], [0.55, 1.32], [0.86, 1.08], [1, 0.96]],
+      width: [[0, 0.8], [0.5, 0.8], [1, 0.73]],
+      taper: 0.22, exp: 3.2, roof: [0.3, 0.6],
+    },
+    scoop: true,
+    ducktail: true,
+    exhaust: [-0.56, -0.44, 0.44, 0.56],
+  },
+  // Low mid-engined wedge with a cab-forward canopy and a big rear wing.
+  super: {
+    length: 4.56, wheelR: 0.36, wheelW: 0.32, track: 0.88, wheels: [0.2, 0.8],
+    body: {
+      top: [[0, 0.42], [0.06, 0.55], [0.2, 0.66], [0.35, 0.73], [0.7, 0.86], [0.9, 0.88], [1, 0.8]],
+      bottom: [[0, 0.16], [0.05, 0.13], [0.95, 0.15], [1, 0.26]],
+      width: [[0, 0.8], [0.08, 0.95], [0.3, 0.97], [0.7, 1.03], [0.9, 1.0], [1, 0.9]],
+      exp: 3.6, taper: 0.14,
+    },
+    cabin: {
+      from: 0.27, to: 0.72,
+      top: [[0, 0.62], [0.35, 1.13], [0.55, 1.14], [0.8, 1.0], [1, 0.86]],
+      width: [[0, 0.78], [0.4, 0.74], [1, 0.62]],
+      taper: 0.32, exp: 2.4, roof: [0.38, 0.62],
+    },
+    wing: true,
+    intakes: true,
+    exhaust: [-0.13, 0.13],
   },
   sedan: {
     length: 4.85, wheelR: 0.34, wheelW: 0.24, track: 0.81, wheels: [0.2, 0.77],
@@ -180,6 +219,7 @@ function strut(a, b, r) {
 }
 
 const cache = new Map();
+export const HERO_TYPES = ['coupe', 'muscle', 'super'];
 
 // Returns geometries grouped by material slot, plus wheel geometry and layout.
 export function carGeometry(typeName) {
@@ -189,8 +229,8 @@ export function carGeometry(typeName) {
   const zAt = s => zf + s * L;
   const wheelZ = T.wheels.map(zAt);
   const archR = T.wheelR + 0.07;
-  // The player's coupe gets the dense mesh; traffic uses a lighter one.
-  const hero = typeName === 'coupe';
+  // The player's cars get the dense mesh; traffic uses a lighter one.
+  const hero = HERO_TYPES.includes(typeName);
   const ring = hero ? 40 : 26;
   const N = hero ? 64 : 40;
 
@@ -270,13 +310,37 @@ export function carGeometry(typeName) {
   tail.push(box(sW(0.98) * 1.72, 0.05, 0.06, 0, rearY - 0.08, -zf - 0.02));
   for (const side of [-1, 1]) tail.push(box(0.36, 0.11, 0.06, side * sW(0.98) * 0.68, rearY - 0.12, -zf - 0.03));
   dark.push(box(sW(0.98) * 1.5, 0.16, 0.1, 0, smooth(T.body.bottom, 0.98) + 0.06, -zf - 0.05));
-  for (const side of [-1, 1]) chrome.push(cyl(0.05, 0.05, 0.14, 12, side * 0.42, smooth(T.body.bottom, 0.98) + 0.03, -zf + 0.02, 'z'));
+  const exhaustY = smooth(T.body.bottom, 0.98) + 0.03;
+  const exhausts = (T.exhaust || [-0.42, 0.42]).map(x => new THREE.Vector3(x, exhaustY, -zf + 0.06));
+  for (const e of exhausts) chrome.push(cyl(0.05, 0.05, 0.14, 12, e.x, e.y, -zf + 0.02, 'z'));
   // Side skirts.
   for (const side of [-1, 1]) {
     const len = (wheelZ[1] - wheelZ[0]) - archR * 2;
     trim.push(box(0.06, 0.08, len, side * sW(0.5) * 0.99, smooth(T.body.bottom, 0.5) + 0.03, (wheelZ[0] + wheelZ[1]) / 2));
   }
   if (T.spoiler) paint.push(box(sW(0.96) * 1.5, 0.022, 0.12, 0, smooth(T.body.top, 0.96) + 0.012, zAt(0.965), -0.2));
+  if (T.ducktail) paint.push(box(sW(0.95) * 1.78, 0.05, 0.2, 0, smooth(T.body.top, 0.95) + 0.03, zAt(0.955), 0.28));
+  if (T.scoop) {
+    // Raised hood scoop with a dark mouth facing forward.
+    const hy = smooth(T.body.top, 0.22);
+    paint.push(box(0.56, 0.09, 0.7, 0, hy + 0.035, zAt(0.23), 0.04));
+    dark.push(box(0.46, 0.05, 0.03, 0, hy + 0.05, zAt(0.23) - 0.35));
+  }
+  if (T.wing) {
+    // Rear wing on two swan-neck struts.
+    const deckY = smooth(T.body.top, 0.93), wz = zAt(0.95);
+    for (const side of [-1, 1]) trim.push(box(0.04, 0.3, 0.16, side * 0.42, deckY + 0.14, wz, 0.25));
+    trim.push(box(sW(0.95) * 1.86, 0.035, 0.34, 0, deckY + 0.3, wz + 0.02, -0.12));
+    for (const side of [-1, 1]) trim.push(box(0.03, 0.14, 0.38, side * sW(0.95) * 0.93, deckY + 0.29, wz + 0.02));
+  }
+  if (T.intakes) {
+    // Side intakes ahead of the rear wheels, and a front splitter lip.
+    for (const side of [-1, 1]) {
+      const s = 0.66, y = (smooth(T.body.bottom, s) + smooth(T.body.top, s)) / 2;
+      dark.push(box(0.05, 0.2, 0.52, side * sW(s) * 0.985, y, zAt(s), 0, side * 0.14, 0));
+    }
+    dark.push(box(sW(0.03) * 1.8, 0.03, 0.3, 0, smooth(T.body.bottom, 0.02) + 0.01, zf + 0.12));
+  }
   if (T.rails) for (const side of [-1, 1]) trim.push(box(0.05, 0.05, L * 0.5, side * 0.62, smooth(C.top, 0.6) + 0.04, zAt(0.62)));
   if (T.bed) {
     // Open bed walls behind the cab.
@@ -307,46 +371,54 @@ export function carGeometry(typeName) {
       plate: toNonIndexed(plate),
     },
     wheels: [],
-    wheel: wheelGeometry(T.wheelR, T.wheelW),
+    wheel: wheelGeometry(T.wheelR, T.wheelW, !hero),
+    exhausts,
   };
   for (const z of wheelZ) for (const side of [-1, 1]) out.wheels.push({ x: side * T.track, y: T.wheelR, z, side, front: z < 0 });
   cache.set(typeName, out);
   return out;
 }
 
-function wheelGeometry(R, W) {
+// lite: a cheaper wheel for traffic (about a sixth of the triangles), which is seen
+// smaller and is left out of shadows and reflections.
+function wheelGeometry(R, W, lite = false) {
   // Tire: lathe of a rounded profile, axis along X.
   const rimR = R * 0.69;
-  const pts = [
-    [rimR, -W / 2 + 0.01], [R * 0.86, -W / 2 - 0.004], [R * 0.97, -W / 2 + 0.025], [R, -W / 2 + 0.06],
-    [R, W / 2 - 0.06], [R * 0.97, W / 2 - 0.025], [R * 0.86, W / 2 + 0.004], [rimR, W / 2 - 0.01],
-  ].map(([r, y]) => new THREE.Vector2(r, y));
-  const tire = new THREE.LatheGeometry(pts, 30);
+  const profile = lite
+    ? [[rimR, -W / 2 + 0.01], [R * 0.95, -W / 2 + 0.01], [R, -W / 2 + 0.06], [R, W / 2 - 0.06], [R * 0.95, W / 2 - 0.01], [rimR, W / 2 - 0.01]]
+    : [
+      [rimR, -W / 2 + 0.01], [R * 0.86, -W / 2 - 0.004], [R * 0.97, -W / 2 + 0.025], [R, -W / 2 + 0.06],
+      [R, W / 2 - 0.06], [R * 0.97, W / 2 - 0.025], [R * 0.86, W / 2 + 0.004], [rimR, W / 2 - 0.01],
+    ];
+  const tire = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), lite ? 14 : 30);
   tire.rotateZ(Math.PI / 2);
-  // Rim: barrel, lip and five split spokes on the outer face (+X; mirrored per side by scale).
+  // Rim: barrel, lip and split spokes on the outer face (+X; mirrored per side by rotation).
   const rimParts = [];
-  const barrel = new THREE.CylinderGeometry(rimR, rimR, W - 0.03, 24, 1, true);
+  const barrel = new THREE.CylinderGeometry(rimR, rimR, W - 0.03, lite ? 10 : 24, 1, true);
   barrel.rotateZ(Math.PI / 2);
   rimParts.push(barrel);
-  const lip = new THREE.TorusGeometry(rimR - 0.008, 0.014, 6, 32);
-  lip.rotateY(Math.PI / 2);
-  lip.translate(W / 2 - 0.03, 0, 0);
-  rimParts.push(lip);
+  if (!lite) {
+    const lip = new THREE.TorusGeometry(rimR - 0.008, 0.014, 6, 32);
+    lip.rotateY(Math.PI / 2);
+    lip.translate(W / 2 - 0.03, 0, 0);
+    rimParts.push(lip);
+  }
   const face = W / 2 - 0.05;
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2 + (i % 2) * 0.12;
+  const spokes = lite ? 5 : 10;
+  for (let i = 0; i < spokes; i++) {
+    const a = (i / spokes) * Math.PI * 2 + (lite ? 0 : (i % 2) * 0.12);
     const spoke = new THREE.BoxGeometry(0.035, rimR - 0.05, 0.045);
     spoke.translate(0, (rimR - 0.05) / 2 + 0.05, 0);
     spoke.rotateX(a);
     spoke.translate(face, 0, 0);
     rimParts.push(spoke);
   }
-  const hub = new THREE.CylinderGeometry(0.07, 0.08, 0.05, 12);
+  const hub = new THREE.CylinderGeometry(0.07, 0.08, 0.05, lite ? 6 : 12);
   hub.rotateZ(Math.PI / 2);
   hub.translate(face + 0.01, 0, 0);
   rimParts.push(hub);
   const rim = mergeGeometries(rimParts.map(g => (g.index ? g.toNonIndexed() : g)));
-  const disc = new THREE.CylinderGeometry(rimR * 0.82, rimR * 0.82, 0.03, 24);
+  const disc = new THREE.CylinderGeometry(rimR * 0.82, rimR * 0.82, 0.03, lite ? 10 : 24);
   disc.rotateZ(Math.PI / 2);
   disc.translate(face - 0.06, 0, 0);
   const caliper = new THREE.BoxGeometry(0.07, 0.16, 0.12);

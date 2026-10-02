@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { canvasTexture } from '../core/materials.js';
+import { batchStatic } from '../core/batch.js';
 import { roadsX, roadsZ, ROAD_HALF, SLAB_H, PROMENADE, PIER } from './layout.js';
 import { terrainHeight } from './ground.js';
-import { range, pick, chance } from '../core/rng.js';
 
 // Traffic signal timing shared by the lamps and the traffic AI.
 // Axis 0 controls north/south traffic, axis 1 east/west.
@@ -33,9 +33,15 @@ varying vec3 vN;
 varying vec3 vW;
 void main() {
   vH = uv.y;
-  vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  vec4 local = vec4(position, 1.0);
+  vec3 n = normal;
+  #ifdef USE_INSTANCING
+    local = instanceMatrix * local;
+    n = mat3(instanceMatrix) * n;
+  #endif
+  vec4 w = modelMatrix * local;
   vW = w.xyz;
-  vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+  vN = normalize(mat3(modelMatrix) * n);
   gl_Position = projectionMatrix * viewMatrix * w;
 }`;
 const beamFragment = /* glsl */`
@@ -65,7 +71,7 @@ export function makeBeamMaterial(color, intensity = 0) {
   });
 }
 
-export function buildProps(scene, renderer, extraLamps = []) {
+export function buildProps(scene, renderer, extraLamps = [], knock = null) {
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1);
   const up = new THREE.Vector3(0, 1, 0);
   const metal = new THREE.MeshStandardMaterial({ color: 0x3f4648, roughness: 0.45, metalness: 0.7 });
@@ -217,27 +223,21 @@ export function buildProps(scene, renderer, extraLamps = []) {
   const signalColors = [new THREE.Color(7, 0.35, 0.2), new THREE.Color(7, 3.6, 0.3), new THREE.Color(0.3, 6, 2.2)];
   const offColor = new THREE.Color(0.05, 0.05, 0.05);
 
-  // Fire hydrants, benches and trash cans along the sidewalks.
-  const hydrants = [], benches = [], bins = [];
-  for (const x of roadsX) for (let z = -500; z <= 500; z += 50) {
-    if (roadsZ.some(r => Math.abs(z - r) < crossClear)) continue;
-    const side = chance(0.5) ? 1 : -1;
-    if (x === roadsX[0] && side < 0) continue;
-    if (chance(0.5)) hydrants.push([x + side * (ROAD_HALF + 0.6), z + 6]);
-    if (chance(0.35)) benches.push([x + side * (ROAD_HALF + 3.2), z + 12, side]);
-    if (chance(0.4)) bins.push([x + side * (ROAD_HALF + 0.9), z + 15]);
+  // Lamp posts fold over when hit hard enough; their light pool and cone go with them.
+  if (knock) {
+    lamps.forEach(([x, z], i) => knock.add(
+      [{ mesh: poles, index: i }, { mesh: arms, index: i }, { mesh: heads, index: i }],
+      [{ mesh: pools, index: i }, { mesh: beams, index: i }],
+      { type: 'lamp', x, z, y: SLAB_H, r: 0.18, mass: 0.22, solid: 6, kind: 'topple', sparks: true },
+    ));
+    promenade.forEach(([x, z], j) => knock.add(
+      [{ mesh: promPoles, index: j }, { mesh: globes, index: j }],
+      [{ mesh: pools, index: lamps.length + j }],
+      { type: 'lamp', x, z, y: SLAB_H, r: 0.14, mass: 0.12, solid: 4, kind: 'topple', sparks: true },
+    ));
   }
-  const hydrantMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.2, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0xb8352a, roughness: 0.5 }), hydrants.length);
-  hydrants.forEach(([x, z], i) => { m.makeTranslation(x, SLAB_H + 0.4, z); hydrantMesh.setMatrixAt(i, m); });
-  const benchMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.6, 0.5, 2.2), new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.8 }), benches.length);
-  benches.forEach(([x, z], i) => { m.makeTranslation(x, SLAB_H + 0.25, z); benchMesh.setMatrixAt(i, m); });
-  const binMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.28, 1, 10), new THREE.MeshStandardMaterial({ color: 0x2d4a3a, roughness: 0.6, metalness: 0.3 }), bins.length);
-  bins.forEach(([x, z], i) => { m.makeTranslation(x, SLAB_H + 0.5, z); binMesh.setMatrixAt(i, m); });
-  for (const o of [hydrantMesh, benchMesh, binMesh]) {
-    o.castShadow = true;
-    o.layers.set(1);
-    scene.add(o);
-  }
+  // Signal masts are anchored for good.
+  const circles = masts.map(([px, pz]) => ({ x: px, z: pz, r: 0.3 }));
 
   // Billboards with original ads, lit after dark.
   const ads = [
@@ -253,6 +253,7 @@ export function buildProps(scene, renderer, extraLamps = []) {
     [-215, -432, -Math.PI / 2], [100, 212, Math.PI], [-136, 30, -Math.PI / 2], [270, 362, Math.PI], [345, -200, -Math.PI / 2], [345, 250, -Math.PI / 2],
   ];
   const billboards = [];
+  const boardRoot = new THREE.Group();
   billboardSpots.forEach(([x, z, ry], i) => {
     const [title, tag, accent, bg] = ads[i % ads.length];
     const tex = canvasTexture(renderer, 1024, 384, (c, w, h) => {
@@ -284,10 +285,13 @@ export function buildProps(scene, renderer, extraLamps = []) {
     group.add(board, back, post);
     group.position.set(x, SLAB_H, z);
     group.rotation.y = ry;
+    circles.push({ x, z, r: 0.5 });
     group.traverse(o => { if (o.isMesh) o.castShadow = true; });
-    scene.add(group);
+    boardRoot.add(group);
     billboards.push(board.material);
   });
+  batchStatic(boardRoot); // posts and frames share one material
+  scene.add(boardRoot);
 
   // The hillside sign overlooking the city.
   const letters = 'VISTA PACÍFICA';
@@ -321,6 +325,7 @@ export function buildProps(scene, renderer, extraLamps = []) {
 
   return {
     lamps,
+    circles,
     update(time, lampFactor) {
       headMat.emissiveIntensity = lampFactor * 4;
       globeMat.emissiveIntensity = lampFactor * 2.6;

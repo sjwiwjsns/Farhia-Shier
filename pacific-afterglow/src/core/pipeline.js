@@ -8,10 +8,10 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 
 // Quality tiers. Dynamic resolution keeps the frame rate steady inside each tier.
 export const QUALITY = {
-  ultra: { label: 'Ultra', pixelRatio: 2, msaa: 4, shadow: 4096, shadowRange: 150, ao: true, reflections: 0.75, bloom: true, grade: true },
-  high: { label: 'High', pixelRatio: 1.5, msaa: 4, shadow: 2048, shadowRange: 120, ao: false, reflections: 0.5, bloom: true, grade: true },
-  medium: { label: 'Balanced', pixelRatio: 1.2, msaa: 2, shadow: 2048, shadowRange: 90, ao: false, reflections: 0, bloom: true, grade: true },
-  low: { label: 'Performance', pixelRatio: 1, msaa: 0, shadow: 1024, shadowRange: 70, ao: false, reflections: 0, bloom: false, grade: false },
+  ultra: { label: 'Ultra', pixelRatio: 2, msaa: 4, shadow: 4096, shadowRange: 150, ao: true, reflections: 0.75, bloom: true, grade: true, shafts: true },
+  high: { label: 'High', pixelRatio: 1.5, msaa: 4, shadow: 2048, shadowRange: 120, ao: false, reflections: 0.5, bloom: true, grade: true, shafts: true },
+  medium: { label: 'Balanced', pixelRatio: 1.2, msaa: 2, shadow: 2048, shadowRange: 90, ao: false, reflections: 0, bloom: true, grade: true, shafts: true },
+  low: { label: 'Performance', pixelRatio: 1, msaa: 0, shadow: 1024, shadowRange: 70, ao: false, reflections: 0, bloom: false, grade: false, shafts: false },
 };
 
 // GTAO that ignores sky, water, particles and decals in its geometry pass.
@@ -33,6 +33,7 @@ const GradeShader = {
     time: { value: 0 },
     resolution: { value: new THREE.Vector2(1, 1) },
     speedBlur: { value: 0 },
+    camBlur: { value: new THREE.Vector2() },
     aberration: { value: 0.0015 },
     vignette: { value: 0.32 },
     grain: { value: 0.035 },
@@ -48,7 +49,7 @@ const GradeShader = {
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse;
     uniform float time, speedBlur, aberration, vignette, grain, sunVisible, flash, night;
-    uniform vec2 resolution, sunPos;
+    uniform vec2 resolution, sunPos, camBlur;
     uniform vec3 sunColor;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
@@ -65,15 +66,20 @@ const GradeShader = {
       vec2 fromCenter = uv - 0.5;
       float edge = dot(fromCenter, fromCenter);
       vec3 col = sampleCA(uv, aberration * (1.0 + edge * 6.0) + speedBlur * 0.004);
-      // Radial speed blur toward the edges when going fast.
-      if (speedBlur > 0.01) {
+      // Motion blur: radial streaks toward the edges at speed, plus a directional smear when
+      // the camera swings round. The car itself moves with the camera, so it stays sharp.
+      float radial = speedBlur * 0.055 * smoothstep(0.02, 0.25, edge);
+      float carMask = smoothstep(0.035, 0.13, length((uv - vec2(0.5, 0.33)) * vec2(1.0, 1.5)));
+      vec2 swing = camBlur * carMask;
+      if (radial > 0.0004 || dot(swing, swing) > 1e-7) {
         vec3 acc = col;
         float w = 1.0;
         for (int i = 1; i <= 6; i++) {
           float k = float(i) / 6.0;
-          vec2 suv = uv - fromCenter * k * speedBlur * 0.055 * smoothstep(0.02, 0.25, edge);
-          acc += texture2D(tDiffuse, suv).rgb * (1.0 - k * 0.5);
-          w += 1.0 - k * 0.5;
+          vec2 suv = uv - fromCenter * k * radial - swing * (k - 0.5);
+          float wk = 1.0 - k * 0.5;
+          acc += texture2D(tDiffuse, suv).rgb * wk;
+          w += wk;
         }
         col = acc / w;
       }
@@ -105,6 +111,49 @@ const GradeShader = {
       col += n * grain * (1.0 - luma * 0.6);
       col += (hash(uv * resolution * 1.37) - 0.5) / 255.0;
       gl_FragColor = vec4(max(col, 0.0), 1.0);
+    }`,
+};
+
+// Sun shafts: march from each pixel toward the sun and gather the bright sky
+// seen along the way. Buildings in between leave dark gaps, so the light
+// breaks into rays between them. Runs on the linear HDR image before bloom.
+const SunShaftShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    sunPos: { value: new THREE.Vector2(0.5, 0.5) },
+    strength: { value: 0 },
+    color: { value: new THREE.Color(1, 0.7, 0.4) },
+    aspect: { value: 1 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform vec2 sunPos;
+    uniform float strength, aspect;
+    uniform vec3 color;
+    varying vec2 vUv;
+    void main() {
+      vec3 base = texture2D(tDiffuse, vUv).rgb;
+      if (strength < 0.002) { gl_FragColor = vec4(base, 1.0); return; }
+      vec2 delta = sunPos - vUv;
+      float dist = length(delta * vec2(aspect, 1.0));
+      vec2 stepv = delta * (0.9 / 30.0);
+      vec2 uv = vUv;
+      float illum = 0.0, decay = 1.0;
+      for (int i = 0; i < 30; i++) {
+        uv += stepv;
+        vec3 c = texture2D(tDiffuse, clamp(uv, 0.001, 0.999)).rgb;
+        float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        illum += smoothstep(1.0, 3.0, l) * decay;
+        decay *= 0.965;
+      }
+      illum /= 30.0;
+      // Rays show against what blocks the sun; open sky is already bright and gains little.
+      float baseLum = dot(base, vec3(0.2126, 0.7152, 0.0722));
+      float contrast = 1.0 - 0.8 * smoothstep(0.5, 2.2, baseLum);
+      gl_FragColor = vec4(base + color * illum * strength * contrast * exp(-dist * 2.0), 1.0);
     }`,
 };
 
@@ -148,6 +197,9 @@ export class Pipeline {
       this.ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
       this.composer.addPass(this.ao);
     }
+    this.shafts = new ShaderPass(SunShaftShader);
+    this.shafts.enabled = q.shafts;
+    this.composer.addPass(this.shafts);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.42, 0.62, 0.92);
     this.bloom.enabled = q.bloom;
     this.composer.addPass(this.bloom);
@@ -178,6 +230,7 @@ export class Pipeline {
     this.composer.setPixelRatio(pr);
     this.composer.setSize(w, h);
     this.grade.uniforms.resolution.value.set(w * pr, h * pr);
+    this.shafts.uniforms.aspect.value = w / h;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.onResize?.();

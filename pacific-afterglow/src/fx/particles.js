@@ -167,7 +167,8 @@ export function buildEffects(scene, renderer) {
     smoke: new ParticlePool(scene, 420, { texture: smokeTex, drag: 1.1, gravity: 0.35, grow: 2.6 }),
     dust: new ParticlePool(scene, 200, { texture: smokeTex, drag: 1.6, gravity: -0.2, grow: 2.0 }),
     sparks: new ParticlePool(scene, 160, { texture: glowTex, additive: true, drag: 0.6, gravity: -9.8, grow: -0.6 }),
-    flames: new ParticlePool(scene, 120, { texture: glowTex, additive: true, drag: 3, gravity: 0.5, grow: -0.4 }),
+    flames: new ParticlePool(scene, 160, { texture: glowTex, additive: true, drag: 3, gravity: 0.5, grow: -0.4 }),
+    water: new ParticlePool(scene, 360, { texture: smokeTex, drag: 0.35, gravity: -9.8, grow: 1.6 }),
   };
 }
 

@@ -16,6 +16,8 @@ export class CameraRig {
     this.cine = null;
     this.cineTimer = 0;
     this.baseFov = 55;
+    this.rumble = 0;
+    this.clock = 0;
   }
 
   snap(car) {
@@ -78,6 +80,12 @@ export class CameraRig {
       cam.position.z += (Math.random() - 0.5) * s;
       this.shake = damp(this.shake, 0, 6, dt || 0.016);
     }
+    // Road rumble at speed: smooth, layered sines rather than per-frame jitter.
+    if (this.rumble > 0.0005) {
+      const t = this.clock, r = this.rumble;
+      cam.position.y += (Math.sin(t * 37.0) * 0.6 + Math.sin(t * 61.3) * 0.4) * r;
+      cam.position.x += (Math.sin(t * 29.1 + 1.3) * 0.5 + Math.sin(t * 53.7) * 0.3) * r * 0.6;
+    }
     cam.lookAt(this.look);
   }
 
@@ -99,7 +107,11 @@ export class CameraRig {
     const target = (this.mode === 2 ? 68 : this.mode === 3 ? 40 : this.baseFov) + (this.mode === 3 ? 0 : speedFov + (car.boosting ? 7 : 0));
     this.camera.fov = damp(this.camera.fov, target, 3, dt);
     this.camera.updateProjectionMatrix();
-    if (car.boosting) this.shake = Math.max(this.shake, 0.035);
+    this.clock += dt;
+    const fast = THREE.MathUtils.clamp((Math.abs(car.speed) - 26) / 40, 0, 1);
+    const rough = car.surface === 'road' ? 1 : 2.2; // curbs, grass and sand shake harder
+    this.rumble = this.mode === 3 ? 0 : (fast * 0.02 + (car.boosting ? 0.014 : 0)) * rough * (this.mode === 2 ? 0.6 : 1);
+    if (car.boosting) this.shake = Math.max(this.shake, 0.02);
     this.apply(dt);
   }
 
