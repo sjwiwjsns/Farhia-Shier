@@ -6,12 +6,10 @@ export class Input {
     this.state = { throttle: 0, brake: 0, steer: 0, handbrake: false, nitro: false };
     this.padButtons = new Set();
     this.onPadPress = null;
-    this.touchSteer = null; // -1..1 from the on-screen stick while a thumb is on it
   }
 
   clear() {
     this.keys.clear();
-    this.touchSteer = null;
   }
 
   poll() {
@@ -21,7 +19,6 @@ export class Input {
     let steer = (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0) - (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0);
     let handbrake = k.has('Space');
     let nitro = k.has('ShiftLeft') || k.has('ShiftRight');
-    if (this.touchSteer !== null) steer = this.touchSteer;
 
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     for (const pad of pads) {

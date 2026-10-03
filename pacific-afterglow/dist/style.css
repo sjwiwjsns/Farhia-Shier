@@ -14,13 +14,7 @@
 html,body{overscroll-behavior:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 body.playing{touch-action:none}
 body.playing .touch-controls{display:block;position:absolute;left:0;right:0;bottom:0;height:52%;pointer-events:none;z-index:2}
-.steer-zone{position:absolute;left:0;bottom:0;width:48%;height:100%;pointer-events:auto;touch-action:none;--sx:max(130px,calc(env(safe-area-inset-left) + 120px));--sy:calc(100% - 78px)}
-.steer-hint{position:absolute;left:max(24px,env(safe-area-inset-left));bottom:max(30px,env(safe-area-inset-bottom));width:200px;height:56px;border:1px solid #ffffff2e;border-radius:30px;background:#0b1722a8;display:flex;align-items:center;justify-content:space-between;padding:0 16px;color:#fff3dcb0;font-size:15px;transition:opacity .2s}
-.steer-hint b{font-size:9px;letter-spacing:1.6px;font-weight:600}
-.steer-zone.active .steer-hint{opacity:.25}
-.steer-knob{position:absolute;left:var(--sx);top:var(--sy);width:66px;height:66px;margin:0;border-radius:50%;border:2px solid #fff3dccc;background:radial-gradient(circle,#ff8a5288 0 35%,#ffffff1f 36%);box-shadow:0 4px 18px #0007;transform:translate(-50%,-50%);opacity:0;pointer-events:none;transition:opacity .15s}
-.steer-zone.active .steer-knob{opacity:1}
-.pedals{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));display:flex;align-items:flex-end;gap:12px;pointer-events:auto;touch-action:none}
+.steer-buttons{position:absolute;left:max(20px,env(safe-area-inset-left));bottom:max(20px,env(safe-area-inset-bottom));display:flex;gap:14px;pointer-events:auto;touch-action:none}.touch-steer{width:88px;height:88px;border:1px solid #ffffff4d;border-radius:18px;background:#162a36c4;color:#fff3dc;font-size:30px;line-height:1;touch-action:none;box-shadow:0 4px 16px #0006}.touch-steer.pressed{background:#e9774acc;transform:scale(.96)}.pedals{position:absolute;right:max(18px,env(safe-area-inset-right));bottom:max(20px,env(safe-area-inset-bottom));display:flex;align-items:flex-end;gap:12px;pointer-events:auto;touch-action:none}
 .pedals button{border:1px solid #ffffff4d;border-radius:14px;color:#fff3dc;font-weight:800;letter-spacing:1.2px;touch-action:none;box-shadow:0 4px 16px #0006}
 .touch-gas{width:86px;height:118px;background:#e9774acc;font-size:13px}
 .touch-brake{width:76px;height:80px;background:#162a36cc;font-size:11px}
@@ -32,8 +26,8 @@ body.playing .touch-utils{display:flex;gap:8px;position:absolute;top:max(66px,ca
 .control-strip,.radio,.mission{display:none!important}
 .map-panel{top:max(64px,calc(env(safe-area-inset-top) + 56px));bottom:auto;left:max(3.6%,env(safe-area-inset-left));width:160px}
 .map-wrap{height:96px}.map-caption{margin-top:6px}.map-caption>span:last-child,.health-line{display:none}
-.speed-panel{bottom:auto;top:max(66px,calc(env(safe-area-inset-top) + 58px));right:auto;left:50%;transform:translateX(-50%);width:140px;text-align:center;pointer-events:none}
-.speed-top{justify-content:center;gap:10px}.speed-value{justify-content:center}.speed-value b{font-size:46px}.tach-label,.boost-label{font-size:8px}.tach{margin:4px 0 8px}
+/* Speed as a small pill in the sky above the road, nothing mid-screen. */
+.speed-panel{top:max(14px,calc(env(safe-area-inset-top) + 8px));bottom:auto;left:50%;right:auto;transform:translateX(-50%);width:auto;display:flex;align-items:center;gap:10px;padding:5px 14px 5px 16px;border:1px solid #ffffff24;border-radius:22px;background:#0b1722b0;pointer-events:none;z-index:3}.speed-panel .tach-label,.speed-panel .tach,.speed-panel .boost-label,#hud-car{display:none}.speed-panel .speed-top{order:2}.speed-panel .speed-value{order:1;gap:5px}.speed-panel .boost-track{order:3;width:46px;height:3px;margin:0}.speed-panel .speed-value b{font-size:26px;line-height:1}.speed-panel .speed-value>span{font-size:8px}.speed-panel .speed-top>span:last-child{font-size:11px;min-width:20px;min-height:20px}body.playing .brand-title{display:none}
 .wanted{top:max(112px,calc(env(safe-area-inset-top) + 104px))}
 .race{top:max(112px,calc(env(safe-area-inset-top) + 104px))}
 .toast{top:42%}
@@ -44,11 +38,10 @@ body.playing .touch-utils{display:flex;gap:8px;position:absolute;top:max(66px,ca
 }
 @media (pointer:coarse) and (orientation:portrait){
 body.playing .touch-controls{height:40%}
-.steer-hint{width:112px;padding:0 14px}.steer-hint b{display:none}
+.touch-steer{width:62px;height:76px}.steer-buttons{gap:9px;left:max(14px,env(safe-area-inset-left))}
 .pedals{gap:9px}
-.touch-gas{width:74px;height:104px}.touch-brake{width:64px;height:70px}.touch-small{width:48px;height:44px}
-.speed-panel{top:max(116px,calc(env(safe-area-inset-top) + 108px));left:auto;right:max(4%,env(safe-area-inset-right));transform:none;width:120px;text-align:right}
-.speed-top,.speed-value{justify-content:flex-end}
+.touch-gas{width:72px;height:104px}.touch-brake{width:62px;height:70px}.touch-small{width:46px;height:44px}
+.speed-panel{top:max(112px,calc(env(safe-area-inset-top) + 104px));left:auto;right:max(4%,env(safe-area-inset-right));transform:none}
 .wanted,.race{top:max(214px,calc(env(safe-area-inset-top) + 206px))}
 }
 /* Short landscape screens: no room for the title footer under the car picker. */

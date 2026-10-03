@@ -52,8 +52,8 @@ Rebuild `dist/game.js` after editing anything in `src/`; never edit the bundle.
 - The road shader samples the mirror's render target, so the mirror swaps in a blank
   texture while it renders (otherwise WebGL reports a feedback loop). The mirror is skipped
   while roads are dry and the sea is out of view.
-- Touch: the steering stick in `#steer-zone` writes `input.touchSteer` (null when no thumb
-  is on it); pedals and NOS/DRIFT are ordinary `data-key` buttons, so they multi-touch.
+- Touch: the ◀ ▶ steering buttons, pedals and NOS/DRIFT are ordinary `data-key` buttons
+  (each captures its own pointer), so they multi-touch.
   All touch layout lives in the `(pointer:coarse)` blocks at the end of `style.css`.
 - The player car's body parts are its own geometry copies so dents never touch the cached
   geometry that traffic shares.
@@ -78,7 +78,7 @@ lamp posts; the countdown, GPS route and a complete time trial with the result s
 speeding past police, ramming a cruiser, evading and getting busted; waypoints on the full
 map; audio start on input, radio stations and engine voices; the pause menu, time-of-day and
 quality switches; Easy against Sport handling; an emulated phone in landscape and portrait
-with two-thumb multi-touch (stick plus GAS), the touch buttons and the pause menu; and no
+with two-thumb multi-touch (a steering button plus GAS), the touch buttons and the pause menu; and no
 runtime errors.
 
 Frame rate could not be measured in that software renderer. On High the scene draws about

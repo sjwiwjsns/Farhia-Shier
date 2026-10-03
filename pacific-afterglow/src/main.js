@@ -501,39 +501,7 @@ async function main() {
   addEventListener('resize', () => pipeline.applySize());
 
   // --- Touch -------------------------------------------------------------
-  // Steering: put a thumb anywhere in the left zone and slide it; the stick follows.
-  const zone = $('steer-zone'), knob = $('steer-knob');
-  let steerPointer = null, steerX = 0, steerY = 0;
-  const STICK = 62; // px of travel for full lock
-  zone.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    if (game.paused || steerPointer !== null) return;
-    steerPointer = e.pointerId;
-    zone.setPointerCapture(e.pointerId);
-    const r = zone.getBoundingClientRect();
-    steerX = e.clientX;
-    steerY = e.clientY;
-    zone.classList.add('active');
-    zone.style.setProperty('--sx', `${e.clientX - r.left}px`);
-    zone.style.setProperty('--sy', `${e.clientY - r.top}px`);
-    knob.style.transform = 'translate(-50%, -50%)';
-    input.touchSteer = 0;
-  });
-  zone.addEventListener('pointermove', e => {
-    if (e.pointerId !== steerPointer) return;
-    const dx = THREE.MathUtils.clamp(e.clientX - steerX, -STICK, STICK);
-    // A little dead zone in the middle, then a smooth curve to full lock.
-    const t = Math.max(0, Math.abs(dx) / STICK - 0.08) / 0.92;
-    input.touchSteer = -Math.sign(dx) * Math.pow(t, 1.3);
-    knob.style.transform = `translate(calc(-50% + ${dx}px), -50%)`;
-  });
-  const releaseSteer = e => {
-    if (e.pointerId !== steerPointer) return;
-    steerPointer = null;
-    input.touchSteer = null;
-    zone.classList.remove('active');
-  };
-  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) zone.addEventListener(type, releaseSteer);
+  // Steering and pedals are ordinary data-key buttons (wired above), so they multi-touch.
   $('touch-cam').onclick = () => cameraSwitch();
   $('touch-radio').onclick = () => setRadio(audio.station + 1 >= STATIONS.length ? -1 : audio.station + 1);
   $('touch-reset').onclick = () => { if (game.state === 'play' && !game.paused) resetCar(); };

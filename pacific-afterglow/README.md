@@ -36,8 +36,8 @@ Then open http://localhost:4173. Opening `index.html` straight from disk will no
 | Esc / P | Start | Pause and settings |
 | ← → on the title screen | | Choose a car |
 
-**Phones and tablets:** put your left thumb anywhere on the left side of the screen and
-slide it to steer; hold GAS and BRAKE on the right, with NOS and DRIFT beside them. CAM,
+**Phones and tablets:** steer with the ◀ ▶ buttons on the left; hold GAS and BRAKE on the
+right, with NOS and DRIFT beside them. Speed sits in a small strip at the top of the screen. CAM,
 FM (radio) and ↺ (reset) sit at the top right, and the Ⅱ button pauses and opens settings. The game goes full
 screen in landscape where the browser allows it, and plays in portrait too. Phones start
 on the Performance graphics setting.
