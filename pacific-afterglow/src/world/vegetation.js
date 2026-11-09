@@ -292,11 +292,12 @@ export function buildVegetation(scene, renderer) {
   // Parks: lawns under broadleaf trees and stout palms. Laurel Park is the densest.
   for (const [cx, cz, plan] of parkBlocks()) {
     const half = BLOCK_SIZE / 2 - 10;
-    const n = plan.district === 'laurel' ? 44 : 26;
+    const big = plan.district === 'laurel' && cx > 560 && cx < 1040 && cz > 160 && cz < 480;
+    const n = big ? 44 : 26;
     for (let i = 0; i < n; i++) {
       const x = cx + range(-half, half), z = cz + range(-half, half);
       if (Math.abs(x - cx) < 9 && Math.abs(z - cz) < 9) continue;
-      if (chance(plan.district === 'laurel' ? 0.15 : 0.4)) stout.push([x, z]); else trees.push([x, z, range(0.8, 1.3), 0]);
+      if (chance(big ? 0.15 : 0.4)) stout.push([x, z]); else trees.push([x, z, range(0.8, 1.3), 0]);
     }
   }
   // Street trees along the avenues of the leafier districts.

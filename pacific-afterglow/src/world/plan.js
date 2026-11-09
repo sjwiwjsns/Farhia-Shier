@@ -29,7 +29,7 @@ const MIX = {
   port: [{ warehouse: 5, garage: 1, shops: 1 }, [0.02, 0.14, 0]],
   eastside: [{ stucco: 4, shops: 2, brick: 1, condo: 1 }, [0.16, 0.03, 0]],
   foothills: [{ stucco: 5, shops: 1, motel: 1 }, [0.18, 0.03, 0]],
-  laurel: [{ stucco: 1 }, [1, 0, 0]],
+  laurel: [{ condo: 2, stucco: 2, shops: 2, brick: 1, hotel: 1 }, [0.1, 0.03, 0.04]],
 };
 const DOWNTOWN = [
   [0.75, { tower: 4, office: 2, deco: 1 }],
@@ -57,6 +57,8 @@ export function blockPlan(cx, cz) {
   let kind = 'mix', weights = null;
   if (old) {
     if (typeof old === 'string') kind = old; else weights = old;
+  } else if (district === 'laurel' && cx > 560 && cx < 1040 && cz > 160 && cz < 480) {
+    kind = 'park'; // Laurel Park itself: four blocks of lawn and trees
   } else if (district === 'downtown') {
     const h = hash2(cx * 0.37 + 11, cz * 0.53 + 5);
     if (h < 0.1) kind = dw > 0.7 ? 'plaza-tall' : 'plaza';

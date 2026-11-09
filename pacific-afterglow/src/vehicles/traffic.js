@@ -64,7 +64,7 @@ function perInstanceGlow(mat, key) {
 const trafficPartCache = new Map();
 function trafficParts(geo) {
   if (trafficPartCache.has(geo)) return trafficPartCache.get(geo);
-  const colors = { trim: '#14181a', dark: '#07090a', chrome: '#b9bec2', plate: '#d6d2c4' };
+  const colors = { trim: '#14181a', dark: '#07090a', chrome: '#b9bec2', plate: '#d6d2c4', rev: '#c9c9c2', amber: '#c9741a' };
   const pieces = Object.entries(colors).map(([k, hex]) => {
     const g = geo.parts[k].clone();
     const c = new THREE.Color(hex), n = g.attributes.position.count, arr = new Float32Array(n * 3);
@@ -77,19 +77,8 @@ function trafficParts(geo) {
   return out;
 }
 
-function policePaint() {
-  const mat = paintMaterial(0xffffff, { metalness: 0.35, roughness: 0.32 });
-  mat.onBeforeCompile = sh => {
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying float vBodyY;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBodyY = position.y;');
-    sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vBodyY;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(vec3(0.015), vec3(0.92), smoothstep(0.7, 0.74, vBodyY));');
-  };
-  mat.customProgramCacheKey = () => 'police-paint';
-  return mat;
-}
+// Police livery: black lower body, white upper body and roof.
+const policePaint = seams => paintMaterial(0xffffff, { metalness: 0.35, roughness: 0.32, seams, twoTone: ['0.015', '0.92', '0.7'] });
 
 export class Traffic {
   constructor(scene, renderer) {
@@ -122,7 +111,7 @@ export class Traffic {
       const geoType = typeName === 'taxi' || typeName === 'police' ? 'sedan' : typeName;
       const geo = carGeometry(geoType);
       const cap = count + (PARK_CAP[typeName] || 0);
-      const paint = typeName === 'police' ? policePaint() : paintMaterial(0xffffff, { metalness: 0.45, roughness: 0.38 });
+      const paint = typeName === 'police' ? policePaint(geo.seams) : paintMaterial(0xffffff, { metalness: 0.45, roughness: 0.38, seams: geo.seams });
       const slot = { paint, glass: mats.glass, body: this.bodyMat, head: this.headMat, tail: this.tailMat };
       const parts = {};
       for (const [k, g] of Object.entries(trafficParts(geo))) {
@@ -143,7 +132,7 @@ export class Traffic {
         parts.tail.setColorAt(i, scalar.setScalar(1));
         parts.head.setColorAt(i, scalar.setScalar(1));
       }
-      const tire = new THREE.InstancedMesh(geo.wheel.tire, mats.tire, cap * 4);
+      const tire = new THREE.InstancedMesh(geo.wheel.tire, mats.tireLite, cap * 4);
       const rim = new THREE.InstancedMesh(geo.wheel.rim, mats.rim, cap * 4);
       for (const w of [tire, rim]) {
         w.frustumCulled = false;

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { canvasTexture } from '../core/materials.js';
 import { batchStatic } from '../core/batch.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { roadsX, roadsZ, ROAD_HALF, SLAB_H, PROMENADE, PIERS, BOUNDS, WEST, EAST, NORTH, SOUTH } from './layout.js';
 import { allBlocks } from './plan.js';
 import { instancedChunks } from '../core/grid.js';
@@ -101,17 +102,18 @@ export function buildProps(scene, renderer, extraLamps = [], knock = null) {
   const promenade = [];
   for (let z = BOUNDS.minZ + 16; z <= BOUNDS.maxZ - 16; z += 24) if (PIERS.every(P => Math.abs(z - P.z) > 12)) promenade.push([(PROMENADE.from + PROMENADE.to) / 2, z]);
 
-  const poleGeo = new THREE.CylinderGeometry(0.09, 0.14, 9, 8);
-  poleGeo.translate(0, 4.5, 0);
+  // Pole and arm are one piece of metal, and one draw call.
+  const shaft = new THREE.CylinderGeometry(0.09, 0.14, 9, 8);
+  shaft.translate(0, 4.5, 0);
   const armGeo = new THREE.BoxGeometry(0.1, 0.1, 2.6);
-  armGeo.translate(0, 0, 1.3);
+  armGeo.translate(0, 8.85, 1.3);
+  const poleGeo = mergeGeometries([shaft, armGeo]);
   const headGeo = new THREE.BoxGeometry(0.42, 0.16, 0.9);
   const headMat = new THREE.MeshStandardMaterial({ color: 0x777777, emissive: 0xffd6a0, emissiveIntensity: 0, roughness: 0.3 });
   const at = l => [l[0], l[1]];
   const yawOf = ([, , dx, dz]) => q.setFromAxisAngle(up, Math.atan2(dx, dz));
   const shadowed = mesh => { mesh.castShadow = true; };
   const poles = instancedChunks(scene, lamps, poleGeo, metal, { at, far: 650, setup: shadowed, set: (mesh, i, l) => mesh.setMatrixAt(i, m.compose(v.set(l[0], SLAB_H, l[1]), yawOf(l), one)) });
-  const arms = instancedChunks(scene, lamps, armGeo, metal, { at, far: 650, setup: shadowed, set: (mesh, i, l) => mesh.setMatrixAt(i, m.compose(v.set(l[0], SLAB_H + 8.85, l[1]), yawOf(l), one)) });
   const heads = instancedChunks(scene, lamps, headGeo, headMat, { at, far: 1700, set: (mesh, i, l) => mesh.setMatrixAt(i, m.compose(v.set(l[0] + l[2] * 2.5, SLAB_H + 8.78, l[1] + l[3] * 2.5), yawOf(l), one)) });
 
   const globeMat = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: 0xffcf8a, emissiveIntensity: 0, roughness: 0.2 });
@@ -205,7 +207,7 @@ export function buildProps(scene, renderer, extraLamps = [], knock = null) {
   // Lamp posts fold over when hit hard enough; their light pool and cone go with them.
   if (knock) {
     lamps.forEach(([x, z], i) => knock.add(
-      [poles.refs[i], arms.refs[i], heads.refs[i]],
+      [poles.refs[i], heads.refs[i]],
       [pools.refs[i], beams.refs[i]],
       { type: 'lamp', x, z, y: SLAB_H, r: 0.18, mass: 0.22, solid: 6, kind: 'topple', sparks: true },
     ));

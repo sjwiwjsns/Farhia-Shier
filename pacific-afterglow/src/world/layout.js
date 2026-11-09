@@ -131,7 +131,7 @@ export const DISTRICTS = {
   southbank: ['SOUTHBANK', 'Harbor Heights', 0.4, 0.6],
   northshore: ['NORTHSHORE', 'Lighthouse Point', 0.35, 0.5],
   midtown: ['MIDTOWN', 'Alta Vista', 0.8, 0.3],
-  laurel: ['LAUREL PARK', 'The Gardens', 0.3, 0.9],
+  laurel: ['LAUREL PARK', 'The Gardens', 0.35, 0.9],
   arts: ['ARTS DISTRICT', 'Cannery Row', 0.6, 0.3],
   port: ['PORT DISTRICT', 'Bayfront Docks', 0.55, 0.1],
   marina: ['MARINA', 'South Beach', 0.4, 0.3],
@@ -152,12 +152,11 @@ export function districtKey(cx, cz) {
   if (cz < -1120) return 'northshore';
   if (cz > 1120) return 'port';
   if (cx > 1120) return 'eastside';
-  if (cx > 560 && cx < 1040 && cz > 160 && cz < 480) return 'laurel';
-  if (cz < 0 && cz > -960 && cx > 0) return 'downtown';
-  if (cz <= -960) return 'midtown';
+  if (cz <= -800) return 'midtown';
+  if (cz < 0 && cx > 0) return 'downtown';
   if (cz > 640) return 'arts';
-  if (cz > 160) return cx < 480 ? 'southbank' : 'midtown';
-  return cx < 640 ? 'palm' : 'midtown';
+  if (cx > 480) return 'laurel'; // the garden quarter around Laurel Park
+  return cz > 160 ? 'southbank' : 'palm';
 }
 
 export function districtAt(x, z) {

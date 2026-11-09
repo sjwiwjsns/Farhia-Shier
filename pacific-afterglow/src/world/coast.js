@@ -157,8 +157,10 @@ export function buildCoast(scene, renderer) {
   const oceanBox = reflector.geometry.boundingBox.clone().applyMatrix4(reflector.matrixWorld);
   oceanBox.expandByVector(new THREE.Vector3(0, 2, 0));
   const frustum = new THREE.Frustum(), projView = new THREE.Matrix4();
+  const state = { paused: false };
   const mirrorRender = function (...args) {
     const camera = args[2];
+    if (state.paused) return; // another pass (the car's reflection probe) is rendering
     if (camera && roadUniforms.wetness.value < 0.02) {
       projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       frustum.setFromProjectionMatrix(projView);
@@ -184,6 +186,7 @@ export function buildCoast(scene, renderer) {
   return {
     ocean: reflector,
     pier,
+    mirror: state,
     mirrorHide,
     setReflections(on, scale = 0.5) {
       mirrorEnabled = on;
@@ -404,6 +407,7 @@ function buildPier(scene, renderer) {
   });
   group.add(lampPole, lampHead);
 
+  batchStatic(wheel); // rims, spokes and hub turn together as one mesh
   batchStatic(group, { exclude: [wheel] }); // planks, rails, shops and legs: one draw per material
   scene.add(group);
   const hsl = new THREE.Color();

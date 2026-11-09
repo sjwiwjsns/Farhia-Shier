@@ -53,7 +53,9 @@ function districtLabels() {
     const s = sums[k] || (sums[k] = [0, 0, 0]);
     s[0] += x; s[1] += z; s[2]++;
   }
-  const out = Object.entries(sums).map(([k, [x, z, n]]) => [DISTRICTS[k][0], x / n, z / n]);
+  // Neighbours whose middles line up are nudged apart so their names never collide.
+  const nudge = { eastside: [-40, -420], foothills: [-60, 380], seaview: [0, 60], palm: [40, -40], marina: [60, 0] };
+  const out = Object.entries(sums).map(([k, [x, z, n]]) => [DISTRICTS[k][0], x / n + (nudge[k]?.[0] || 0), z / n + (nudge[k]?.[1] || 0)]);
   out.push([DISTRICTS.ocean[0], -385, 0]);
   return out;
 }
@@ -213,6 +215,12 @@ export class Hud {
       const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
       const W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
       if (W > 0 && H > 0 && (cv.width !== W || cv.height !== H)) { cv.width = W; cv.height = H; }
+      if (this.fitPending && W > 0) {
+        this.fitPending = false;
+        const fit = Math.min(W / (MAP.x1 - MAP.x0), H / (MAP.z1 - MAP.z0));
+        this.view.zoom = Math.min(Math.max(W / (BOUNDS.maxX - MAP.x0 - 260) / fit, 1), 8);
+        this.clampView();
+      }
     }
     const w = cv.width, h = cv.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -232,11 +240,13 @@ export class Hud {
     }
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(this.mapImage, MAP.x0, MAP.z0, MAP.x1 - MAP.x0, MAP.z1 - MAP.z0);
-    // Marker and line sizes are in metres; on the big map they are sized to stay readable.
-    const z = this.expanded ? 3.4 / Math.sqrt(this.view.zoom) : 1;
+    // Markers and lines are drawn in metres; on the big map they are sized to stay the
+    // same on screen at any zoom.
+    const dpr = this.expanded ? cv.width / Math.max(cv.getBoundingClientRect().width, 1) : 1;
+    const z = this.expanded ? (0.95 * dpr) / this.mapScale() : 1;
     if (this.expanded) {
-      ctx.fillStyle = '#fff4dc66';
-      ctx.font = `700 ${Math.round(46 / Math.sqrt(this.view.zoom))}px "Barlow Condensed", Barlow, Arial`;
+      ctx.fillStyle = '#fff4dc88';
+      ctx.font = `700 ${(13 * dpr) / this.mapScale()}px "Barlow Condensed", Barlow, Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       for (const [name, lx, lz] of this.labels) {
@@ -285,7 +295,7 @@ export class Hud {
         ctx.fill();
         if (this.expanded) {
           ctx.fillStyle = '#17212a';
-          ctx.font = `700 ${Math.round(9 * z)}px Barlow, Arial`;
+          ctx.font = `700 ${9 * z}px Barlow, Arial`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(String(i + 1), x, cz + 1);
@@ -308,7 +318,7 @@ export class Hud {
     // Player arrow.
     ctx.translate(car.x, car.z);
     ctx.rotate(-car.heading);
-    const s = this.expanded ? 1.5 * z : 1;
+    const s = this.expanded ? 1.7 * z : 1;
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 8;
     ctx.fillStyle = '#ff8a52';
@@ -321,16 +331,20 @@ export class Hud {
     ctx.fill();
     ctx.restore();
     if (this.expanded) {
+      const u = cv.width / Math.max(cv.getBoundingClientRect().width, 1); // device pixels per CSS pixel
+      ctx.fillStyle = '#0b161ccc';
+      ctx.fillRect(0, 0, w, 40 * u);
+      ctx.fillRect(0, h - 36 * u, 250 * u, 36 * u);
       ctx.fillStyle = '#fff4dccc';
-      ctx.font = '600 20px Barlow, Arial';
+      ctx.font = `600 ${13 * u}px Barlow, Arial`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(game.mode === 'race' ? `${game.raceName} · FOLLOW THE ORANGE LINE` : 'CLICK TO SET A WAYPOINT · SCROLL OR PINCH TO ZOOM · DRAG TO MOVE', 24, 22);
-      ctx.fillStyle = '#5f8dff'; ctx.fillRect(24, h - 44, 14, 14);
-      ctx.fillStyle = '#c9d3d6'; ctx.fillRect(170, h - 44, 14, 14);
+      ctx.fillText(game.mode === 'race' ? `${game.raceName} · FOLLOW THE ORANGE LINE` : 'CLICK TO SET A WAYPOINT · SCROLL OR PINCH TO ZOOM · DRAG TO MOVE', 16 * u, 13 * u);
+      ctx.fillStyle = '#5f8dff'; ctx.fillRect(16 * u, h - 24 * u, 10 * u, 10 * u);
+      ctx.fillStyle = '#c9d3d6'; ctx.fillRect(110 * u, h - 24 * u, 10 * u, 10 * u);
       ctx.fillStyle = '#fff4dccc';
-      ctx.fillText('POLICE', 46, h - 46);
-      ctx.fillText('TRAFFIC', 192, h - 46);
+      ctx.fillText('POLICE', 32 * u, h - 26 * u);
+      ctx.fillText('TRAFFIC', 126 * u, h - 26 * u);
     }
     // North marker on the radar edge.
     if (!this.expanded) {
@@ -346,8 +360,10 @@ export class Hud {
 
   setExpanded(on, car = null) {
     this.expanded = on;
-    // Open on the whole city; zooming in from there keeps the car in view.
+    // The city is taller than it is wide, so the map opens fitted to its width and
+    // centred on the car; zoom out for the whole coast.
     this.view.zoom = 1;
+    this.fitPending = on;
     if (car) { this.view.x = car.x; this.view.z = car.z; }
     this.clampView();
     this.canvas.width = on ? 1100 : 480;

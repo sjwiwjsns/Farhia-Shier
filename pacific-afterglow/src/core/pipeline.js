@@ -8,10 +8,10 @@ import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 
 // Quality tiers. Dynamic resolution keeps the frame rate steady inside each tier.
 export const QUALITY = {
-  ultra: { label: 'Ultra', pixelRatio: 2, msaa: 4, shadow: 4096, shadowRange: 150, ao: true, reflections: 0.75, bloom: true, grade: true, shafts: true },
-  high: { label: 'High', pixelRatio: 1.5, msaa: 4, shadow: 2048, shadowRange: 120, ao: false, reflections: 0.5, bloom: true, grade: true, shafts: true },
-  medium: { label: 'Balanced', pixelRatio: 1.2, msaa: 2, shadow: 2048, shadowRange: 90, ao: false, reflections: 0, bloom: true, grade: true, shafts: true },
-  low: { label: 'Performance', pixelRatio: 1, msaa: 0, shadow: 1024, shadowRange: 70, ao: false, reflections: 0, bloom: false, grade: false, shafts: false },
+  ultra: { label: 'Ultra', pixelRatio: 2, msaa: 4, shadow: 4096, shadowRange: 150, ao: true, reflections: 0.75, bloom: true, grade: true, shafts: true, carProbe: 256, sharpen: 0.3 },
+  high: { label: 'High', pixelRatio: 1.5, msaa: 4, shadow: 2048, shadowRange: 120, ao: false, reflections: 0.5, bloom: true, grade: true, shafts: true, carProbe: 128, sharpen: 0.3 },
+  medium: { label: 'Balanced', pixelRatio: 1.2, msaa: 2, shadow: 2048, shadowRange: 90, ao: false, reflections: 0, bloom: true, grade: true, shafts: true, carProbe: 0, sharpen: 0.22 },
+  low: { label: 'Performance', pixelRatio: 1, msaa: 0, shadow: 1024, shadowRange: 70, ao: false, reflections: 0, bloom: false, grade: false, shafts: false, carProbe: 0, sharpen: 0 },
 };
 
 // GTAO that ignores sky, water, particles and decals in its geometry pass.
@@ -37,6 +37,7 @@ const GradeShader = {
     aberration: { value: 0.0015 },
     vignette: { value: 0.32 },
     grain: { value: 0.035 },
+    sharpen: { value: 0 },
     sunPos: { value: new THREE.Vector2(0.5, 0.5) },
     sunVisible: { value: 0 },
     sunColor: { value: new THREE.Color(1, 0.7, 0.4) },
@@ -48,7 +49,7 @@ const GradeShader = {
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */`
     uniform sampler2D tDiffuse;
-    uniform float time, speedBlur, aberration, vignette, grain, sunVisible, flash, night;
+    uniform float time, speedBlur, aberration, vignette, grain, sunVisible, flash, night, sharpen;
     uniform vec2 resolution, sunPos, camBlur;
     uniform vec3 sunColor;
     varying vec2 vUv;
@@ -66,6 +67,16 @@ const GradeShader = {
       vec2 fromCenter = uv - 0.5;
       float edge = dot(fromCenter, fromCenter);
       vec3 col = sampleCA(uv, aberration * (1.0 + edge * 6.0) + speedBlur * 0.004);
+      // Contrast-adaptive sharpening: restores the fine detail that scaling and anti-aliasing
+      // soften, and backs off on edges that are already strong so nothing rings.
+      if (sharpen > 0.0) {
+        vec2 px = 1.0 / resolution;
+        vec3 n = texture2D(tDiffuse, uv + vec2(0.0, px.y)).rgb, s = texture2D(tDiffuse, uv - vec2(0.0, px.y)).rgb;
+        vec3 e = texture2D(tDiffuse, uv + vec2(px.x, 0.0)).rgb, w = texture2D(tDiffuse, uv - vec2(px.x, 0.0)).rgb;
+        vec3 lo = min(col, min(min(n, s), min(e, w))), hi = max(col, max(max(n, s), max(e, w)));
+        vec3 amount = sqrt(clamp(min(lo, 1.0 - hi) / max(hi, 1e-3), 0.0, 1.0)) * sharpen;
+        col = clamp((col + (col * 4.0 - n - s - e - w) * amount * 0.5), lo, hi);
+      }
       // Motion blur: radial streaks toward the edges at speed, plus a directional smear when
       // the camera swings round. The car itself moves with the camera, so it stays sharp.
       float radial = speedBlur * 0.055 * smoothstep(0.02, 0.25, edge);
@@ -210,6 +221,7 @@ export class Pipeline {
       this.grade.uniforms.grain.value = 0;
       this.grade.uniforms.aberration.value = 0;
     }
+    this.grade.uniforms.sharpen.value = q.sharpen;
     this.composer.addPass(this.grade);
     this.applySize();
   }
@@ -252,6 +264,13 @@ export class Pipeline {
       this.scale = next;
       this.applySize();
     }
+  }
+
+  // The shadow map is drawn once per frame, by whichever pass renders first. Without this
+  // every nested render (ocean mirror, reflection probe, ambient occlusion) would redraw it.
+  beginFrame() {
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
   }
 
   render() {

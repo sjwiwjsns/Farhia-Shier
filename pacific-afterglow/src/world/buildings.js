@@ -32,6 +32,45 @@ uniform float nightFactor;
 uniform float worldTime;
 float fGlass; float fRough; float fMetal; vec3 fEmit; vec3 fTilt;
 
+#ifndef FACADE_LOW
+// Interior mapping: every window looks into its own room. The view ray is followed from
+// the glass to whichever of the room's surfaces it meets first (back wall, side walls,
+// floor or ceiling), so the rooms shift in parallax as you drive past, with no geometry.
+//   cell: position inside the window's bay in metres; size: bay width and storey height
+//   seed: per-room random; office: 0 homes, 1 open-plan floors
+vec3 paRoom(vec2 cell, vec2 size, vec3 V, vec3 T, vec3 N, float seed, float office, out float ceiling) {
+  vec3 r = vec3(dot(V, T), V.y, max(-dot(V, N), 0.03));
+  float depth = mix(4.2, 9.0, office);
+  float tx = abs(r.x) > 1e-4 ? (r.x > 0.0 ? size.x - cell.x : -cell.x) / r.x : 1e5;
+  float ty = abs(r.y) > 1e-4 ? (r.y > 0.0 ? size.y - cell.y : -cell.y) / r.y : 1e5;
+  float tz = depth / r.z;
+  float t = min(tx, min(ty, tz));
+  vec3 hit = vec3(cell, 0.0) + r * t;
+  vec3 paintCol = mix(mix(vec3(0.78, 0.72, 0.6), vec3(0.6, 0.66, 0.7), step(0.4, seed)), vec3(0.72, 0.58, 0.5), step(0.75, seed));
+  paintCol = mix(paintCol, vec3(0.74, 0.75, 0.76), office);
+  vec3 col;
+  ceiling = 0.0;
+  if (t == tz) {
+    // Back wall, with a doorway, a shelf or a picture on it.
+    vec2 w = hit.xy / size;
+    col = paintCol * (0.8 + 0.2 * w.y);
+    float thing = step(0.3, seed) * step(abs(w.x - 0.3 - seed * 0.4), 0.14) * step(w.y, 0.72);
+    col = mix(col, paintCol * mix(0.35, 0.6, fract(seed * 7.0)), thing * (1.0 - office));
+    col = mix(col, vec3(0.2, 0.22, 0.25), office * step(abs(fract(w.x * 2.0 + seed) - 0.5), 0.08));
+  } else if (t == ty) {
+    if (r.y > 0.0) {
+      // Ceiling with its light fitting (a strip in offices, a lamp at home).
+      vec2 c = vec2(hit.x / size.x, hit.z / depth);
+      float fitting = mix(1.0 - smoothstep(0.1, 0.22, length((c - vec2(0.5, 0.45)) * vec2(1.0, 1.6))), step(abs(fract(c.y * 3.0) - 0.5), 0.12), office);
+      col = vec3(0.86, 0.85, 0.82);
+      ceiling = fitting;
+    } else col = mix(vec3(0.3, 0.2, 0.13), vec3(0.22, 0.24, 0.27), office) * (0.8 + 0.2 * step(0.5, fract(hit.x * 1.5)));
+  } else col = paintCol * 0.82;
+  // Light falls off toward the back of the room.
+  return col * (1.0 - 0.45 * hit.z / depth);
+}
+#endif
+
 void paFacade(inout vec3 albedo) {
   fGlass = 0.0; fRough = 0.86; fMetal = 0.0; fEmit = vec3(0.0); fTilt = vec3(0.0);
   vec3 an = abs(vFacN);
@@ -266,12 +305,28 @@ void paFacade(inout vec3 albedo) {
   // Interior light: ceiling glow near the top of the window, blinds on some.
   float wy = clamp((fv - v0) / (v1 - v0), 0.0, 1.0);
   float interior = 0.55 + 0.45 * smoothstep(0.2, 1.0, wy);
-  interior *= mix(1.0, 0.65 + 0.35 * step(0.5, fract(wy * 11.0)), step(0.7, h2));
+  float blinds = mix(1.0, 0.65 + 0.35 * step(0.5, fract(wy * 11.0)), step(0.7, h2));
+  interior *= blinds;
+  vec3 roomCol = vec3(interior);
+  #ifndef FACADE_LOW
+    // Close up, the flat glow gives way to a real room behind the glass.
+    vec3 toPix = vPaWorld - cameraPosition;
+    float roomFade = (1.0 - smoothstep(70.0, 150.0, length(toPix))) * (1.0 - step(0.5, spandrel));
+    if (roomFade > 0.01) {
+      float ceilGlow;
+      vec3 room = paRoom(vec2(fu * cellW, fv * floorH), vec2(cellW, floorH), normalize(toPix),
+        an.x > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0), vFacN, h1, office, ceilGlow);
+      // Lit rooms glow from the ceiling fitting; dark ones only show by day.
+      vec3 litRoom = room * (0.55 + ceilGlow * 2.2) * 1.5 * blinds;
+      roomCol = mix(roomCol, litRoom, roomFade);
+      albedo = mix(albedo, mix(glassCol, room * 0.34 * blinds, 0.6), win * roomFade * (1.0 - nightFactor * 0.8));
+    }
+  #endif
   vec3 lightCol = mix(mix(vec3(1.0, 0.7, 0.4), vec3(1.0, 0.88, 0.7), step(0.45, h2)), vec3(0.72, 0.85, 1.0), step(0.8, h2));
   // TVs flicker in a few homes late at night.
   float tv = step(0.94, h3) * step(2.5, style) * (0.6 + 0.4 * sin(worldTime * 7.0 + h1 * 50.0));
   lightCol = mix(lightCol, vec3(0.55, 0.65, 1.0) * (0.6 + tv), step(0.94, h3) * step(2.5, style));
-  fEmit = lightCol * win * lit * interior * (0.5 + h2 * 0.9) * nightFactor * 0.8;
+  fEmit = lightCol * roomCol * win * lit * (0.5 + h2 * 0.9) * nightFactor * 0.8;
   fTilt = vec3(h1 - 0.5, 0.0, h2 - 0.5) * 0.045 * glassAll;
 }
 `;

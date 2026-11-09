@@ -8,6 +8,8 @@ import { buildVegetation, leafSun } from './world/vegetation.js';
 import { buildProps, makeBeamMaterial, signalState } from './world/props.js';
 import { RACES, spawn, CHECKPOINT_RADIUS, nearestRoadX, nearestRoadZ, ROAD_HALF, SHORE_X, PIERS, SLAB_H, districtAt } from './world/layout.js';
 import { BoxGrid, PointGrid, updateLod, lodStats } from './core/grid.js';
+import { CarProbe } from './core/probe.js';
+import { carMaterials } from './vehicles/carModel.js';
 import { PlayerCar, CARS, CAR_ORDER, HANDLING } from './vehicles/player.js';
 import { Knockables } from './world/knockables.js';
 import { buildFurniture } from './world/furniture.js';
@@ -70,6 +72,14 @@ async function main() {
   let carKey = store.get('pacific-car');
   if (!CARS[carKey]) carKey = 'coupe';
   const player = new PlayerCar(scene, renderer, carKey);
+  // Live reflections of the street on the player's paint, glass and brightwork.
+  const probe = new CarProbe(renderer, scene);
+  {
+    const m = carMaterials(renderer);
+    m.glassClear.userData.envBoost = 1.25;
+    m.chrome.userData.envBoost = 1.2;
+    probe.attach([player.paint, m.glassClear, m.chrome, m.rim]);
+  }
   const traffic = new Traffic(scene, renderer);
   const pedestrians = new Pedestrians(scene);
   const fx = buildEffects(scene, renderer);
@@ -140,6 +150,7 @@ async function main() {
     const q = pipeline.quality;
     atmosphere.setShadowQuality(q.shadow, q.shadowRange);
     coast.setReflections(q.reflections > 0, q.reflections);
+    probe.setSize(q.carProbe);
     $('quality').value = name;
   }
   pipeline.onResize = () => coast.resize(pipeline.quality.reflections);
@@ -819,6 +830,7 @@ async function main() {
 
   // --- Frame loop -------------------------------------------------------
   const clock = new THREE.Clock();
+  const probeHide = [player.group];
   let lodTimer = 0;
   renderer.info.autoReset = false;
   function frame() {
@@ -839,7 +851,7 @@ async function main() {
         rig.orbit(player, game.time);
       }
     }
-    player.setLights(atmosphere.lampFactor, player.brake > 0 && player.speed > 0.5, player.gear < 0);
+    player.setLights(atmosphere.lampFactor, player.gear < 0 ? player.throttle > 0 : player.brake > 0 && player.speed > 0.5, player.gear < 0 && game.state === 'play', dt);
 
     // Shadows and sky follow a point a little ahead of the car.
     const focus = tmpV.set(player.x - Math.sin(player.heading) * pipeline.quality.shadowRange * 0.35, 0, player.z - Math.cos(player.heading) * pipeline.quality.shadowRange * 0.35);
@@ -907,6 +919,17 @@ async function main() {
     g.night.value = atmosphere.nightFactor;
     if (pipeline.bloom) pipeline.bloom.strength = 0.36 + atmosphere.lampFactor * 0.22;
 
+    pipeline.beginFrame();
+    if (probe.size && !game.paused) {
+      probe.update(player.group.position, probeHide, Math.min(1, scene.environmentIntensity * 1.9), draw => {
+        const sky = atmosphere.sky.material.uniforms.skyDisc;
+        coast.mirror.paused = true;
+        sky.value = 0; // the sun is already a light; its disc would give every panel a second highlight
+        draw();
+        sky.value = 1;
+        coast.mirror.paused = false;
+      });
+    }
     pipeline.render();
     if (game.state === 'play' && game.frame % 2 === 0) hud.update(player, game, traffic, atmosphere, wanted);
     audio.setSiren(game.state === 'play' ? wanted.sirenLevel(player) : 0);

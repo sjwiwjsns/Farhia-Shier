@@ -34,7 +34,7 @@ export const CAR_TYPES = {
       taper: 0.3, exp: 2.6, roof: [0.33, 0.64],
     },
     spoiler: true,
-    exhaust: [-0.42, 0.42],
+    exhaust: [-0.42, 0.42], leather: '#5a3a26', shirt: '#2b3038',
   },
   // Long hood, short deck, boxy flanks: a seventies-style muscle car.
   muscle: {
@@ -51,7 +51,7 @@ export const CAR_TYPES = {
       width: [[0, 0.8], [0.5, 0.8], [1, 0.73]],
       taper: 0.22, exp: 3.2, roof: [0.3, 0.6],
     },
-    scoop: true,
+    scoop: true, roundLamps: true, grille: 3, plainTail: true, leather: '#17181b', shirt: '#5b2a22',
     ducktail: true,
     exhaust: [-0.56, -0.44, 0.44, 0.56],
   },
@@ -70,7 +70,7 @@ export const CAR_TYPES = {
       width: [[0, 0.78], [0.4, 0.74], [1, 0.62]],
       taper: 0.32, exp: 2.4, roof: [0.38, 0.62],
     },
-    wing: true,
+    wing: true, leather: '#7a1c16', shirt: '#1d1f24',
     intakes: true,
     exhaust: [-0.13, 0.13],
   },
@@ -88,6 +88,7 @@ export const CAR_TYPES = {
       width: [[0, 0.8], [0.4, 0.82], [1, 0.76]],
       taper: 0.24, exp: 2.8, roof: [0.28, 0.72],
     },
+    grille: 3, plainTail: true,
   },
   suv: {
     length: 4.75, wheelR: 0.39, wheelW: 0.27, track: 0.85, wheels: [0.18, 0.79],
@@ -103,7 +104,7 @@ export const CAR_TYPES = {
       width: [[0, 0.86], [0.5, 0.88], [1, 0.84]],
       taper: 0.15, exp: 4, roof: [0.2, 0.96],
     },
-    rails: true,
+    rails: true, grille: 4, plainTail: true, cPillar: 0.8,
   },
   hatch: {
     length: 4.05, wheelR: 0.32, wheelW: 0.22, track: 0.78, wheels: [0.19, 0.8],
@@ -119,6 +120,7 @@ export const CAR_TYPES = {
       width: [[0, 0.79], [0.5, 0.8], [1, 0.76]],
       taper: 0.2, exp: 3.2, roof: [0.3, 0.92],
     },
+    plainTail: true, cPillar: 0.82,
   },
   pickup: {
     length: 5.4, wheelR: 0.41, wheelW: 0.28, track: 0.88, wheels: [0.17, 0.75],
@@ -134,7 +136,7 @@ export const CAR_TYPES = {
       width: [[0, 0.9], [1, 0.9]],
       taper: 0.12, exp: 4.5, roof: [0.28, 0.94],
     },
-    bed: true,
+    bed: true, grille: 4, plainTail: true,
   },
 };
 
@@ -193,6 +195,40 @@ function loft(sections, ring, { closed = true, caps = true } = {}) {
   return g;
 }
 
+// A closed-ring loft whose quads are sorted into separate geometries by classify(row, column).
+// All of them share one set of smooth normals, so the pieces read as a single surface.
+function splitLoft(sections, ring, classify) {
+  const pos = [];
+  for (const sct of sections) pos.push(...sct);
+  const idx = [], groups = [];
+  for (let i = 0; i < sections.length - 1; i++) {
+    for (let k = 0; k < ring; k++) {
+      const k1 = (k + 1) % ring;
+      const a = i * ring + k, b = i * ring + k1, c = (i + 1) * ring + k, d = (i + 1) * ring + k1;
+      const quad = [a, b, c, b, d, c];
+      idx.push(...quad);
+      // Both sides of the car get the same treatment: mirror the upper half's columns.
+      const g = classify(i, k < ring / 2 ? k : k);
+      (groups[g] || (groups[g] = [])).push(...quad);
+    }
+  }
+  const full = new THREE.BufferGeometry();
+  full.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  full.setIndex(idx);
+  full.computeVertexNormals();
+  const out = [];
+  for (let g = 0; g < 3; g++) {
+    const part = new THREE.BufferGeometry();
+    part.setAttribute('position', full.attributes.position);
+    part.setAttribute('normal', full.attributes.normal);
+    part.setIndex(groups[g] || []);
+    const flat = part.toNonIndexed();
+    flat.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(flat.attributes.position.count * 2), 2));
+    out.push(flat);
+  }
+  return out;
+}
+
 function box(w, h, d, x, y, z, rx = 0, ry = 0, rz = 0) {
   const g = new THREE.BoxGeometry(w, h, d);
   if (rx || ry || rz) g.applyMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(rx, ry, rz)));
@@ -234,6 +270,21 @@ export function carGeometry(typeName) {
   const ring = hero ? 40 : 26;
   const N = hero ? 64 : 40;
 
+  // Body half-width, swelling a little over each wheel like real fenders do.
+  const bodyW = s => {
+    let w = smooth(T.body.width, s);
+    for (const wz of wheelZ) w *= 1 + 0.03 * Math.exp(-(((zAt(s) - wz) / 0.5) ** 2));
+    return w;
+  };
+  // x of the body side at height y (the same superellipse the loft uses), so parts sit on the skin.
+  const sideX = (s, y) => {
+    const y0 = smooth(T.body.bottom, s), y1 = smooth(T.body.top, s);
+    const mid = (y0 + y1) / 2, half = (y1 - y0) / 2, e = 2 / T.body.exp;
+    const sn = Math.sign(y - mid) * Math.min(1, Math.abs(y - mid) / half) ** (1 / e);
+    return bodyW(s) * Math.sqrt(Math.max(0, 1 - sn * sn)) ** e * (1 - T.body.taper * Math.max(0, sn));
+  };
+  const sOf = z => (z - zf) / L;
+
   // Lower body with arches.
   const bodySections = [];
   for (let i = 0; i <= N; i++) {
@@ -245,14 +296,16 @@ export function carGeometry(typeName) {
     }
     const y1 = smooth(T.body.top, s);
     const out = [];
-    section(smooth(T.body.width, s), Math.min(y0, y1 - 0.08), y1, T.body.exp, T.body.taper, ring, out, z);
+    section(bodyW(s), Math.min(y0, y1 - 0.08), y1, T.body.exp, T.body.taper, ring, out, z);
     bodySections.push(out);
   }
   const paint = [loft(bodySections, ring)];
 
-  // Greenhouse (glass) and a painted roof skin over it.
+  // Greenhouse: one lofted surface, split quad by quad into glass panes and the frame
+  // around them (painted roof, A and C pillars, a dark B pillar), so pillars and roof sit
+  // flush with the glass the way a real car's do.
   const C = T.cabin;
-  const cabinSections = [], roofSections = [];
+  const cabinSections = [];
   const cabinTopAt = cs => smooth(C.top, cs);
   const CN = hero ? 36 : 20;
   for (let i = 0; i <= CN; i++) {
@@ -263,16 +316,89 @@ export function carGeometry(typeName) {
     const out = [];
     section(w, y0, y1, C.exp, C.taper, ring, out, z);
     cabinSections.push(out);
-    if (cs >= C.roof[0] && cs <= C.roof[1]) {
-      const r = [];
-      section(w * 1.01, y0, y1 + 0.012, C.exp, C.taper, 14, r, z, [0.2 * Math.PI, 0.8 * Math.PI]);
-      roofSections.push(r);
+  }
+  const fourDoor = typeName === 'sedan' || typeName === 'suv' || typeName === 'hatch';
+  const bPillar = (C.roof[0] + C.roof[1]) / 2;
+  const k0 = Math.round(ring * 0.1), k1 = ring / 2 - k0; // the roof is the arc of quads k0..k1-1
+  const shoulder = (k, n) => (k >= k0 - n && k < k0) || (k >= k1 && k < k1 + n);
+  const cabin = splitLoft(cabinSections, ring, (i, k) => {
+    const cs = (i + 0.5) / CN;
+    const onRoof = cs >= C.roof[0] && cs <= C.roof[1];
+    if (k >= k0 && k < k1) return onRoof ? 1 : 0; // roof panel, or windshield and rear glass
+    if (cs < C.roof[0]) return shoulder(k, 1) ? 1 : 0; // A pillars
+    if (cs > C.roof[1]) return shoulder(k, hero ? 2 : 1) ? 1 : 0; // C pillars
+    if (shoulder(k, 1)) return 1; // roof rails above the doors
+    if (Math.abs(cs - bPillar) < 0.62 / CN) return 2; // B pillar
+    if (T.cPillar && Math.abs(cs - T.cPillar) < 0.62 / CN) return 1;
+    return 0;
+  });
+  const glass = [cabin[0]];
+  paint.push(cabin[1]);
+  const tinted = (g, hex) => {
+    const n = g.index ? g.toNonIndexed() : g;
+    const c = new THREE.Color(hex), count = n.attributes.position.count, arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
+    n.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    if (!n.attributes.uv) n.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(count * 2), 2));
+    return n;
+  };
+  // The player's cars have a cabin you can see into: a dark sill over the body, dashboard,
+  // steering wheel, two seats and a driver, under a headliner that closes the roof from inside.
+  const interior = [];
+  if (hero) {
+    const sill = [], liner = [];
+    for (let i = 0; i <= CN; i++) {
+      const cs = i / CN, sc = C.from + cs * (C.to - C.from), z = zAt(sc);
+      const yb = smooth(T.body.top, sc);
+      const w = smooth(C.width, cs);
+      const o = [];
+      section(w * 0.97, yb - 0.03, Math.min(yb + 0.035, Math.max(cabinTopAt(cs) - 0.01, yb - 0.01)), 4, 0, 16, o, z);
+      sill.push(o);
+      if (cs >= C.roof[0] - 0.03 && cs <= C.roof[1] + 0.03) {
+        const r = [];
+        section(w * 0.985, yb - 0.06, Math.max(cabinTopAt(cs), yb) - 0.004, C.exp, C.taper, 12, r, z, [0.24 * Math.PI, 0.76 * Math.PI]);
+        liner.push(r);
+      }
+    }
+    interior.push(tinted(loft(sill, 16), '#0c0d0f'));
+    if (liner.length > 1) interior.push(tinted(loft(liner, 12, { closed: false, caps: false }), '#17181b'));
+    const leather = T.leather || '#1b1c20';
+    const headCs = C.roof[0] + 0.1, headS = C.from + headCs * (C.to - C.from), headZ = zAt(headS);
+    const belt = smooth(T.body.top, headS), roofY = cabinTopAt(headCs);
+    const headY = Math.min(roofY - 0.19, belt + 0.26);
+    const seatX = smooth(C.width, headCs) * 0.47;
+    for (const side of [-1, 1]) {
+      interior.push(tinted(box(0.46, headY - belt + 0.12, 0.13, side * seatX, (headY + belt) / 2 - 0.06, headZ + 0.2, -0.12), leather));
+      interior.push(tinted(box(0.24, 0.17, 0.09, side * seatX, headY + 0.06, headZ + 0.2), leather));
+    }
+    // Dashboard and steering wheel (left-hand drive: the driver sits on -X).
+    const dashS = C.from + 0.2 * (C.to - C.from), dashZ = zAt(dashS), dashY = smooth(T.body.top, dashS);
+    interior.push(tinted(box(smooth(C.width, 0.2) * 1.7, 0.07, 0.24, 0, dashY + 0.005, dashZ + 0.04), '#101114'));
+    interior.push(tinted(box(0.3, 0.05, 0.12, -seatX, dashY + 0.05, dashZ + 0.1, 0.25), '#0b0b0d'));
+    const wheelRim = new THREE.TorusGeometry(0.17, 0.016, 8, 24);
+    wheelRim.rotateX(-0.42);
+    wheelRim.translate(-seatX, dashY + 0.07, dashZ + 0.32);
+    interior.push(tinted(wheelRim, '#050506'));
+    interior.push(tinted(box(0.3, 0.025, 0.03, -seatX, dashY + 0.07, dashZ + 0.32, -0.42), '#0a0a0b'));
+    // Driver: shoulders, neck, head and hair, with arms reaching for the wheel.
+    interior.push(tinted(box(0.42, 0.3, 0.2, -seatX, headY - 0.3, headZ + 0.08, -0.1), T.shirt || '#23272e'));
+    const neck = new THREE.CylinderGeometry(0.05, 0.055, 0.1, 8);
+    neck.translate(-seatX, headY - 0.12, headZ + 0.07);
+    interior.push(tinted(neck, '#b98562'));
+    const head = new THREE.SphereGeometry(0.108, 14, 10);
+    head.scale(0.92, 1.08, 1);
+    head.translate(-seatX, headY, headZ + 0.06);
+    interior.push(tinted(head, '#c08a66'));
+    const hair = new THREE.SphereGeometry(0.114, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.52);
+    hair.scale(0.94, 1.08, 1.02);
+    hair.translate(-seatX, headY + 0.012, headZ + 0.075);
+    interior.push(tinted(hair, '#1a1410'));
+    for (const side of [-1, 1]) {
+      const a = new THREE.Vector3(-seatX + side * 0.2, headY - 0.22, headZ + 0.04), b = new THREE.Vector3(-seatX + side * 0.15, dashY + 0.1, dashZ + 0.33);
+      interior.push(tinted(strut(a, b, 0.045), T.shirt || '#23272e'));
     }
   }
-  const glass = [loft(cabinSections, ring)];
-  if (roofSections.length > 1) paint.push(loft(roofSections, 14, { closed: false, caps: false }));
 
-  // Pillars: A pillars along the windshield edges, B pillars at the door line.
   const trim = [], chrome = [], head = [], tail = [], dark = [];
   const cabinPoint = (cs, side, up) => {
     const s = C.from + cs * (C.to - C.from);
@@ -281,38 +407,89 @@ export function carGeometry(typeName) {
     const w = smooth(C.width, cs) * (1 - C.taper * (up ? 0.92 : 0)) * 0.97;
     return new THREE.Vector3(side * w, up ? y1 - 0.02 : y0, zAt(s));
   };
+  trim.push(cabin[2]);
   for (const side of [-1, 1]) {
-    paint.push(strut(cabinPoint(0.02, side, false), cabinPoint(C.roof[0] + 0.01, side, true), 0.045));
-    const bs = (C.roof[0] + C.roof[1]) / 2;
-    trim.push(strut(cabinPoint(bs, side, false), cabinPoint(bs, side, true), 0.05));
     // Mirrors.
     const mp = cabinPoint(0.1, side, false);
     paint.push(box(0.16, 0.1, 0.12, mp.x + side * 0.14, mp.y + 0.06, mp.z));
     trim.push(box(0.1, 0.025, 0.04, mp.x + side * 0.05, mp.y + 0.03, mp.z));
+    chrome.push(box(0.13, 0.075, 0.008, mp.x + side * 0.14, mp.y + 0.06, mp.z + 0.062));
   }
+  // Wipers parked at the foot of the windshield.
+  {
+    const ws = C.from + 0.035 * (C.to - C.from), wy = smooth(T.body.top, ws) + 0.012, wz = zAt(ws);
+    for (const [x, len, tilt] of [[-0.2, 0.52, 0.1], [0.3, 0.46, 0.1]]) dark.push(box(len, 0.012, 0.022, x, wy, wz, 0, tilt, 0));
+  }
+  // Door seams are drawn by the paint shader from these lines; handles sit by each door's rear edge.
+  const bsDoor = (C.roof[0] + C.roof[1]) / 2;
+  const zB = zAt(C.from + bsDoor * (C.to - C.from));
+  const doorF = wheelZ[0] + archR + 0.14;
+  const doors = fourDoor ? [doorF, zB, wheelZ[1] - archR - 0.04] : [doorF, Math.min(zB + 0.42, wheelZ[1] - archR - 0.05), 99];
+  const sillY = smooth(T.body.bottom, 0.5) + 0.1;
+  const handleAt = zEdge => {
+    const sH = sOf(zEdge - 0.16), yH = smooth(T.body.top, sH) - 0.12;
+    for (const side of [-1, 1]) chrome.push(box(0.022, 0.028, 0.15, side * (sideX(sH, yH) + 0.006), yH, zEdge - 0.16));
+  };
+  handleAt(doors[1]);
+  if (fourDoor) handleAt(doors[2]);
+  const hoodZ = zAt(C.from) - 0.07;
+  const hoodW = bodyW(0.15) * 0.78;
+  const trunkZ = !fourDoor && !T.bed && !T.wing ? zAt(C.to) + 0.07 : typeName === 'sedan' ? zAt(C.to) + 0.07 : 99;
+  const seams = { a: new THREE.Vector4(doors[0], doors[1], doors[2], sillY), b: new THREE.Vector4(hoodZ, trunkZ, hoodW, T.intakes ? 1 : 0) };
 
   const sW = s => smooth(T.body.width, s);
   // Front: headlight clusters, grille, splitter.
   // Headlights sit in the nose fascia, just proud of the surface.
   const noseMid = (smooth(T.body.bottom, 0.02) + smooth(T.body.top, 0.02)) / 2;
   const noseTop = smooth(T.body.top, 0.02);
+  const rev = [], amber = [];
+  const round = (r, depth, x, y, z, seg = hero ? 18 : 10) => cyl(r, r, depth, seg, x, y, z, 'z');
   for (const side of [-1, 1]) {
     const hx = side * sW(0.02) * 0.62;
     const hy = noseMid + (noseTop - noseMid) * 0.45;
-    dark.push(box(0.44, 0.1, 0.06, hx, hy, zf + 0.045, 0, side * 0.32, 0));
-    head.push(box(0.38, 0.055, 0.05, hx, hy + 0.005, zf + 0.03, 0, side * 0.32, 0));
-    head.push(box(0.34, 0.016, 0.03, hx, hy + 0.06, zf + 0.04, 0, side * 0.32, 0));
+    const yaw = side * 0.32;
+    // A dark housing with two projector lamps, a daytime running strip above and an amber corner lamp.
+    dark.push(box(0.46, 0.115, 0.06, hx, hy, zf + 0.045, 0, yaw, 0));
+    if (T.roundLamps) {
+      for (const dx of [-0.105, 0.105]) {
+        chrome.push(round(0.062, 0.03, hx + dx, hy, zf + 0.022 + Math.abs(dx - side * 0.1) * 0.12));
+        head.push(round(0.05, 0.034, hx + dx, hy, zf + 0.018 + Math.abs(dx - side * 0.1) * 0.12));
+      }
+    } else {
+      head.push(box(0.38, 0.05, 0.05, hx, hy - 0.004, zf + 0.03, 0, yaw, 0));
+      for (const dx of [-0.1, 0.07]) head.push(round(0.036, 0.03, hx + dx, hy - 0.004, zf + 0.012 + (side * dx > 0 ? 0.035 : 0)));
+      head.push(box(0.34, 0.014, 0.03, hx, hy + 0.058, zf + 0.04, 0, yaw, 0));
+    }
+    amber.push(box(0.07, 0.035, 0.05, side * sW(0.03) * 0.93, hy - 0.01, zf + 0.12, 0, side * 0.9, 0));
   }
-  dark.push(box(sW(0.03) * 1.05, 0.18, 0.12, 0, smooth(T.body.bottom, 0.02) + 0.17, zf + 0.06));
+  // Grille: a dark mouth, with bright bars on the cars that wear chrome.
+  const grilleY = smooth(T.body.bottom, 0.02) + 0.17;
+  dark.push(box(sW(0.03) * 1.05, 0.18, 0.12, 0, grilleY, zf + 0.06));
+  if (T.grille) for (let k = 0; k < T.grille; k++) chrome.push(box(sW(0.03) * 0.98, 0.012, 0.02, 0, grilleY - 0.06 + (k * 0.12) / Math.max(T.grille - 1, 1), zf - 0.002));
   trim.push(box(sW(0.03) * 1.7, 0.04, 0.22, 0, smooth(T.body.bottom, 0.02) + 0.02, zf + 0.1));
-  // Rear: full-width light bar, diffuser, exhausts.
+  // Rear: light clusters (a full-width bar on the sportier cars), reverse and turn lamps, diffuser, exhausts.
   const rearY = smooth(T.body.top, 0.97);
-  tail.push(box(sW(0.98) * 1.72, 0.05, 0.06, 0, rearY - 0.08, -zf - 0.02));
-  for (const side of [-1, 1]) tail.push(box(0.36, 0.11, 0.06, side * sW(0.98) * 0.68, rearY - 0.12, -zf - 0.03));
+  if (!T.plainTail) tail.push(box(sW(0.98) * 1.72, 0.05, 0.06, 0, rearY - 0.08, -zf - 0.02));
+  for (const side of [-1, 1]) {
+    const tx = side * sW(0.98) * 0.68;
+    tail.push(box(0.36, T.plainTail ? 0.15 : 0.11, 0.06, tx, rearY - 0.12, -zf - 0.03));
+    rev.push(box(0.09, 0.05, 0.06, tx - side * 0.24, rearY - (T.plainTail ? 0.16 : 0.13), -zf - 0.026));
+    amber.push(box(0.08, 0.05, 0.06, tx + side * 0.2, rearY - (T.plainTail ? 0.16 : 0.13), -zf - 0.034));
+  }
+  // High-mounted brake light at the top of the rear glass.
+  {
+    const p = cabinPoint(Math.min(C.roof[1] + 0.02, 0.97), 0, true);
+    tail.push(box(0.3, 0.018, 0.03, 0, p.y - 0.02, p.z + 0.03));
+  }
   dark.push(box(sW(0.98) * 1.5, 0.16, 0.1, 0, smooth(T.body.bottom, 0.98) + 0.06, -zf - 0.05));
   const exhaustY = smooth(T.body.bottom, 0.98) + 0.03;
   const exhausts = (T.exhaust || [-0.42, 0.42]).map(x => new THREE.Vector3(x, exhaustY, -zf + 0.06));
-  for (const e of exhausts) chrome.push(cyl(0.05, 0.05, 0.14, 12, e.x, e.y, -zf + 0.02, 'z'));
+  for (const e of exhausts) {
+    chrome.push(cyl(0.05, 0.05, 0.14, 12, e.x, e.y, -zf + 0.02, 'z'));
+    dark.push(cyl(0.04, 0.04, 0.02, 10, e.x, e.y, -zf + 0.085, 'z'));
+  }
+  // A small roof aerial on the everyday cars.
+  if (fourDoor || typeName === 'coupe') dark.push(box(0.035, 0.05, 0.16, 0, cabinTopAt(C.roof[1] - 0.06) + 0.03, zAt(C.from + (C.roof[1] - 0.06) * (C.to - C.from)), -0.25));
   // Side skirts.
   for (const side of [-1, 1]) {
     const len = (wheelZ[1] - wheelZ[0]) - archR * 2;
@@ -369,7 +546,11 @@ export function carGeometry(typeName) {
       head: toNonIndexed(head),
       tail: toNonIndexed(tail),
       plate: toNonIndexed(plate),
+      rev: toNonIndexed(rev),
+      amber: toNonIndexed(amber),
+      ...(hero ? { interior: mergeGeometries(interior) } : {}),
     },
+    seams,
     wheels: [],
     wheel: wheelGeometry(T.wheelR, T.wheelW, !hero),
     exhausts,
@@ -417,6 +598,20 @@ function wheelGeometry(R, W, lite = false) {
   hub.rotateZ(Math.PI / 2);
   hub.translate(face + 0.01, 0, 0);
   rimParts.push(hub);
+  if (!lite) {
+    // Five wheel nuts round a centre cap.
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const nut = new THREE.CylinderGeometry(0.011, 0.011, 0.02, 6);
+      nut.rotateZ(Math.PI / 2);
+      nut.translate(face + 0.04, Math.cos(a) * 0.048, Math.sin(a) * 0.048);
+      rimParts.push(nut);
+    }
+    const cap = new THREE.CylinderGeometry(0.028, 0.032, 0.02, 12);
+    cap.rotateZ(Math.PI / 2);
+    cap.translate(face + 0.042, 0, 0);
+    rimParts.push(cap);
+  }
   const rim = mergeGeometries(rimParts.map(g => (g.index ? g.toNonIndexed() : g)));
   const disc = new THREE.CylinderGeometry(rimR * 0.82, rimR * 0.82, 0.03, lite ? 10 : 24);
   disc.rotateZ(Math.PI / 2);
@@ -445,24 +640,119 @@ export function plateTexture(renderer, text = 'PCFC 7X') {
   return t;
 }
 
-// Shared materials. Paint uses a clearcoat over metallic flake for that showroom look.
+// Shared materials. Paint is a clearcoat over metallic flake; its shader also draws the
+// shut lines between panels (doors, hood, trunk) from the car's own measurements, adds
+// sparkle to the flake up close and a film of road grime toward the sills.
+//   seams: { a: vec4(door z1, z2, z3, sill y), b: vec4(hood z, trunk z, hood half-width, -) }
+//   twoTone: [lower colour, upper colour, split height] for police livery.
 export function paintMaterial(color, opts = {}) {
-  return new THREE.MeshPhysicalMaterial({
-    color, metalness: 0.55, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.035, envMapIntensity: 1.1, ...opts,
+  const { seams = null, twoTone = null, ...rest } = opts;
+  const mat = new THREE.MeshPhysicalMaterial({
+    color, metalness: 0.55, roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.035, envMapIntensity: 1.1, ...rest,
   });
+  const uniforms = {
+    uSeamA: { value: seams ? seams.a : new THREE.Vector4(99, 99, 99, 0) },
+    uSeamB: { value: seams ? seams.b : new THREE.Vector4(99, 99, 0, 0) },
+  };
+  mat.userData.seamUniforms = uniforms;
+  mat.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vCarPos;\nvarying vec3 vCarN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvCarPos = position;\nvCarN = normal;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vCarPos; varying vec3 vCarN;
+        uniform vec4 uSeamA; uniform vec4 uSeamB;
+        float paSeam; float paFlakeFade;
+        float carHash(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+        float carLine(float d, float aa) { return 1.0 - smoothstep(0.0035, 0.0035 + aa, abs(d)); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          ${twoTone ? `diffuseColor.rgb = mix(vec3(${twoTone[0]}), vec3(${twoTone[1]}), smoothstep(${twoTone[2]}, ${twoTone[2]} + 0.04, vCarPos.y));` : ''}
+          // Derivatives first, before any branching.
+          float aaZ = max(fwidth(vCarPos.z), 1e-4), aaX = max(fwidth(vCarPos.x), 1e-4);
+          paFlakeFade = 1.0 - smoothstep(0.0015, 0.006, aaZ + aaX + fwidth(vCarPos.y));
+          vec3 nO = normalize(vCarN);
+          float side = smoothstep(0.45, 0.7, abs(nO.x)) * step(uSeamA.w, vCarPos.y);
+          float seam = side * max(carLine(vCarPos.z - uSeamA.x, aaZ), max(carLine(vCarPos.z - uSeamA.y, aaZ), carLine(vCarPos.z - uSeamA.z, aaZ)));
+          float top = smoothstep(0.45, 0.7, nO.y);
+          float inHood = step(abs(vCarPos.x), uSeamB.z + 0.004);
+          seam = max(seam, top * inHood * max(carLine(vCarPos.z - uSeamB.x, aaZ), carLine(vCarPos.z - uSeamB.y, aaZ)));
+          seam = max(seam, top * step(vCarPos.z, uSeamB.x) * carLine(abs(vCarPos.x) - uSeamB.z, aaX));
+          seam = max(seam, top * step(uSeamB.y, vCarPos.z) * step(vCarPos.z, 90.0) * carLine(abs(vCarPos.x) - uSeamB.z, aaX));
+          // Lines thinner than a pixel fade out instead of shimmering.
+          paSeam = seam * (1.0 - smoothstep(0.012, 0.04, max(aaZ, aaX)));
+          diffuseColor.rgb *= 1.0 - paSeam * 0.8;
+          // Road film: duller and dustier low on the body.
+          float grime = (1.0 - smoothstep(0.18, 0.55, vCarPos.y)) * (0.55 + 0.45 * carHash(floor(vCarPos * 40.0)));
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.72 + vec3(0.035, 0.032, 0.028), grime * 0.4);
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.85, paSeam);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          // Metallic flake: each flake tilts the base coat's normal a little; the clearcoat above stays smooth.
+          vec3 fp = floor(vCarPos * 1400.0);
+          vec3 fl = vec3(carHash(fp), carHash(fp + 7.3), carHash(fp + 13.7)) - 0.5;
+          normal = normalize(normal + fl * 0.16 * paFlakeFade * metalnessFactor);
+        }`)
+      .replace('#include <opaque_fragment>', `outgoingLight *= 1.0 - paSeam * 0.85;
+        #include <opaque_fragment>`);
+  };
+  mat.customProgramCacheKey = () => 'car-paint' + (twoTone ? '-two' : '');
+  return mat;
 }
 
+// Tyres: tread grooves and sipes drawn from the lathe's own UVs, with a matte sidewall.
+function tyreMaterial(lite) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.92, metalness: 0 });
+  const [v0, v1] = lite ? [0.4, 0.6] : [3 / 7, 4 / 7];
+  mat.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vTyreUv;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvTyreUv = uv;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vTyreUv;\nfloat paTread;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          float t = (vTyreUv.y - ${v0.toFixed(4)}) / ${(v1 - v0).toFixed(4)};
+          float aa = max(fwidth(t), 1e-4), aaU = max(fwidth(vTyreUv.x * 44.0), 1e-4);
+          float onTread = step(0.0, t) * step(t, 1.0);
+          float groove = 0.0;
+          for (int i = 1; i <= 3; i++) groove = max(groove, 1.0 - smoothstep(0.045, 0.045 + aa, abs(t - float(i) * 0.25)));
+          float sipe = (1.0 - smoothstep(0.1, 0.1 + aaU, abs(fract(vTyreUv.x * 44.0 + t * 0.6) - 0.5))) * step(0.1, abs(t - 0.5));
+          paTread = onTread * max(groove, sipe * 0.7) * (1.0 - smoothstep(0.15, 0.5, aa));
+          diffuseColor.rgb *= 1.0 - paTread * 0.75;
+          // The sidewall is a little greyer than the tread, with a raised ring.
+          float wall = 1.0 - onTread;
+          float ring = wall * (1.0 - smoothstep(0.012, 0.02, abs(abs(t - 0.5) - 1.6)));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.105, 0.105, 0.11), wall * 0.6) * (1.0 + ring * 0.6);
+        }`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 1.0, paTread);');
+  };
+  mat.customProgramCacheKey = () => 'car-tyre' + (lite ? '-lite' : '');
+  return mat;
+}
+
+let sharedMaterials = null;
 export function carMaterials(renderer) {
+  if (sharedMaterials) return sharedMaterials;
   const plateTex = plateTexture(renderer);
-  return {
+  sharedMaterials = {
     glass: new THREE.MeshPhysicalMaterial({ color: 0x0c1215, metalness: 0.1, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.4 }),
+    // The player's glass is tinted but see-through, so the cabin shows.
+    glassClear: new THREE.MeshPhysicalMaterial({ color: 0x0b1316, metalness: 0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.8, transparent: true, opacity: 0.8 }),
+    interior: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0, side: THREE.DoubleSide }),
     trim: new THREE.MeshStandardMaterial({ color: 0x14181a, roughness: 0.45, metalness: 0.4 }),
     dark: new THREE.MeshStandardMaterial({ color: 0x07090a, roughness: 0.6, metalness: 0.2 }),
     chrome: new THREE.MeshStandardMaterial({ color: 0xd8dcdf, roughness: 0.12, metalness: 1 }),
     plate: new THREE.MeshStandardMaterial({ map: plateTex, roughness: 0.5 }),
-    tire: new THREE.MeshStandardMaterial({ color: 0x141516, roughness: 0.92, metalness: 0 }),
+    tire: tyreMaterial(false),
+    tireLite: tyreMaterial(true),
     rim: new THREE.MeshStandardMaterial({ color: 0xb9bec2, roughness: 0.22, metalness: 1 }),
     disc: new THREE.MeshStandardMaterial({ color: 0x5c5e60, roughness: 0.4, metalness: 0.9 }),
     caliper: new THREE.MeshStandardMaterial({ color: 0xc23a22, roughness: 0.4, metalness: 0.3 }),
   };
+  return sharedMaterials;
 }

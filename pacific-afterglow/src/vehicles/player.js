@@ -108,11 +108,14 @@ export class PlayerCar {
     this.group = new THREE.Group();
     this.body = new THREE.Group();
     this.group.add(this.body);
-    this.lightMats = { head: [], tail: [] };
+    this.lightMats = { head: [], tail: [], amber: [] };
     for (let i = 0; i < 2; i++) {
       this.lightMats.head.push(new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff4dc, emissiveIntensity: 2, roughness: 0.2 }));
       this.lightMats.tail.push(new THREE.MeshStandardMaterial({ color: 0x400806, emissive: 0xff2412, emissiveIntensity: 1.5, roughness: 0.3 }));
+      this.lightMats.amber.push(new THREE.MeshStandardMaterial({ color: 0x6b3a08, emissive: 0xff8a14, emissiveIntensity: 0, roughness: 0.3 }));
     }
+    this.revMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b2, emissive: 0xffffff, emissiveIntensity: 0, roughness: 0.25 });
+    this.signal = { side: 0, hold: 0, hazard: 0, clock: 0 };
 
     // Headlights: two real spotlights for night driving plus faint volumetric beams.
     this.spots = [];
@@ -159,7 +162,10 @@ export class PlayerCar {
     }
     this.exhausts = geo.exhausts.map(e => e.clone());
     const m = this.mats;
-    const slot = { paint: this.paint, glass: m.glass, trim: m.trim, dark: m.dark, chrome: m.chrome, plate: m.plate };
+    const slot = { paint: this.paint, glass: m.glassClear, trim: m.trim, dark: m.dark, chrome: m.chrome, plate: m.plate, rev: this.revMat, interior: m.interior };
+    // The paint shader draws this body's shut lines.
+    this.paint.userData.seamUniforms.uSeamA.value = geo.seams.a;
+    this.paint.userData.seamUniforms.uSeamB.value = geo.seams.b;
     // Every body part is our own copy, so dents never touch the shared geometry cache.
     this.deformables = [];
     const deformable = geometry => {
@@ -173,7 +179,7 @@ export class PlayerCar {
       return d;
     };
     for (const [k, g] of Object.entries(geo.parts)) {
-      if (k === 'head' || k === 'tail') {
+      if (k === 'head' || k === 'tail' || k === 'amber') {
         splitSides(g).forEach((half, i) => {
           const mesh = new THREE.Mesh(half, this.lightMats[k][i]);
           mesh.userData.own = true;
@@ -184,8 +190,10 @@ export class PlayerCar {
       }
       const mesh = new THREE.Mesh(g.clone(), slot[k]);
       mesh.userData.own = true;
-      mesh.castShadow = true;
+      mesh.castShadow = k !== 'interior';
       mesh.receiveShadow = true;
+      if (k === 'glass') mesh.renderOrder = 4; // tinted glass goes over the cabin behind it
+      if (k === 'interior') mesh.layers.set(1); // too small to matter in reflections
       this.body.add(mesh);
       const d = deformable(mesh.geometry);
       if (k === 'paint') {
@@ -202,7 +210,7 @@ export class PlayerCar {
       pivot.add(mount);
       const spin = new THREE.Group();
       mount.add(spin);
-      for (const [part, mat] of [['tire', m.tire], ['rim', m.rim], ['disc', m.disc]]) {
+      for (const [part, mat] of [['tire', m.tire], ['rim', m.rim], ['disc', m.disc]]) { // hero wheels
         const mesh = new THREE.Mesh(geo.wheel[part], mat);
         mesh.castShadow = true;
         spin.add(mesh);
@@ -767,7 +775,7 @@ export class PlayerCar {
   }
 
   // Lighting state, called every frame.
-  setLights(night, braking) {
+  setLights(night, braking, reversing = false, dt = 0.016) {
     const headOn = Math.max(night, 0.15);
     this.lightMats.head.forEach((mat, i) => {
       const ok = !this.broken.head[i];
@@ -779,6 +787,21 @@ export class PlayerCar {
     this.lightMats.tail.forEach((mat, i) => {
       mat.emissiveIntensity = this.broken.tail[i] ? 0.05 : braking ? 6 : 1.1 + night * 1.2;
     });
+    this.revMat.emissiveIntensity = reversing ? 5 : 0;
+    // Turn signals: a turn held at town speeds flicks the indicator on that side; a heavy
+    // crash sets the hazards flashing for a few seconds.
+    const sg = this.signal;
+    sg.clock += dt;
+    const turning = Math.abs(this.steer) > 0.3 && this.kmh > 4 && this.kmh < 75 ? Math.sign(this.steer) : 0;
+    sg.hold = turning ? sg.hold + dt : Math.max(0, sg.hold - dt * 2);
+    if (sg.hold > 0.35 && turning) sg.side = turning;
+    else if (sg.hold <= 0) sg.side = 0;
+    if (this.impact > 9) sg.hazard = 5;
+    sg.hazard = Math.max(0, sg.hazard - dt);
+    const blink = (sg.clock * 1.6) % 1 < 0.5 ? 7 : 0;
+    // Steering left is positive; the left lamps are the -X half (index 0).
+    this.lightMats.amber[0].emissiveIntensity = sg.hazard > 0 || sg.side > 0 ? blink : 0;
+    this.lightMats.amber[1].emissiveIntensity = sg.hazard > 0 || sg.side < 0 ? blink : 0;
     this.beamMat.uniforms.intensity.value = night * 0.06;
   }
 
