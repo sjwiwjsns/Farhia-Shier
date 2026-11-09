@@ -1,9 +1,12 @@
 import * as THREE from 'three';
 import { proceduralMaterial } from '../core/materials.js';
 import {
-  roadsX, roadsZ, ROAD_HALF, SIDEWALK, SLAB_H, blockCentersX, blockCentersZ, BLOCK_SIZE,
-  PROMENADE, BEACH_START, BOUNDS,
+  roadsX, roadsZ, ROAD_HALF, SIDEWALK, SLAB_H, BLOCK_SIZE,
+  PROMENADE, BEACH_START, BOUNDS, WEST, EAST, NORTH, SOUTH,
 } from './layout.js';
+import { allBlocks } from './plan.js';
+
+const GX = `${WEST.toFixed(1)}, ${(roadsX.length - 1).toFixed(1)}`, GZ = `${NORTH.toFixed(1)}, ${(roadsZ.length - 1).toFixed(1)}`;
 
 // Roads are one large plane whose shader paints asphalt, lane markings,
 // crosswalks and stop lines analytically, so they are sharp at any distance.
@@ -13,8 +16,8 @@ float paRoadNearest(float v, float start, float maxIndex) {
 }
 // Returns paint mask (rgb = color, a = coverage) and fills asphalt wear.
 vec4 paRoadMarkings(vec2 p, out float wear, out float onRoad) {
-  float dx = p.x - paRoadNearest(p.x, -320.0, 4.0);
-  float dz = p.y - paRoadNearest(p.y, -480.0, 6.0);
+  float dx = p.x - paRoadNearest(p.x, ${GX});
+  float dz = p.y - paRoadNearest(p.y, ${GZ});
   float adx = abs(dx), adz = abs(dz);
   bool inX = adx < ${ROAD_HALF.toFixed(1)};
   bool inZ = adz < ${ROAD_HALF.toFixed(1)};
@@ -64,8 +67,8 @@ const ROAD_DETAIL_GLSL = /* glsl */`
 float paRoadDetail(vec2 p, float fw, out float manhole) {
   manhole = 0.0;
   float skid = 0.0;
-  float dx = p.x - paRoadNearest(p.x, -320.0, 4.0);
-  float dz = p.y - paRoadNearest(p.y, -480.0, 6.0);
+  float dx = p.x - paRoadNearest(p.x, ${GX});
+  float dz = p.y - paRoadNearest(p.y, ${GZ});
   for (int axis = 0; axis < 2; axis++) {
     float a = axis == 0 ? dx : dz;
     float b = axis == 0 ? dz : dx;
@@ -294,9 +297,9 @@ function makeTerrainMaterial() {
 
 export function terrainHeight(x, z) {
   // Hills ring the east, north and south of the city; the ocean is west.
-  const east = Math.max(0, x - 372);
-  const north = Math.max(0, -z - 560);
-  const south = Math.max(0, z - 560);
+  const east = Math.max(0, x - (EAST + 52));
+  const north = Math.max(0, NORTH - 80 - z);
+  const south = Math.max(0, z - (SOUTH + 80));
   const out = Math.hypot(east, Math.max(north, south) * 0.9);
   if (x < -360) return -40;
   if (out <= 0) return -0.6;
@@ -310,7 +313,7 @@ export function buildGround(scene, renderer) {
   const roadMat = makeRoadMaterial();
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), roadMat);
   ground.rotation.x = -Math.PI / 2;
-  const gx0 = BEACH_START - 1, gx1 = 400, gz0 = -620, gz1 = 620;
+  const gx0 = BEACH_START - 1, gx1 = EAST + 80, gz0 = NORTH - 140, gz1 = SOUTH + 140;
   ground.scale.set(gx1 - gx0, gz1 - gz0, 1);
   ground.position.set((gx0 + gx1) / 2, 0, (gz0 + gz1) / 2);
   ground.receiveShadow = true;
@@ -318,22 +321,15 @@ export function buildGround(scene, renderer) {
 
   // Blocks and sidewalks as instanced boxes with a per-instance lot type.
   const slabs = [];
-  const parks = new Set(['-80,80', '240,400']);
-  const parking = new Set(['-240,-400', '80,240']);
-  const plazas = new Set(['80,-80', '240,-240']);
-  for (const x of blockCentersX) for (const z of blockCentersZ) {
-    const k = `${x},${z}`;
-    const lot = parks.has(k) ? 1 : parking.has(k) ? 2 : plazas.has(k) ? 4 : 0;
-    slabs.push([x, z, BLOCK_SIZE, BLOCK_SIZE, lot]);
-  }
-  const zLen = gz1 - gz0;
+  for (const [x, z, plan] of allBlocks()) slabs.push([x, z, BLOCK_SIZE, BLOCK_SIZE, plan.lot]);
+  const zLen = gz1 - gz0, zMid = (gz0 + gz1) / 2;
   // Beach promenade boardwalk and the palm verge west of Ocean Drive.
-  slabs.push([(PROMENADE.from + PROMENADE.to) / 2, 0, PROMENADE.from - PROMENADE.to, zLen, 3]);
-  slabs.push([(PROMENADE.to + BEACH_START) / 2, 0, PROMENADE.to - BEACH_START, zLen, 1]);
+  slabs.push([(PROMENADE.from + PROMENADE.to) / 2, zMid, PROMENADE.from - PROMENADE.to, zLen, 3]);
+  slabs.push([(PROMENADE.to + BEACH_START) / 2, zMid, PROMENADE.to - BEACH_START, zLen, 1]);
   // Outer sidewalks and verges.
   const east = roadsX[roadsX.length - 1] + ROAD_HALF;
-  slabs.push([east + SIDEWALK / 2, 0, SIDEWALK, zLen, 0]);
-  slabs.push([(east + SIDEWALK + 400) / 2, 0, 400 - east - SIDEWALK, zLen, 1]);
+  slabs.push([east + SIDEWALK / 2, zMid, SIDEWALK, zLen, 0]);
+  slabs.push([(east + SIDEWALK + gx1) / 2, zMid, gx1 - east - SIDEWALK, zLen, 1]);
   const north = roadsZ[0] - ROAD_HALF, south = roadsZ[roadsZ.length - 1] + ROAD_HALF;
   for (const [edge, dir] of [[north, -1], [south, 1]]) {
     const w = east - PROMENADE.from;
@@ -362,8 +358,8 @@ export function buildGround(scene, renderer) {
   const sand = new THREE.Mesh(sandGeo, makeSandMaterial());
   sand.rotation.x = -Math.PI / 2;
   const sx0 = -470, sx1 = BEACH_START;
-  sand.scale.set(sx1 - sx0, 1400, 1);
-  sand.position.set((sx0 + sx1) / 2, 0, 0);
+  sand.scale.set(sx1 - sx0, zLen + 320, 1);
+  sand.position.set((sx0 + sx1) / 2, 0, zMid);
   sand.updateMatrixWorld();
   const pos = sandGeo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
@@ -375,12 +371,14 @@ export function buildGround(scene, renderer) {
   scene.add(sand);
 
   // Hills around the city.
-  const tGeo = new THREE.PlaneGeometry(2600, 2600, 220, 220);
+  const tx0 = -420, tx1 = EAST + 1500, tz0 = NORTH - 1400, tz1 = SOUTH + 1400;
+  const tGeo = new THREE.PlaneGeometry(tx1 - tx0, tz1 - tz0, Math.round((tx1 - tx0) / 22), Math.round((tz1 - tz0) / 22));
   tGeo.rotateX(-Math.PI / 2);
   const tp = tGeo.attributes.position;
   for (let i = 0; i < tp.count; i++) {
-    const x = tp.getX(i) + 500, z = tp.getZ(i);
+    const x = tp.getX(i) + (tx0 + tx1) / 2, z = tp.getZ(i) + (tz0 + tz1) / 2;
     tp.setX(i, x);
+    tp.setZ(i, z);
     tp.setY(i, terrainHeight(x, z));
   }
   tGeo.computeVertexNormals();

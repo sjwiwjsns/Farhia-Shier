@@ -3,7 +3,12 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasTexture, proceduralMaterial } from '../core/materials.js';
 import { atmoUniforms } from './atmosphere.js';
 import { rand, range, chance } from '../core/rng.js';
-import { roadsX, roadsZ, ROAD_HALF, PROMENADE, BEACH_START, PIER, BLOCK_SIZE, BUS_STOPS, busStopPos } from './layout.js';
+import {
+  roadsX, roadsZ, ROAD_HALF, PROMENADE, BEACH_START, PIERS, BLOCK_SIZE, BUS_STOPS, busStopPos, BOUNDS, WEST, EAST, NORTH, SOUTH,
+  blockCentersZ, blockCenterX, districtKey, DISTRICTS,
+} from './layout.js';
+import { parkBlocks } from './plan.js';
+import { PointGrid, instancedChunks } from '../core/grid.js';
 import { terrainHeight } from './ground.js';
 
 export const leafSun = { value: new THREE.Color() };
@@ -247,55 +252,70 @@ export function buildVegetation(scene, renderer) {
   const canopyMat = leafMaterial(leafTex, 'canopy', { vertexColors: true });
   const barkMat = trunkMaterial();
   const skirtMat = new THREE.MeshStandardMaterial({ color: 0x5c4a35, roughness: 1 });
+  const nearCross = (z, pad = 6) => roadsZ.some(r => Math.abs(z - r) < ROAD_HALF + pad);
+  const nearAvenue = (x, pad = 6) => roadsX.some(r => Math.abs(x - r) < ROAD_HALF + pad);
+  const stops = new PointGrid(32);
+  for (const b of BUS_STOPS) { const [x, z] = busStopPos(b); stops.add({ x, z }); }
+  const nearStop = (x, z) => stops.near(x, z, 8, p => Math.abs(p.x - x) < 4 && Math.abs(p.z - z) < 6);
 
   // Two palm species: tall slender ones that line the avenues, and stout ones with big crowns.
   const tall = [], stout = [], trees = [];
-  for (let z = -545; z <= 545; z += 18) {
-    if (Math.abs(z - PIER.z) < 14) continue;
+  // The whole beachfront.
+  for (let z = BOUNDS.minZ + 11; z <= BOUNDS.maxZ - 11; z += 18) {
+    if (PIERS.some(P => Math.abs(z - P.z) < 14)) continue;
     tall.push([(PROMENADE.to + BEACH_START) / 2 + range(-1.5, 1.5), z + range(-2, 2)]);
     if (chance(0.3)) stout.push([BEACH_START - range(6, 14), z + range(-4, 4)]);
   }
-  for (const z of [-320, 0]) {
-    for (let x = -300; x < 330; x += 28) {
-      if (roadsX.some(r => Math.abs(x - r) < ROAD_HALF + 6)) continue;
+  // Sunset Blvd and Palm St are palm-lined all the way across town; two more near the coast.
+  for (const [z, xMax] of [[-320, EAST + 10], [0, EAST + 10], [-1280, 640], [1280, 640]]) {
+    for (let x = WEST + 20; x < xMax; x += 28) {
+      if (nearAvenue(x)) continue;
       for (const s of [-1, 1]) tall.push([x + range(-1, 1), z + s * (ROAD_HALF + 1.6)]);
     }
   }
-  for (let z = -470; z < 480; z += 32) {
-    if (roadsZ.some(r => Math.abs(z - r) < ROAD_HALF + 6)) continue;
-    tall.push([-320 + ROAD_HALF + 1.6, z + range(-1, 1)]);
+  // The city side of Ocean Drive.
+  for (let z = NORTH + 10; z < SOUTH; z += 32) {
+    if (nearCross(z)) continue;
+    tall.push([WEST + ROAD_HALF + 1.6, z + range(-1, 1)]);
   }
-  // Palms march down both sides of Seaview Ave and Aurelio Blvd too, clear of the bus stops.
-  const stops = BUS_STOPS.map(b => busStopPos(b));
-  for (const x of [-160, 0]) for (let z = -506; z < 520; z += 34) {
-    if (roadsZ.some(r => Math.abs(z - r) < ROAD_HALF + 7)) continue;
+  // Palms march down both sides of Seaview Ave, Aurelio Blvd and Centro Blvd, clear of the bus stops.
+  const palmAvenues = [-160, 0, 640];
+  for (const x of palmAvenues) for (let z = NORTH - 26; z < SOUTH + 40; z += 34) {
+    if (nearCross(z, 7)) continue;
     for (const side of [-1, 1]) {
       // A little further back than the lamp line (ROAD_HALF + 0.9), so trunks and posts don't crowd.
       const px = x + side * (ROAD_HALF + 2.7), pz = z + (side > 0 ? 17 : 0);
-      if (stops.some(([sx, sz]) => Math.abs(sx - px) < 4 && Math.abs(sz - pz) < 6)) continue;
-      if (roadsZ.some(r => Math.abs(pz - r) < ROAD_HALF + 7)) continue;
+      if (nearStop(px, pz) || nearCross(pz, 7)) continue;
       tall.push([px + range(-0.3, 0.3), pz + range(-1, 1)]);
     }
   }
-  // Parks.
-  for (const [cx, cz] of [[-80, 80], [240, 400]]) {
+  // Parks: lawns under broadleaf trees and stout palms. Laurel Park is the densest.
+  for (const [cx, cz, plan] of parkBlocks()) {
     const half = BLOCK_SIZE / 2 - 10;
-    for (let i = 0; i < 26; i++) {
+    const n = plan.district === 'laurel' ? 44 : 26;
+    for (let i = 0; i < n; i++) {
       const x = cx + range(-half, half), z = cz + range(-half, half);
       if (Math.abs(x - cx) < 9 && Math.abs(z - cz) < 9) continue;
-      if (chance(0.4)) stout.push([x, z]); else trees.push([x, z, range(0.8, 1.3), 0]);
+      if (chance(plan.district === 'laurel' ? 0.15 : 0.4)) stout.push([x, z]); else trees.push([x, z, range(0.8, 1.3), 0]);
     }
   }
-  // Street trees on the residential avenues.
-  for (const x of [0, 160, 320]) for (let z = 110; z < 470; z += 24) {
-    if (roadsZ.some(r => Math.abs(z - r) < ROAD_HALF + 6)) continue;
-    for (const s of [-1, 1]) if (!(x === 320 && s > 0)) trees.push([x + s * (ROAD_HALF + 1.8), z, range(0.6, 0.85), 0]);
+  // Street trees along the avenues of the leafier districts.
+  for (const x of roadsX) {
+    if (x === WEST || (palmAvenues.includes(x) && x !== 0)) continue;
+    for (const cz of blockCentersZ) for (const s of [-1, 1]) {
+      if (x === EAST && s > 0) continue;
+      if (DISTRICTS[districtKey(blockCenterX(x + s * 40), cz)][3] < 0.5) continue;
+      for (let z = cz - 50; z <= cz + 50; z += 25) {
+        const px = x + s * (ROAD_HALF + 1.8);
+        if (!nearStop(px, z)) trees.push([px, z, range(0.6, 0.85), 0]);
+      }
+    }
   }
   // Hills.
-  for (let i = 0; i < 520; i++) {
+  for (let i = 0; i < 2600; i++) {
     const region = rand();
-    const x = region < 0.56 ? range(380, 1100) : range(-300, 700);
-    const z = region < 0.56 ? range(-1100, 1100) : region < 0.78 ? range(-1000, -575) : range(575, 1000);
+    const x = region < 0.5 ? range(EAST + 60, EAST + 900) : range(-300, EAST + 500);
+    const z = region < 0.5 ? range(NORTH - 700, SOUTH + 700) : region < 0.75 ? range(NORTH - 640, NORTH - 95) : range(SOUTH + 95, SOUTH + 640);
     const y = terrainHeight(x, z);
     if (y < 2) continue;
     trees.push([x, z, range(0.7, 1.6), y]);
@@ -303,37 +323,30 @@ export function buildVegetation(scene, renderer) {
 
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
+  const at = t => [t[0], t[1]];
+  const shadows = mesh => { mesh.castShadow = true; mesh.receiveShadow = true; };
 
   function palms(list, { heightRange, thickness, bend, crown, skirt }) {
     const trunkGeo = trunkGeometry(bend);
     const crownGeo = crownGeometry(crown.count, crown.length, crown.width);
-    const trunks = new THREE.InstancedMesh(trunkGeo, barkMat, list.length);
-    const crowns = new THREE.InstancedMesh(crownGeo, frondMat, list.length);
-    const skirts = skirt ? new THREE.InstancedMesh(new THREE.CylinderGeometry(0.9, 0.55, 1, 8), skirtMat, list.length) : null;
-    list.forEach(([x, z], i) => {
+    // Each palm's height, lean and crown are decided once so its three parts agree.
+    const recs = list.map(([x, z]) => {
       const h = range(...heightRange);
-      q.setFromAxisAngle(up, rand() * Math.PI * 2);
-      s.set(thickness, h, thickness);
-      v.set(x, -0.1, z);
-      m.compose(v, q, s);
-      trunks.setMatrixAt(i, m);
-      const top = new THREE.Vector3(bend, 1, 0).applyMatrix4(m);
+      const base = new THREE.Matrix4().compose(v.set(x, -0.1, z), q.setFromAxisAngle(up, rand() * Math.PI * 2), s.set(thickness, h, thickness));
+      const top = new THREE.Vector3(bend, 1, 0).applyMatrix4(base);
       const cs = range(0.85, 1.15);
-      q.setFromAxisAngle(up, rand() * Math.PI * 2);
-      m.compose(top, q, s.set(cs, cs, cs));
-      crowns.setMatrixAt(i, m);
-      if (skirts) {
-        m.compose(top.clone().add(new THREE.Vector3(0, -1.6, 0)), q, s.set(1, 2.6, 1));
-        skirts.setMatrixAt(i, m);
-      }
+      const crownQ = new THREE.Quaternion().setFromAxisAngle(up, rand() * Math.PI * 2);
       trunkColliders.push({ x, z, r: 0.45 });
+      return { x, z, base, top, cs, crownQ };
     });
-    trunks.castShadow = crowns.castShadow = true;
-    trunks.receiveShadow = crowns.receiveShadow = true;
-    scene.add(trunks, crowns);
-    if (skirts) {
-      skirts.castShadow = true;
-      scene.add(skirts);
+    const where = r => [r.x, r.z];
+    instancedChunks(scene, recs, trunkGeo, barkMat, { at: where, far: 800, setup: shadows, set: (mesh, i, r) => mesh.setMatrixAt(i, r.base) });
+    instancedChunks(scene, recs, crownGeo, frondMat, { at: where, far: 1100, setup: shadows, set: (mesh, i, r) => mesh.setMatrixAt(i, m.compose(r.top, r.crownQ, s.set(r.cs, r.cs, r.cs))) });
+    if (skirt) {
+      instancedChunks(scene, recs, new THREE.CylinderGeometry(0.9, 0.55, 1, 8), skirtMat, {
+        at: where, far: 600, setup: mesh => { mesh.castShadow = true; },
+        set: (mesh, i, r) => mesh.setMatrixAt(i, m.compose(v.copy(r.top).add(s.set(0, -1.6, 0)), r.crownQ, s.set(1, 2.6, 1))),
+      });
     }
   }
 
@@ -350,37 +363,34 @@ export function buildVegetation(scene, renderer) {
   };
   const groups = { broad: [], cypress: [], far: [] };
   for (const t of trees) {
-    const [x, z, sc, y] = t;
-    if (y > 0) groups[chance(0.35) ? 'cypress' : 'far'].push(t);
+    if (t[3] > 0) groups[chance(0.35) ? 'cypress' : 'far'].push(t);
     else groups.broad.push(t);
   }
   const barkTree = new THREE.MeshStandardMaterial({ color: 0x4a3d30, roughness: 0.95 });
   const tint = new THREE.Color();
   for (const [kind, list] of Object.entries(groups)) {
     const { canopy, wood } = kinds[kind];
-    const canopies = new THREE.InstancedMesh(canopy, canopyMat, list.length);
-    const woods = new THREE.InstancedMesh(wood, barkTree, list.length);
-    list.forEach(([x, z, sc, y], i) => {
-      q.setFromAxisAngle(up, rand() * Math.PI * 2);
-      const tall = kind === 'cypress' ? range(1.1, 1.6) : range(0.85, 1.2);
-      m.compose(v.set(x, y - 0.1, z), q, s.set(sc, sc * tall, sc));
-      canopies.setMatrixAt(i, m);
-      woods.setMatrixAt(i, m);
+    const hill = kind !== 'broad';
+    const recs = list.map(([x, z, sc, y]) => {
+      const tallness = kind === 'cypress' ? range(1.1, 1.6) : range(0.85, 1.2);
+      const matrix = new THREE.Matrix4().compose(v.set(x, y - 0.1, z), q.setFromAxisAngle(up, rand() * Math.PI * 2), s.set(sc, sc * tallness, sc));
       if (kind === 'broad' && chance(0.22)) tint.setHSL(range(0.72, 0.78), range(0.35, 0.5), range(0.62, 0.72)); // jacaranda
       else if (kind === 'cypress') tint.setHSL(range(0.26, 0.32), range(0.3, 0.45), range(0.32, 0.42));
       else tint.setHSL(range(0.2, 0.3), range(0.35, 0.6), range(0.45, 0.62));
-      canopies.setColorAt(i, tint);
       if (y === 0) trunkColliders.push({ x, z, r: 0.5 });
+      return { x, z, matrix, tint: tint.clone() };
     });
-    canopies.castShadow = woods.castShadow = kind !== 'far';
-    canopies.receiveShadow = true;
-    if (kind !== 'broad') {
-      // Hill trees stay out of the mirror pass.
-      canopies.layers.set(1);
-      woods.layers.set(1);
-    }
-    scene.add(canopies, woods);
+    const where = r => [r.x, r.z];
+    // Hill trees stay out of the mirror pass and cast no shadows; they are drawn in big chunks.
+    const setup = mesh => {
+      mesh.castShadow = kind !== 'far';
+      mesh.receiveShadow = true;
+      if (hill) mesh.layers.set(1);
+    };
+    const opts = { at: where, far: hill ? 2400 : 750, chunk: hill ? 640 : 320, setup };
+    instancedChunks(scene, recs, canopy, canopyMat, { ...opts, set: (mesh, i, r) => { mesh.setMatrixAt(i, r.matrix); mesh.setColorAt(i, r.tint); } });
+    instancedChunks(scene, recs, wood, barkTree, { ...opts, far: hill ? 900 : 600, set: (mesh, i, r) => mesh.setMatrixAt(i, r.matrix) });
   }
 
-  return { trunkColliders };
+  return { trunkColliders, counts: { tall: tall.length, stout: stout.length, trees: trees.length } };
 }

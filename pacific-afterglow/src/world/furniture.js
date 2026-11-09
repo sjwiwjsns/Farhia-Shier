@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasTexture } from '../core/materials.js';
-import { roadsX, roadsZ, ROAD_HALF, SLAB_H, BUS_STOPS, busStopPos } from './layout.js';
+import {
+  roadsX, roadsZ, ROAD_HALF, SLAB_H, BUS_STOPS, busStopPos, WEST, EAST, NORTH, SOUTH, AVENUES as AVENUE_NAMES, STREETS as STREET_NAMES,
+  districtKey, blockCenterX, blockCenterZ,
+} from './layout.js';
+import { PointGrid, instancedChunks } from '../core/grid.js';
 import { rand, pick } from '../core/rng.js';
 
 // Street furniture: hydrants, trash cans, benches, mailboxes, news boxes, parking meters,
@@ -113,8 +117,9 @@ function powerPoleGeo(transformer) {
 }
 
 // Street name blades share one atlas; each instance picks its row.
-const AVENUES = { '-320': 'OCEAN DR', '-160': 'SEAVIEW AV', '0': 'AURELIO BL', '160': 'GRAND AV', '320': 'HILLCREST AV' };
-const STREETS = { '-480': 'MARINA ST', '-320': 'SUNSET BL', '-160': 'PIER AV', '0': 'PALM ST', '160': 'HARBOR ST', '320': 'ROSA ST', '480': 'SOUTHBANK RD' };
+const short = name => name.toUpperCase().replace(' DRIVE', ' DR').replace(' AVE', ' AV').replace(' BLVD', ' BL');
+const AVENUES = Object.fromEntries(Object.entries(AVENUE_NAMES).map(([k, n]) => [k, short(n)]));
+const STREETS = Object.fromEntries(Object.entries(STREET_NAMES).map(([k, n]) => [k, short(n)]));
 
 function bladeMaterial(renderer, names) {
   const rows = names.length;
@@ -174,11 +179,14 @@ export function buildFurniture(scene, renderer, knock, lamps, trunks = []) {
   const solids = []; // axis-aligned boxes the car cannot pass
   const circles = []; // round solids
   const crossClear = ROAD_HALF + 5;
-  const lampSpots = lamps.map(([x, z]) => [x, z]);
-  for (const t of trunks) lampSpots.push([t.x, t.z]); // palm and tree trunks need the same clearance
-  const nearLamp = (x, z, d = 2.4) => lampSpots.some(([lx, lz]) => Math.abs(lx - x) < d && Math.abs(lz - z) < d);
-  const stops = BUS_STOPS.map(b => busStopPos(b));
-  const nearStop = (x, z) => stops.some(([sx, sz]) => Math.abs(sx - x) < 7 && Math.abs(sz - z) < 7);
+  const lampSpots = new PointGrid(16);
+  for (const [x, z] of lamps) lampSpots.add({ x, z });
+  for (const t of trunks) lampSpots.add({ x: t.x, z: t.z }); // palm and tree trunks need the same clearance
+  const nearLamp = (x, z, d = 2.4) => lampSpots.any(x, z, d);
+  const stops = new PointGrid(32);
+  for (const b of BUS_STOPS) { const [x, z] = busStopPos(b); stops.add({ x, z }); }
+  const nearStop = (x, z) => stops.any(x, z, 7);
+  const busy = new Set(['downtown', 'midtown']);
 
   // Plan every sidewalk slot first, then build one instanced mesh per prop type.
   const plan = { hydrant: [], bin: [], bench: [], mailbox: [], newsbox: [], meter: [] };
@@ -188,9 +196,9 @@ export function buildFurniture(scene, renderer, knock, lamps, trunks = []) {
   };
   for (const axis of ['ns', 'ew']) {
     const roads = axis === 'ns' ? roadsX : roadsZ, cross = axis === 'ns' ? roadsZ : roadsX;
-    const [lo, hi] = axis === 'ns' ? [-525, 525] : [-305, 345];
+    const [lo, hi] = axis === 'ns' ? [NORTH - 45, SOUTH + 45] : [WEST + 15, EAST + 25];
     for (const road of roads) for (const side of [-1, 1]) {
-      if (axis === 'ns' && road === roadsX[0] && side < 0) continue; // beach side
+      if (axis === 'ns' && road === WEST && side < 0) continue; // beach side
       for (let s = lo; s <= hi; s += 6.5) {
         if (cross.some(c => Math.abs(s - c) < crossClear)) continue;
         const at = sidewalk(axis, road, side, s);
@@ -198,7 +206,7 @@ export function buildFurniture(scene, renderer, knock, lamps, trunks = []) {
         if (nearLamp(cx, cz) || nearStop(cx, cz)) continue;
         // Faces the road.
         const yaw = axis === 'ns' ? (side > 0 ? -Math.PI / 2 : Math.PI / 2) : (side > 0 ? Math.PI : 0);
-        const downtown = road > -200 && (axis === 'ns' ? s < 120 : road < 120);
+        const downtown = busy.has(districtKey(blockCenterX(cx + (axis === 'ns' ? side * 40 : 0)), blockCenterZ(cz + (axis === 'ew' ? side * 40 : 0))));
         const r = rand();
         if (r < 0.055) plan.hydrant.push([...at(0.6), yaw]);
         else if (r < 0.12) plan.bin.push([...at(0.9), yaw]);
@@ -227,24 +235,22 @@ export function buildFurniture(scene, renderer, knock, lamps, trunks = []) {
   };
   const newsColors = ['#c8342b', '#2f5fa8', '#e2b33a', '#2e7d4f', '#e8e4da', '#d9662f'].map(c => new THREE.Color(c));
   const meshes = {};
+  const at = p => [p[0], p[1]];
+  const small = mesh => { mesh.castShadow = true; mesh.receiveShadow = true; mesh.layers.set(1); };
   for (const [type, list] of Object.entries(plan)) {
     const d = defs[type];
-    const mesh = new THREE.InstancedMesh(d.geo, vc, Math.max(1, list.length));
-    mesh.count = list.length;
-    list.forEach(([x, z, yaw], i) => {
-      q.setFromAxisAngle(up, yaw + (type === 'bin' || type === 'hydrant' ? rand() * 6.28 : 0));
-      m.compose(v.set(x, SLAB_H, z), q, one);
-      mesh.setMatrixAt(i, m);
-      if (type === 'newsbox') mesh.setColorAt(i, pick(newsColors));
+    const built = instancedChunks(scene, list, d.geo, vc, {
+      at, far: type === 'bench' ? 420 : 340,
+      setup: mesh => { small(mesh); mesh.name = type; },
+      set: (mesh, i, [x, z, yaw]) => {
+        q.setFromAxisAngle(up, yaw + (type === 'bin' || type === 'hydrant' ? rand() * 6.28 : 0));
+        mesh.setMatrixAt(i, m.compose(v.set(x, SLAB_H, z), q, one));
+        if (type === 'newsbox') mesh.setColorAt(i, pick(newsColors));
+      },
     });
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.layers.set(1);
-    mesh.name = type;
-    scene.add(mesh);
-    meshes[type] = mesh;
+    meshes[type] = built.meshes;
     list.forEach(([x, z], i) => {
-      knock.add([{ mesh, index: i }], null, { type, x, z, y: SLAB_H + d.y, r: d.r, mass: d.mass, solid: d.solid, lieH: d.lieH ?? 0.2, kind: d.kind, sparks: !!d.sparks });
+      knock.add([built.refs[i]], null, { type, x, z, y: SLAB_H + d.y, r: d.r, mass: d.mass, solid: d.solid, lieH: d.lieH ?? 0.2, kind: d.kind, sparks: !!d.sparks });
     });
   }
 
@@ -252,28 +258,20 @@ export function buildFurniture(scene, renderer, knock, lamps, trunks = []) {
   const names = [...Object.values(AVENUES), ...Object.values(STREETS)];
   const corners = [];
   for (const x of roadsX) for (const z of roadsZ) corners.push([x + ROAD_HALF + 1.3, z - ROAD_HALF - 1.3, x, z]);
-  const poles = new THREE.InstancedMesh(signPoleGeo(), vc, corners.length);
-  const bladeGeo = new THREE.BoxGeometry(1.7, 0.27, 0.03);
-  const blades = new THREE.InstancedMesh(bladeGeo, bladeMaterial(renderer, names), corners.length * 2);
-  const rows = new Float32Array(corners.length * 2);
-  corners.forEach(([px, pz, rx, rz], i) => {
-    m.makeTranslation(px, SLAB_H, pz);
-    poles.setMatrixAt(i, m);
-    // Avenue blade runs north-south, street blade east-west, a little higher.
-    q.setFromAxisAngle(up, Math.PI / 2);
-    m.compose(v.set(px, SLAB_H + 3.0, pz), q, one);
-    blades.setMatrixAt(i * 2, m);
-    q.identity();
-    m.compose(v.set(px, SLAB_H + 3.3, pz), q, one);
-    blades.setMatrixAt(i * 2 + 1, m);
+  const poles = instancedChunks(scene, corners, signPoleGeo(), vc, { at, far: 420, setup: small, set: (mesh, i, [px, pz]) => mesh.setMatrixAt(i, m.makeTranslation(px, SLAB_H, pz)) });
+  // Two blades per corner: the avenue's runs north-south, the street's east-west, a little higher.
+  const bladeList = corners.flatMap(([px, pz, rx, rz]) => [[px, pz, 0, names.indexOf(AVENUES[String(rx)])], [px, pz, 1, names.indexOf(STREETS[String(rz)])]]);
+  const blades = instancedChunks(scene, bladeList, new THREE.BoxGeometry(1.7, 0.27, 0.03), bladeMaterial(renderer, names), {
+    at, far: 420, cloneGeometry: true,
+    set: (mesh, i, [px, pz, k]) => {
+      if (k === 0) q.setFromAxisAngle(up, Math.PI / 2); else q.identity();
+      mesh.setMatrixAt(i, m.compose(v.set(px, SLAB_H + 3.0 + k * 0.3, pz), q, one));
+    },
     // Rows count from the bottom of the atlas (canvas textures are flipped).
-    rows[i * 2] = names.length - 1 - names.indexOf(AVENUES[String(rx)]);
-    rows[i * 2 + 1] = names.length - 1 - names.indexOf(STREETS[String(rz)]);
+    setup: (mesh, list) => { small(mesh); mesh.geometry.setAttribute('aRow', new THREE.InstancedBufferAttribute(new Float32Array(list.map(b => names.length - 1 - b[3])), 1)); },
   });
-  bladeGeo.setAttribute('aRow', new THREE.InstancedBufferAttribute(rows, 1));
-  for (const o of [poles, blades]) { o.castShadow = true; o.layers.set(1); scene.add(o); }
   corners.forEach(([px, pz], i) => {
-    knock.add([{ mesh: poles, index: i }, { mesh: blades, index: i * 2 }, { mesh: blades, index: i * 2 + 1 }], null,
+    knock.add([poles.refs[i], blades.refs[i * 2], blades.refs[i * 2 + 1]], null,
       { type: 'sign', x: px, z: pz, y: SLAB_H, r: 0.12, mass: 0.05, solid: 2.5, kind: 'topple', sparks: true });
   });
 
@@ -316,22 +314,18 @@ export function buildFurniture(scene, renderer, knock, lamps, trunks = []) {
 
   // Power lines on wooden poles along the city's outer streets, wires sagging between them.
   const lines = [];
-  for (let z = -510; z <= 525; z += 38) if (!roadsZ.some(r => Math.abs(z - r) < crossClear)) lines.push([320 + ROAD_HALF + 1.7, z, 'ns']);
-  for (const [road, side] of [[480, 1], [-480, -1]]) {
-    for (let x = -290; x <= 330; x += 38) if (!roadsX.some(r => Math.abs(x - r) < crossClear)) lines.push([x, road + side * (ROAD_HALF + 1.7), 'ew']);
+  for (let z = NORTH - 30; z <= SOUTH + 45; z += 38) if (!roadsZ.some(r => Math.abs(z - r) < crossClear)) lines.push([EAST + ROAD_HALF + 1.7, z, 'ns']);
+  for (const [road, side] of [[SOUTH, 1], [NORTH, -1]]) {
+    for (let x = WEST + 30; x <= EAST + 10; x += 38) if (!roadsX.some(r => Math.abs(x - r) < crossClear)) lines.push([x, road + side * (ROAD_HALF + 1.7), 'ew']);
   }
   const plain = lines.filter((_, i) => i % 4 !== 2), withTx = lines.filter((_, i) => i % 4 === 2);
   for (const [list, tx] of [[plain, false], [withTx, true]]) {
-    const mesh = new THREE.InstancedMesh(powerPoleGeo(tx), vc, list.length);
-    list.forEach(([x, z, axis], i) => {
+    instancedChunks(scene, list, powerPoleGeo(tx), vc, {
+      at, far: 900, setup: mesh => { mesh.castShadow = true; },
       // Crossarms sit across the line's direction.
-      q.setFromAxisAngle(up, axis === 'ns' ? 0 : Math.PI / 2);
-      m.compose(v.set(x, SLAB_H, z), q, one);
-      mesh.setMatrixAt(i, m);
-      circles.push({ x, z, r: 0.22 });
+      set: (mesh, i, [x, z, axis]) => mesh.setMatrixAt(i, m.compose(v.set(x, SLAB_H, z), q.setFromAxisAngle(up, axis === 'ns' ? 0 : Math.PI / 2), one)),
     });
-    mesh.castShadow = true;
-    scene.add(mesh);
+    for (const [x, z] of list) circles.push({ x, z, r: 0.22 });
   }
   // Wires: a catenary per conductor between consecutive poles of the same run.
   const wire = [];

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { blockCentersX, blockCentersZ, SLAB_H } from './layout.js';
+import { blockCentersX, blockCentersZ, blockCenterX, blockCenterZ, SLAB_H, GRID, spawn, DISTRICTS, districtKey } from './layout.js';
 import { signalState } from './props.js';
 import { rand, range, pick, chance } from '../core/rng.js';
 
@@ -141,19 +141,22 @@ export class Pedestrians {
     this.e = new THREE.Euler(0, 0, 0, 'YXZ');
     for (let i = 0; i < COUNT; i++) {
       const p = { i, scale: range(0.9, 1.08) };
-      this.place(p, -316, 246, true);
+      this.place(p, spawn.x, spawn.z, true);
       this.peds.push(p);
     }
   }
 
   // Put a pedestrian somewhere on a block near (px, pz).
   place(p, px, pz, anywhere = false) {
+    // Only the blocks around the player are candidates; busy districts draw more people.
     const blocks = [];
-    for (const cx of blockCentersX) for (const cz of blockCentersZ) {
-      const d = Math.hypot(cx - px, cz - pz);
-      if (d < (anywhere ? 330 : 300)) blocks.push([cx, cz]);
+    const bx = blockCenterX(px), bz = blockCenterZ(pz), reach = anywhere ? 330 : 300;
+    for (let cx = bx - GRID * 2; cx <= bx + GRID * 2; cx += GRID) for (let cz = bz - GRID * 2; cz <= bz + GRID * 2; cz += GRID) {
+      if (!blockCentersX.includes(cx) || !blockCentersZ.includes(cz) || Math.hypot(cx - px, cz - pz) >= reach) continue;
+      const weight = 1 + Math.round(DISTRICTS[districtKey(cx, cz)][2] * 3);
+      for (let k = 0; k < weight; k++) blocks.push([cx, cz]);
     }
-    const [cx, cz] = blocks.length ? pick(blocks) : [blockCentersX[0], blockCentersZ[3]];
+    const [cx, cz] = blocks.length ? pick(blocks) : [bx, bz];
     Object.assign(p, {
       cx, cz, t: rand() * PERIM, dir: chance(0.5) ? 1 : -1, speed: range(1.05, 1.55),
       lateral: range(-0.9, 0.9), state: chance(0.12) ? 'idle' : 'walk', timer: range(3, 9),
@@ -178,7 +181,7 @@ export class Pedestrians {
   tryCross(p, corner, time) {
     const [sx, sz] = cornerSign[corner];
     const options = [];
-    const nx = p.cx + sx * 160, nz = p.cz + sz * 160;
+    const nx = p.cx + sx * GRID, nz = p.cz + sz * GRID;
     if (blockCentersX.includes(nx)) options.push({ axis: 0, tx: nx, tz: p.cz, corner: cornerIndex(-sx, sz) }); // over a north-south road
     if (blockCentersZ.includes(nz)) options.push({ axis: 1, tx: p.cx, tz: nz, corner: cornerIndex(sx, -sz) }); // over an east-west road
     if (!options.length || !chance(0.45)) return false;

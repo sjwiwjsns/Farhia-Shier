@@ -2,7 +2,7 @@ import { roadsX, roadsZ, ROAD_HALF } from './world/layout.js';
 
 // GPS: shortest path along the road grid between two points. Nodes are the crossings;
 // each end point is first snapped onto its nearest road and linked to the two crossings
-// on either side of it. The grid is small (35 crossings), so plain Dijkstra is instant.
+// on either side of it. The grid is a few hundred crossings, so plain Dijkstra is instant.
 
 const nodes = [];
 for (let i = 0; i < roadsX.length; i++) for (let j = 0; j < roadsZ.length; j++) nodes.push({ x: roadsX[i], z: roadsZ[j], i, j });
@@ -55,19 +55,20 @@ export function routeBetween(ax, az, bx, bz) {
   // Both points on the same stretch of road: drive straight there.
   const sameSegment = a.ends[0] === b.ends[0] && a.ends[1] === b.ends[1];
   if (sameSegment) return [[ax, az], [a.x, a.z], [b.x, b.z], [bx, bz]];
-  const dist = new Map([[START, 0]]), prev = new Map(), done = new Set();
+  const dist = new Float64Array(n + 2).fill(Infinity), prev = new Int32Array(n + 2).fill(-1), done = new Uint8Array(n + 2);
+  dist[START] = 0;
   while (true) {
     let cur = -1, cd = Infinity;
-    for (const [k, d] of dist) if (!done.has(k) && d < cd) { cur = k; cd = d; }
+    for (let k = 0; k < n + 2; k++) if (!done[k] && dist[k] < cd) { cur = k; cd = dist[k]; }
     if (cur < 0 || cur === END) break;
-    done.add(cur);
+    done[cur] = 1;
     for (const [k, w] of edges(cur)) {
       const nd = cd + w;
-      if (nd < (dist.get(k) ?? Infinity)) { dist.set(k, nd); prev.set(k, cur); }
+      if (nd < dist[k]) { dist[k] = nd; prev[k] = cur; }
     }
   }
   const path = [];
-  for (let k = END; k !== undefined; k = prev.get(k)) {
+  for (let k = END; k >= 0; k = prev[k]) {
     const p = pos(k);
     path.unshift([p.x, p.z]);
     if (k === START) break;

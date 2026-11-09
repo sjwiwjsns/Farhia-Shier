@@ -4,7 +4,10 @@ import { proceduralMaterial, canvasTexture } from '../core/materials.js';
 import { batchStatic } from '../core/batch.js';
 import { atmoUniforms } from './atmosphere.js';
 import { rand, range, pick, chance } from '../core/rng.js';
-import { blockCentersX, blockCentersZ, BLOCK_SIZE, SIDEWALK, SLAB_H } from './layout.js';
+import { BLOCK_SIZE, SIDEWALK, SLAB_H, EAST, NORTH, SOUTH } from './layout.js';
+import { allBlocks } from './plan.js';
+import { BoxGrid, chunkId, registerLod } from '../core/grid.js';
+import { hash2 } from '../core/rng.js';
 import { terrainHeight } from './ground.js';
 
 // Facade styles. Every building box is one instance of a single facade
@@ -356,16 +359,6 @@ const PALETTES = {
 // --- City plan --------------------------------------------------------------
 // Each block gets a mix of building types; lots are carved by a random split
 // so neighbouring buildings differ in width, depth, height and setback.
-const BLOCK_PLAN = {
-  '-240,-400': 'parking', '-240,-240': { stucco: 3, motel: 2, shops: 2 }, '-240,-80': { hotel: 3, shops: 2, stucco: 1 },
-  '-240,80': { stucco: 3, shops: 2, motel: 1 }, '-240,240': { motel: 2, stucco: 3, shops: 1 }, '-240,400': { stucco: 3, shops: 2 },
-  '-80,-400': { brick: 3, shops: 2, garage: 1 }, '-80,-240': { office: 2, garage: 1, deco: 1, shops: 1 }, '-80,-80': { shops: 2, condo: 2, deco: 1, brick: 1 },
-  '-80,80': 'park', '-80,240': { brick: 3, garage: 1, shops: 1 }, '-80,400': { warehouse: 4, garage: 1 },
-  '80,-400': { tower: 3, office: 2, deco: 1 }, '80,-240': { tower: 2, deco: 2, office: 1 }, '80,-80': 'plaza',
-  '80,80': { hotel: 2, shops: 1, condo: 2 }, '80,240': 'parking', '80,400': { warehouse: 3, shops: 1, brick: 1 },
-  '240,-400': { office: 2, tower: 2, garage: 1 }, '240,-240': 'plaza-tall', '240,-80': { deco: 2, tower: 2, hotel: 1 },
-  '240,80': { condo: 2, brick: 2, shops: 1 }, '240,240': { condo: 3, shops: 2 }, '240,400': 'park',
-};
 // Smallest lot side each type can be built on.
 const MIN_SIDE = { tower: 36, deco: 32, office: 28, hotel: 28, garage: 28, condo: 24, warehouse: 24, motel: 24, brick: 18, stucco: 14, shops: 14 };
 export const BUILDING_TYPES = ['glass tower', 'office', 'art deco', 'brick apartments', 'condo', 'hotel', 'shops', 'parking garage', 'coastal stucco', 'motel', 'warehouse'];
@@ -374,10 +367,7 @@ const SHOP_NAMES = ['COFFEE', 'PIZZA', 'NAILS', 'DELI', 'BOOKS', 'PHARMACY', 'TA
 const SIGN_COLORS = ['#ff5a7a', '#5fe8ff', '#ffd25a', '#ff8a3d', '#a6ff6a', '#ffffff', '#ff6af0', '#7ab8ff'];
 const HOTEL_NAMES = ['HOTEL MIRAMAR', 'THE PALMS', 'CASA DEL MAR', 'HOTEL AURELIO', 'THE SEABRIGHT'];
 
-const CHUNKS_X = 2, CHUNKS_Z = 3;
-export function chunkOf(x, z) {
-  return (x < 0 ? 0 : 1) + CHUNKS_X * (z < -160 ? 0 : z < 160 ? 1 : 2);
-}
+const LOT_SIGNS = ['SURF DINER', 'GAS · 24H', 'CAR WASH', 'DRIVE-IN', 'TIRE SHOP', 'TACO STAND', 'MINI MART', 'BURGERS'];
 
 function splitLots(rect, minSide, maxSide, out, depth = 0) {
   const w = rect.x1 - rect.x0, d = rect.z1 - rect.z0;
@@ -511,7 +501,7 @@ export function buildCity(scene, renderer) {
   const houses = [];
 
   const put = (kind, x, z, rec) => {
-    const key = `${kind}|${chunkOf(x, z)}`;
+    const key = `${kind}|${chunkId(x, z)}`;
     if (!batches.has(key)) batches.set(key, []);
     batches.get(key).push(rec);
   };
@@ -746,26 +736,29 @@ export function buildCity(scene, renderer) {
 
   // --- Lay out every block --------------------------------------------------
   const half = BLOCK_SIZE / 2 - SIDEWALK; // usable lot half-size (61)
-  for (const cx of blockCentersX) for (const cz of blockCentersZ) {
+  for (const [cx, cz, blockPlan] of allBlocks()) {
     const key = `${cx},${cz}`;
-    const plan = BLOCK_PLAN[key];
-    const dw = Math.max(0, 1 - Math.hypot(cx - 150, cz + 200) / 380);
+    const plan = blockPlan.kind === 'mix' ? blockPlan.weights : blockPlan.kind;
+    const dw = blockPlan.dw;
     if (plan === 'park') { emptyLots.push({ x: cx, z: cz, w: half * 2, d: half * 2, park: true }); continue; }
     if (plan === 'parking') {
       const b = fbox(cx - half + 14, cz - half + 11, 24, 18, SLAB_H, 5.5, STYLE.STUCCO, params(STYLE.STUCCO, pick(PALETTES.stucco), { shops: true }));
       storefronts(b, null, [FACES.nz], true);
-      signs.push({ x: b.x, z: b.z - b.d / 2 - 0.1, y: 7.6, face: 'north', text: key === '80,240' ? 'GAS · 24H' : 'SURF DINER', color: '#ff6a5a' });
+      const text = key === '80,240' ? 'GAS · 24H' : key === '-240,-400' ? 'SURF DINER' : LOT_SIGNS[Math.floor(hash2(cx + 3, cz + 9) * LOT_SIGNS.length)];
+      signs.push({ x: b.x, z: b.z - b.d / 2 - 0.1, y: 7.6, face: 'north', text, color: '#ff6a5a' });
       emptyLots.push({ x: cx + 10, z: cz + 10, w: half * 1.6, d: half * 1.6, parking: true });
       continue;
     }
     if (plan === 'plaza' || plan === 'plaza-tall') {
       const s = range(46, 54);
-      build.tower({ x: cx + range(-6, 6), z: cz + range(-6, 6), w: s, d: s }, [FACES.px, FACES.nx, FACES.pz, FACES.nz], plan === 'plaza-tall' ? 1.25 : 0.95);
+      build.tower({ x: cx + range(-6, 6), z: cz + range(-6, 6), w: s, d: s }, [FACES.px, FACES.nx, FACES.pz, FACES.nz], plan === 'plaza-tall' ? Math.max(1.25, dw * 1.1) : Math.max(0.95, dw));
       emptyLots.push({ x: cx, z: cz, w: half * 2, d: half * 2, plaza: true });
       continue;
     }
-    const coastal = cx === -240;
-    const lots = splitLots({ x0: cx - half, x1: cx + half, z0: cz - half, z1: cz + half }, coastal ? 18 : 22, coastal ? 44 : 64, []);
+    const coastal = blockPlan.coastal;
+    // Beach and hillside neighbourhoods are built in smaller lots than the centre.
+    const small = coastal || blockPlan.district === 'eastside' || blockPlan.district === 'foothills';
+    const lots = splitLots({ x0: cx - half, x1: cx + half, z0: cz - half, z1: cz + half }, small ? 18 : 22, small ? 44 : 64, []);
     for (const r of lots) {
       const w = r.x1 - r.x0, d = r.z1 - r.z0;
       // Street-facing sides are the ones on the block edge.
@@ -788,10 +781,10 @@ export function buildCity(scene, renderer) {
   }
 
   // Houses dotted over the hills.
-  for (let i = 0; i < 160; i++) {
+  for (let i = 0; i < 620; i++) {
     const side = rand();
-    const x = side < 0.6 ? range(420, 980) : range(-300, 700);
-    const z = side < 0.6 ? range(-900, 900) : (chance(0.5) ? range(620, 1000) : range(-1000, -620));
+    const x = side < 0.6 ? range(EAST + 100, EAST + 760) : range(-300, EAST + 400);
+    const z = side < 0.6 ? range(NORTH - 500, SOUTH + 500) : (chance(0.5) ? range(SOUTH + 140, SOUTH + 620) : range(NORTH - 620, NORTH - 140));
     houses.push([x, z]);
   }
 
@@ -818,10 +811,10 @@ export function buildCity(scene, renderer) {
   const fireEscapeGeo = new Map();
   const KINDS = {
     facade: { geometry: boxGeo, material: facadeMat, shadow: true, lod: 0 },
-    tileRoof: { geometry: hipRoofGeometry(), material: makeTileRoofMaterial(), shadow: true, lod: 0 },
+    tileRoof: { geometry: hipRoofGeometry(), material: makeTileRoofMaterial(), shadow: true, lod: 1100 },
     ac: { geometry: geo.acUnit, material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.5 }), shadow: true, lod: 320 },
     tank: { geometry: geo.tank, material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), shadow: true, lod: 420 },
-    antenna: { geometry: geo.antenna, material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.8 }), shadow: true, lod: 0 },
+    antenna: { geometry: geo.antenna, material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.8 }), shadow: true, lod: 1400 },
     fireEscape: { geometry: null, material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.6 }), shadow: true, lod: 260 },
     balconySlab: { geometry: geo.balconySlab, material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 }), shadow: true, lod: 340 },
     balconyGlass: { geometry: geo.balconyRail, material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.08, metalness: 0.7, transparent: true, opacity: 0.55, depthWrite: false }), shadow: false, lod: 300 },
@@ -830,11 +823,11 @@ export function buildCity(scene, renderer) {
     sign: { geometry: geo.sign, material: signMat, shadow: false, lod: 520 },
   };
   const MIRROR_SKIP = new Set(['tileRoof', 'ac', 'tank', 'antenna', 'fireEscape', 'balconyGlass', 'balconyRail', 'balconySlab']);
-  const chunkMeshes = Array.from({ length: CHUNKS_X * CHUNKS_Z }, () => []);
+  const facadeLow = makeFacadeMaterial(true);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), color = new THREE.Color();
   const up = new THREE.Vector3(0, 1, 0);
   for (const [key, recs] of batches) {
-    const [kind, chunkStr] = key.split('|');
+    const [kind] = key.split('|');
     const def = KINDS[kind];
     if (kind === 'fireEscape') {
       // Fire escape stairs depend on floor height; group by it.
@@ -842,13 +835,13 @@ export function buildCity(scene, renderer) {
       for (const r of recs) { const k = r.floorH.toFixed(1); if (!byH.has(k)) byH.set(k, []); byH.get(k).push(r); }
       for (const [k, list] of byH) {
         if (!fireEscapeGeo.has(k)) fireEscapeGeo.set(k, geo.fireEscape(Number(k)));
-        addMesh(kind, Number(chunkStr), list, fireEscapeGeo.get(k), def);
+        addMesh(kind, list, fireEscapeGeo.get(k), def);
       }
       continue;
     }
-    addMesh(kind, Number(chunkStr), recs, def.geometry, def);
+    addMesh(kind, recs, def.geometry, def);
   }
-  function addMesh(kind, chunk, recs, geometry, def) {
+  function addMesh(kind, recs, geometry, def) {
     let g = geometry;
     if (kind === 'facade' || kind === 'sign') g = geometry.clone();
     const mesh = new THREE.InstancedMesh(g, def.material, recs.length);
@@ -884,16 +877,27 @@ export function buildCity(scene, renderer) {
     // Roof kit and small wall details can't be seen from the mirror camera under the
     // water plane; layer 1 keeps them out of that pass.
     if (MIRROR_SKIP.has(kind)) mesh.layers.set(1);
+    mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
+    mesh.computeBoundingBox();
     scene.add(mesh);
-    chunkMeshes[chunk].push(mesh);
+    // Distant chunks drop their small details, and their facades switch to a cheaper shader.
+    if (kind === 'facade') registerLod(mesh, 0, (dist, o) => { o.material = dist > 360 ? facadeLow : facadeMat; });
+    else registerLod(mesh, def.lod);
   }
-  const chunkCenters = chunkMeshes.map((_, i) => new THREE.Vector3((i % CHUNKS_X) ? 160 : -200, 0, [-320, 0, 320][Math.floor(i / CHUNKS_X)]));
 
   // Hotels: an entrance canopy, a vertical blade sign and a lit rooftop name.
   // Garages get a lit P; motels a roadside sign on a pole.
   const specialMeshes = [];
-  const signTex = (w, h, draw) => canvasTexture(renderer, w, h, draw);
+  const texCache = new Map();
+  const signTex = (w, h, draw, key = null) => {
+    if (key && texCache.has(key)) return texCache.get(key);
+    const t = canvasTexture(renderer, w, h, draw);
+    if (key) texCache.set(key, t);
+    return t;
+  };
+  const matCache = new Map();
+  const cached = (key, make) => { if (!matCache.has(key)) matCache.set(key, make()); return matCache.get(key); };
   const glowMat = (tex, extra = {}) => new THREE.MeshStandardMaterial({ color: 0x111111, map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.4, roughness: 0.5, ...extra });
   const darkMetal = new THREE.MeshStandardMaterial({ color: 0x1c2023, roughness: 0.45, metalness: 0.6 });
   const warmLight = new THREE.MeshStandardMaterial({ color: 0x332a20, emissive: 0xffd9a0, emissiveIntensity: 0.3 });
@@ -902,7 +906,8 @@ export function buildCity(scene, renderer) {
     if (mesh.isGroup) batchStatic(mesh);
     mesh.userData.glow = glow;
     scene.add(mesh);
-    specialMeshes.push({ mesh, chunk: chunkOf(x, z) });
+    registerLod(mesh, 700);
+    specialMeshes.push({ mesh });
   };
   for (const sp of special) {
     if (sp.kind === 'hotel') {
@@ -932,8 +937,8 @@ export function buildCity(scene, renderer) {
         const step = (h - 80) / chars.length;
         c.font = `800 ${Math.min(100, step * 0.95)}px "Barlow Condensed", Impact, sans-serif`;
         chars.forEach((ch, i) => c.fillText(ch, w / 2, 50 + step * (i + 0.5)));
-      });
-      const bladeMat = glowMat(blade);
+      }, 'blade' + letters + color);
+      const bladeMat = cached('blade' + letters + color, () => glowMat(blade));
       const bladeH = Math.min(14, b.top - 9);
       if (bladeH > 5) {
         const bladeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, bladeH, 2.2), [bladeMat, bladeMat, darkMetal, darkMetal, darkMetal, darkMetal]);
@@ -948,10 +953,14 @@ export function buildCity(scene, renderer) {
         c.shadowColor = color; c.shadowBlur = 18; c.fillStyle = color;
         c.fillText(name, w / 2, h / 2 + 4);
         c.shadowBlur = 0; c.fillStyle = '#fff6e0'; c.fillText(name, w / 2, h / 2 + 4);
+      }, 'roof' + name + color);
+      const roofMat = cached('roof' + name + color, () => {
+        const mat = glowMat(roofTex, { transparent: true, alphaTest: 0.05, color: 0x000000 });
+        mat.userData.boost = 1.4;
+        return mat;
       });
-      const roofSign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(fl * 0.85, 26), Math.min(fl * 0.85, 26) / 8), glowMat(roofTex, { transparent: true, alphaTest: 0.05, color: 0x000000 }));
+      const roofSign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(fl * 0.85, 26), Math.min(fl * 0.85, 26) / 8), roofMat);
       roofSign.position.set(0, b.top - b.y0 + 1.9, -0.6);
-      roofSign.material.userData.boost = 1.4;
       g.add(roofSign);
       const [x, z] = facePoint(b, f, 0, 0);
       g.position.set(x, SLAB_H, z);
@@ -964,8 +973,8 @@ export function buildCity(scene, renderer) {
         c.strokeStyle = '#ffffff'; c.lineWidth = 8; c.strokeRect(8, 8, w - 16, h - 16);
         c.fillStyle = '#ffffff'; c.font = '800 100px Arial, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
         c.fillText('P', w / 2, h / 2 + 6);
-      });
-      const mat = glowMat(tex, { color: 0xffffff });
+      }, 'garageP');
+      const mat = cached('garageP', () => glowMat(tex, { color: 0xffffff }));
       const sign = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 0.3), [darkMetal, darkMetal, darkMetal, darkMetal, mat, mat]);
       const fl = faceLength(b, f);
       const [x, z] = facePoint(b, f, fl / 2 - 1.5, 0.3);
@@ -983,8 +992,8 @@ export function buildCity(scene, renderer) {
         c.shadowColor = '#5fe8ff'; c.fillStyle = '#9ff3ff';
         c.font = '700 54px "Barlow Condensed", Impact, sans-serif'; c.fillText(name, w / 2, 186);
         c.shadowBlur = 0; c.fillStyle = '#ffd25a'; c.font = '700 30px Arial'; c.fillText('VACANCY', w / 2, 232);
-      });
-      const mat = glowMat(tex);
+      }, 'motel' + name);
+      const mat = cached('motel' + name, () => glowMat(tex));
       const g = new THREE.Group();
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 7.5, 10), darkMetal);
       pole.position.y = 3.75;
@@ -1028,59 +1037,31 @@ export function buildCity(scene, renderer) {
   const signMeshes = [];
   for (const sg of signs) signMeshes.push(neonSign(scene, renderer, sg));
 
-  const facadeLow = makeFacadeMaterial(true);
-  const chunkBounds = chunkMeshes.map((_, i) => {
-    const xi = i % CHUNKS_X, zi = Math.floor(i / CHUNKS_X);
-    return { x0: xi ? 0 : -360, x1: xi ? 360 : 0, z0: [-570, -160, 160][zi], z1: [-160, 160, 570][zi] };
-  });
-  let lodTimer = 0;
-  const glowSpecial = specialMeshes.flatMap(({ mesh }) => {
+  const glowSpecial = new Set(specialMeshes.flatMap(({ mesh }) => {
     const mats = [];
     mesh.traverse(o => { if (o.isMesh) for (const mm of [].concat(o.material)) if (mm.emissiveMap || mm === warmLight) mats.push(mm); });
     return mats;
-  });
+  }));
+  const signMats = new Set(signMeshes.map(sm => sm.material));
+  // Sun occlusion and line-of-sight tests only look at boxes near the ray.
+  const topsGrid = new BoxGrid(160, b => [b.w / 2, b.d / 2]).addAll(buildingTops);
 
   const api = {
     colliders,
     buildingTops,
     emptyLots,
+    topsGrid,
     stats: { buildings: colliders.length, facadeBoxes: [...batches.keys()].filter(k => k.startsWith('facade')).reduce((a, k) => a + batches.get(k).length, 0) },
-    update(night, time, camera, dt = 0.016) {
+    update(night, time) {
       crownMat.emissiveIntensity = night * 1.6;
       beaconMat.color.setRGB(8 * (0.15 + 0.85 * night) * (Math.sin(time * 3.2) > 0.2 ? 1 : 0.04), 0.25, 0.15);
       signMat.emissiveIntensity = 0.3 + night * 2.0;
-      for (const mm of new Set(glowSpecial)) mm.emissiveIntensity = (0.3 + night * 2.2) * (mm.userData.boost || 1);
-      for (const sm of signMeshes) {
-        const flicker = sm.userData.flicker && Math.sin(time * 37) > 0.93 ? 0.3 : 1;
-        sm.material.emissiveIntensity = (0.3 + night * 2.2) * flicker;
-      }
+      for (const mm of glowSpecial) mm.emissiveIntensity = (0.3 + night * 2.2) * (mm.userData.boost || 1);
+      const flick = Math.sin(time * 37) > 0.93 ? 0.3 : 1;
+      for (const mm of signMats) mm.emissiveIntensity = (0.3 + night * 2.2) * (mm.userData.flicker ? flick : 1);
       if (houseMesh) houseMesh.material.userData.night.value = night;
-      // Level of detail: hide small details in distant chunks and switch
-      // their facades to a cheaper shader.
-      lodTimer -= dt;
-      if (camera && lodTimer <= 0) {
-        lodTimer = 0.25;
-        const cx = camera.position.x, cz = camera.position.z;
-        chunkMeshes.forEach((meshes, i) => {
-          const bnd = chunkBounds[i];
-          const dx = Math.max(bnd.x0 - cx, 0, cx - bnd.x1), dz = Math.max(bnd.z0 - cz, 0, cz - bnd.z1);
-          const dist = Math.hypot(dx, dz);
-          for (const mesh of meshes) {
-            if (mesh.userData.lod > 0) mesh.visible = dist < mesh.userData.lod;
-            if (mesh.material === facadeMat || mesh.material === facadeLow) mesh.material = dist > 360 ? facadeLow : facadeMat;
-          }
-        });
-        for (const { mesh, chunk } of specialMeshes) {
-          const bnd = chunkBounds[chunk];
-          const dx = Math.max(bnd.x0 - cx, 0, cx - bnd.x1), dz = Math.max(bnd.z0 - cz, 0, cz - bnd.z1);
-          mesh.visible = Math.hypot(dx, dz) < 700;
-        }
-      }
     },
   };
-  // Run one LOD pass from the spawn so both facade shaders exist at load time
-  // and get compiled up front instead of hitching mid-drive.
-  api.update(0, 0, { position: { x: -316, z: 246 } }, 1);
   return api;
 }
 
@@ -1115,30 +1096,36 @@ function buildHillHouses(scene, list) {
   return mesh;
 }
 
+const neonMats = new Map();
 function neonSign(scene, renderer, { x, y, z, face, text, color }) {
-  const tex = canvasTexture(renderer, 512, 128, (c, w, h) => {
-    c.fillStyle = '#0b0d10';
-    c.fillRect(0, 0, w, h);
-    c.font = '700 70px "Barlow Condensed", Impact, sans-serif';
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.shadowColor = color;
-    c.shadowBlur = 18;
-    c.fillStyle = color;
-    c.fillText(text, w / 2, h / 2 + 3);
-    c.shadowBlur = 0;
-    c.fillStyle = '#ffffffcc';
-    c.fillText(text, w / 2, h / 2 + 3);
-    c.strokeStyle = color;
-    c.lineWidth = 5;
-    c.strokeRect(8, 8, w - 16, h - 16);
-  });
-  const mat = new THREE.MeshStandardMaterial({ color: 0x111111, map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1, roughness: 0.5 });
+  const key = text + color;
+  if (!neonMats.has(key)) {
+    const tex = canvasTexture(renderer, 512, 128, (c, w, h) => {
+      c.fillStyle = '#0b0d10';
+      c.fillRect(0, 0, w, h);
+      c.font = '700 70px "Barlow Condensed", Impact, sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.shadowColor = color;
+      c.shadowBlur = 18;
+      c.fillStyle = color;
+      c.fillText(text, w / 2, h / 2 + 3);
+      c.shadowBlur = 0;
+      c.fillStyle = '#ffffffcc';
+      c.fillText(text, w / 2, h / 2 + 3);
+      c.strokeStyle = color;
+      c.lineWidth = 5;
+      c.strokeRect(8, 8, w - 16, h - 16);
+    });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x111111, map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1, roughness: 0.5 });
+    mat.userData.flicker = chance(0.25);
+    neonMats.set(key, mat);
+  }
   const width = Math.min(12, 3 + text.length * 0.9);
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4), mat);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4), neonMats.get(key));
   mesh.position.set(x, y, z);
   mesh.rotation.y = face === 'west' ? -Math.PI / 2 : face === 'east' ? Math.PI / 2 : face === 'north' ? Math.PI : 0;
-  mesh.userData.flicker = chance(0.25);
   scene.add(mesh);
+  registerLod(mesh, 520);
   return mesh;
 }

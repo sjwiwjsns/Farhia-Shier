@@ -6,8 +6,9 @@ import { buildCity } from './world/buildings.js';
 import { buildCoast } from './world/coast.js';
 import { buildVegetation, leafSun } from './world/vegetation.js';
 import { buildProps, makeBeamMaterial, signalState } from './world/props.js';
-import { route, spawn, CHECKPOINT_RADIUS, roadsX, roadsZ, nearestRoad, ROAD_HALF, SHORE_X, PIER, SLAB_H, districtAt } from './world/layout.js';
-import { PlayerCar, CARS, CAR_ORDER } from './vehicles/player.js';
+import { RACES, spawn, CHECKPOINT_RADIUS, nearestRoadX, nearestRoadZ, ROAD_HALF, SHORE_X, PIERS, SLAB_H, districtAt } from './world/layout.js';
+import { BoxGrid, PointGrid, updateLod, lodStats } from './core/grid.js';
+import { PlayerCar, CARS, CAR_ORDER, HANDLING } from './vehicles/player.js';
 import { Knockables } from './world/knockables.js';
 import { buildFurniture } from './world/furniture.js';
 import { Wanted } from './wanted.js';
@@ -21,8 +22,6 @@ import { Input } from './input.js';
 import { rand } from './core/rng.js';
 
 const $ = id => document.getElementById(id);
-// How busy the background traffic hum is in each district.
-const CITY_NOISE = { 'DOWNTOWN': 1, 'PALM DISTRICT': 0.65, 'SEAVIEW': 0.5, 'SOUTHBANK': 0.4, 'OCEAN DRIVE': 0.3 };
 const mobile = matchMedia('(pointer:coarse)').matches;
 // Phones get the lightest graphics by default; tablets one step up.
 const phone = mobile && Math.min(screen.width, screen.height) < 600;
@@ -48,7 +47,7 @@ async function main() {
   }
   const renderer = pipeline.renderer;
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 3200);
+  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.2, 5600);
   camera.layers.enable(1);
   pipeline.init(scene, camera);
 
@@ -66,7 +65,7 @@ async function main() {
   const vegetation = buildVegetation(scene, renderer);
   const knock = new Knockables();
   const props = buildProps(scene, renderer, coast.pier.lamps, knock);
-  const furniture = buildFurniture(scene, renderer, knock, props.lamps, vegetation.trunkColliders.filter(t => Math.abs(t.z) < 600 && t.x < 360));
+  const furniture = buildFurniture(scene, renderer, knock, props.lamps, vegetation.trunkColliders);
   await progress('Fueling up…');
   let carKey = store.get('pacific-car');
   if (!CARS[carKey]) carKey = 'coupe';
@@ -101,23 +100,30 @@ async function main() {
   gate.visible = false;
   scene.add(gate);
 
+  // Everything solid goes into spatial grids, so collision cost does not grow with the city.
+  const boxes = [...city.colliders, ...furniture.solids];
+  const circles = [...vegetation.trunkColliders, ...props.circles, ...furniture.circles];
   const world = {
     colliders: city.colliders,
-    boxes: [...city.colliders, ...furniture.solids],
-    circles: [...vegetation.trunkColliders, ...props.circles, ...furniture.circles],
-    piles: (PIER.piles || []).map(([x, z]) => ({ x, z, r: 0.45 })),
+    boxes, circles,
+    boxGrid: new BoxGrid(80).addAll(boxes),
+    buildingGrid: new BoxGrid(80).addAll(city.colliders.map(c => ({ ...c }))),
+    circleGrid: new PointGrid(24).addAll(circles),
+    pileGrid: new PointGrid(24).addAll(PIERS.flatMap(P => P.piles || [])),
+    piles: PIERS.flatMap(P => P.piles || []),
   };
   traffic.world = world;
   patchSceneMaterials(scene);
 
-  const wanted = new Wanted(traffic, city.colliders);
+  const wanted = new Wanted(traffic, world.buildingGrid);
   const rig = new CameraRig(camera);
   const hud = new Hud(city.colliders);
   const audio = new Audio();
   const input = new Input();
 
   const game = {
-    state: 'intro', paused: false, mode: 'free', raceTime: 0, checkpoint: 0, route, countdown: 0,
+    state: 'intro', paused: false, mode: 'free', raceTime: 0, checkpoint: 0, countdown: 0,
+    raceId: 'sunset', route: RACES.sunset.route, raceName: RACES.sunset.name,
     splits: [], topSpeed: 0, crashes: 0, waypoint: null,
     lastX: spawn.x, lastZ: spawn.z, time: 0, frame: 0, flash: 0,
   };
@@ -190,6 +196,7 @@ async function main() {
     }
     $('car-name').textContent = def.name;
     $('car-blurb').textContent = def.blurb;
+    $('car-spec').textContent = def.spec;
     $('hud-car').textContent = def.name;
     $('car-menu').value = key;
     for (const stat of ['speed', 'accel', 'grip']) $(`stat-${stat}`).style.width = `${Math.round(def.stats[stat] * 100)}%`;
@@ -217,12 +224,12 @@ async function main() {
   }
 
   function setGate() {
-    if (game.checkpoint >= route.length) return;
-    const [gx, gz] = route[game.checkpoint];
+    if (game.checkpoint >= game.route.length) return;
+    const [gx, gz] = game.route[game.checkpoint];
     gate.position.set(gx, 0, gz);
-    const onAvenue = Math.abs(gx - nearestRoad(roadsX, gx)) < 1;
+    const onAvenue = Math.abs(gx - nearestRoadX(gx)) < 1;
     for (const c of columns) c.mesh.position.set(onAvenue ? c.side * (ROAD_HALF + 1) : 0, 0, onAvenue ? 0 : c.side * (ROAD_HALF + 1));
-    $('checkpoint-count').textContent = `${game.checkpoint + 1} / ${route.length}`;
+    $('checkpoint-count').textContent = `${game.checkpoint + 1} / ${game.route.length}`;
   }
 
   function begin(mode) {
@@ -238,13 +245,14 @@ async function main() {
     $('start-trial').classList.toggle('hidden', mode === 'race');
     $('mode-label').textContent = mode === 'race' ? 'TIME TRIAL' : 'FREE ROAM';
     $('mission-title').textContent = mode === 'race' ? 'Follow the afterglow.' : 'Take the long way home.';
-    $('mission-subtitle').textContent = mode === 'race' ? `Pass through all ${route.length} golden checkpoints.` : 'Explore Vista Pacífica at your own pace.';
+    $('mission-subtitle').textContent = mode === 'race' ? `Pass through all ${game.route.length} golden checkpoints.` : 'Explore Vista Pacífica at your own pace.';
     game.raceTime = 0;
     game.checkpoint = 0;
     game.splits = [];
     game.topSpeed = 0;
     game.crashes = 0;
-    player.reset(spawn.x, spawn.z, spawn.heading);
+    const start = mode === 'race' ? RACES[game.raceId].start || spawn : spawn;
+    player.reset(start.x, start.z, start.heading);
     game.lastX = player.x;
     game.lastZ = player.z;
     gate.visible = mode === 'race';
@@ -290,15 +298,16 @@ async function main() {
     input.clear();
     audio.chime(true);
     $('final-time').textContent = formatTime(game.raceTime);
-    const best = Number(store.get('pacific-best')) || null;
+    const best = Number(store.get(bestKey(game.raceId))) || null;
     if (!best || game.raceTime < best) {
-      store.set('pacific-best', String(game.raceTime));
+      store.set(bestKey(game.raceId), String(game.raceTime));
       $('best-time').textContent = 'A new personal best. Make the coast remember it.';
     } else $('best-time').textContent = 'PERSONAL BEST  ' + formatTime(best);
     const avg = (player.distance / Math.max(game.raceTime, 0.1)) * 3.6;
     $('result-stats').innerHTML = `<span><b>${Math.round(game.topSpeed * 3.6)}</b> KM/H TOP</span><span><b>${Math.round(avg)}</b> KM/H AVG</span><span><b>${game.crashes}</b> ${game.crashes === 1 ? 'CRASH' : 'CRASHES'}</span><span><b>${CARS[carKey].name}</b></span>`;
     $('result').showModal();
     gate.visible = false;
+    selectRace(game.raceId); // refresh the best time shown on the title screen
   }
 
   function pauseGame(settings = false) {
@@ -309,7 +318,7 @@ async function main() {
     $('menu-description').textContent = settings ? 'Tune the look of the coast to your machine.' : 'The coast will be right here.';
     $('resume').textContent = game.state === 'intro' ? 'BACK TO THE COAST' : 'BACK TO THE DRIVE';
     $('back-title').classList.toggle('hidden', game.state === 'intro');
-    $('restart-race').textContent = game.mode === 'race' && game.state === 'play' ? 'RESTART SUNSET RUN' : 'START SUNSET RUN';
+    $('restart-race').textContent = (game.mode === 'race' && game.state === 'play' ? 'RESTART ' : 'START ') + game.raceName;
     if (!$('menu').open) $('menu').showModal();
   }
 
@@ -337,7 +346,7 @@ async function main() {
 
   function toggleMap() {
     if (game.state !== 'play') return;
-    hud.setExpanded(!hud.expanded);
+    hud.setExpanded(!hud.expanded, player);
     document.querySelector('.map-panel').classList.toggle('expanded', hud.expanded);
     $('map-button').setAttribute('aria-label', hud.expanded ? 'Close expanded map' : 'Expand map');
   }
@@ -346,7 +355,8 @@ async function main() {
     if (game.mode === 'race') {
       game.raceTime = 0;
       game.checkpoint = 0;
-      player.reset(spawn.x, spawn.z, spawn.heading);
+      const start = RACES[game.raceId].start || spawn;
+      player.reset(start.x, start.z, start.heading);
       setGate();
       toast('RUN RESTARTED');
     } else {
@@ -407,7 +417,45 @@ async function main() {
     toast(soundOn ? 'SOUND ON' : 'SOUND OFF');
   };
   $('map-button').onclick = toggleMap;
-  $('minimap').addEventListener('click', e => hud.pick(e.clientX, e.clientY, game));
+  // Big map: click sets a waypoint, the wheel or a pinch zooms, a drag moves it.
+  {
+    const map = $('minimap');
+    const pointers = new Map();
+    let moved = 0, pinch = 0;
+    map.addEventListener('wheel', e => { if (!hud.expanded) return; e.preventDefault(); hud.zoomAt(e.deltaY < 0 ? 1.25 : 0.8, e.clientX, e.clientY); }, { passive: false });
+    map.addEventListener('pointerdown', e => {
+      if (!hud.expanded) return;
+      map.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pointers.size === 1) moved = 0;
+      pinch = 0;
+    });
+    map.addEventListener('pointermove', e => {
+      const last = pointers.get(e.pointerId);
+      if (!last || !hud.expanded) return;
+      if (pointers.size === 1) {
+        moved += Math.abs(e.clientX - last[0]) + Math.abs(e.clientY - last[1]);
+        if (moved > 6) hud.panBy(e.clientX - last[0], e.clientY - last[1]);
+      }
+      pointers.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch > 0 && d > 0) hud.zoomAt(d / pinch, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+        pinch = d;
+        moved = 99;
+      }
+    });
+    const release = e => {
+      const had = pointers.delete(e.pointerId);
+      if (had && hud.expanded && pointers.size === 0 && moved <= 6 && e.type === 'pointerup') hud.pick(e.clientX, e.clientY, game);
+      pinch = 0;
+    };
+    map.addEventListener('pointerup', release);
+    map.addEventListener('pointercancel', release);
+    $('map-zoom-in').onclick = () => hud.zoomAt(1.5);
+    $('map-zoom-out').onclick = () => hud.zoomAt(1 / 1.5);
+  }
   for (const btn of document.querySelectorAll('.swatch')) btn.onclick = () => selectColor(btn.dataset.color);
   // Radio: Q cycles stations; the settings menu picks one directly.
   function setRadio(index, announce = true) {
@@ -422,12 +470,50 @@ async function main() {
   $('radio-select').onchange = e => setRadio(Number(e.target.value), false);
   // Handling: Easy (assists on, the default) or Sport (the raw car).
   function setHandling(name) {
-    player.assist = name !== 'sport';
-    store.set('pacific-handling', player.assist ? 'easy' : 'sport');
-    $('handling-select').value = player.assist ? 'easy' : 'sport';
+    player.setHandling(name);
+    store.set('pacific-handling', player.mode);
+    $('handling-select').value = player.mode;
   }
-  $('handling-select').onchange = e => { setHandling(e.target.value); if (game.state === 'play') toast(player.assist ? 'EASY HANDLING' : 'SPORT HANDLING'); };
+  $('handling-select').onchange = e => { setHandling(e.target.value); if (game.state === 'play') toast(HANDLING[player.mode].label); };
   setHandling(store.get('pacific-handling') || 'easy');
+  // Police: Relaxed cruisers (the default) top out near 110 km/h; Standard is the original
+  // high-speed pursuit; Off means no wanted level at all.
+  const POLICE = { slow: 0.6, standard: 1, off: 0 };
+  let policeSetting = 'slow';
+  function setPolice(name) {
+    policeSetting = name in POLICE ? name : 'slow';
+    traffic.policePace = POLICE[policeSetting] || 0.6;
+    store.set('pacific-police', policeSetting);
+    $('police-select').value = policeSetting;
+    if (policeSetting === 'off') wanted.reset();
+  }
+  $('police-select').onchange = e => { setPolice(e.target.value); if (game.state === 'play') toast({ slow: 'RELAXED POLICE', standard: 'STANDARD POLICE', off: 'POLICE OFF' }[policeSetting]); };
+  setPolice(store.get('pacific-police') || 'slow');
+  // Time trials: three routes, each with its own best time.
+  const RACE_ORDER = Object.keys(RACES);
+  const bestKey = id => (id === 'sunset' ? 'pacific-best' : 'pacific-best-' + id);
+  const titleCase = t => t.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  function selectRace(id) {
+    if (!RACES[id]) id = 'sunset';
+    game.raceId = id;
+    game.route = RACES[id].route;
+    game.raceName = RACES[id].name;
+    store.set('pacific-race', id);
+    $('race-select').value = id;
+    $('race-name').textContent = RACES[id].name;
+    const best = Number(store.get(bestKey(id)));
+    $('race-info').textContent = `${RACES[id].route.length} CHECKPOINTS · ${best ? 'BEST ' + formatTime(best) : RACES[id].blurb.toUpperCase()}`;
+    $('trial').firstChild.textContent = RACES[id].name + ' ';
+    $('start-trial').firstChild.textContent = `Start ${titleCase(RACES[id].name)} `;
+    $('start-trial').querySelector('span').textContent = `${RACES[id].route.length} CHECKPOINTS`;
+    document.querySelector('#race > span').textContent = RACES[id].name;
+    document.querySelector('#result .eyebrow').textContent = RACES[id].name + ' COMPLETE';
+  }
+  const stepRace = dir => selectRace(RACE_ORDER[(RACE_ORDER.indexOf(game.raceId) + dir + RACE_ORDER.length) % RACE_ORDER.length]);
+  $('race-prev').onclick = () => stepRace(-1);
+  $('race-next').onclick = () => stepRace(1);
+  $('race-select').onchange = e => selectRace(e.target.value);
+  selectRace(store.get('pacific-race') || 'sunset');
   // Optional frame-rate readout (settings menu).
   let fpsOn = store.get('pacific-fps') === 'on';
   const fpsEl = $('fps');
@@ -469,6 +555,8 @@ async function main() {
     if (e.code === 'KeyR') return resetCar();
     if (e.code === 'KeyC') return cameraSwitch();
     if (e.code === 'KeyM') return toggleMap();
+    if (hud.expanded && (e.code === 'Equal' || e.code === 'NumpadAdd')) return hud.zoomAt(1.5);
+    if (hud.expanded && (e.code === 'Minus' || e.code === 'NumpadSubtract')) return hud.zoomAt(1 / 1.5);
     if (e.code === 'KeyH') { audio.horn(3); return; }
     if (e.code === 'KeyQ') { setRadio(audio.station + 1 >= STATIONS.length ? -1 : audio.station + 1); return; }
     input.keys.add(e.code);
@@ -535,10 +623,12 @@ async function main() {
 
   function rayHitsBox(ox, oy, oz, dx, dy, dz, b) {
     let tmin = 0, tmax = 2000;
-    for (const [o, d, lo, hi] of [[ox, dx, b.x - b.w / 2, b.x + b.w / 2], [oy, dy, 0, b.h], [oz, dz, b.z - b.d / 2, b.z + b.d / 2]]) {
+    for (let k = 0; k < 3; k++) {
+      const o = k === 0 ? ox : k === 1 ? oy : oz, d = k === 0 ? dx : k === 1 ? dy : dz;
+      const lo = k === 0 ? b.x - b.w / 2 : k === 1 ? 0 : b.z - b.d / 2, hi = k === 0 ? b.x + b.w / 2 : k === 1 ? b.h : b.z + b.d / 2;
       if (Math.abs(d) < 1e-6) { if (o < lo || o > hi) return false; continue; }
       let t1 = (lo - o) / d, t2 = (hi - o) / d;
-      if (t1 > t2) [t1, t2] = [t2, t1];
+      if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
       tmin = Math.max(tmin, t1);
       tmax = Math.min(tmax, t2);
       if (tmin > tmax) return false;
@@ -551,8 +641,8 @@ async function main() {
     const o = camera.position;
     sunScreen.copy(o).addScaledVector(d, 1000).project(camera);
     if (atmosphere.elevation < -0.5 || sunScreen.z > 1) return 0;
-    for (const b of city.buildingTops) if (rayHitsBox(o.x, o.y, o.z, d.x, d.y, d.z, b)) return 0;
-    for (let t = 60; t < 1600; t *= 1.35) if (o.y + d.y * t < terrainHeight(o.x + d.x * t, o.z + d.z * t)) return 0;
+    if (d.y < 0.75 && city.topsGrid.segment(o.x, o.z, o.x + d.x * 900, o.z + d.z * 900, b => rayHitsBox(o.x, o.y, o.z, d.x, d.y, d.z, b))) return 0;
+    for (let t = 60; t < 3200; t *= 1.35) if (o.y + d.y * t < terrainHeight(o.x + d.x * t, o.z + d.z * t)) return 0;
     const edge = Math.max(Math.abs(sunScreen.x), Math.abs(sunScreen.y));
     return THREE.MathUtils.clamp(1.25 - edge, 0, 1) * THREE.MathUtils.smoothstep(atmosphere.elevation, -0.5, 4);
   }
@@ -630,21 +720,21 @@ async function main() {
   }
 
   function checkpoints(dt) {
-    if (game.mode !== 'race' || game.checkpoint >= route.length || game.countdown > 0.6) return;
+    if (game.mode !== 'race' || game.checkpoint >= game.route.length || game.countdown > 0.6) return;
     game.raceTime += dt;
     game.topSpeed = Math.max(game.topSpeed, Math.abs(player.speed));
-    const [gx, gz] = route[game.checkpoint];
+    const [gx, gz] = game.route[game.checkpoint];
     const ax = game.lastX, az = game.lastZ, bx = player.x - ax, bz = player.z - az;
     const len = bx * bx + bz * bz;
     const t = len ? THREE.MathUtils.clamp(((gx - ax) * bx + (gz - az) * bz) / len, 0, 1) : 0;
     if (Math.hypot(gx - ax - bx * t, gz - az - bz * t) < CHECKPOINT_RADIUS) {
       game.checkpoint++;
       game.splits.push(game.raceTime);
-      if (game.checkpoint === route.length) finishRace();
+      if (game.checkpoint === game.route.length) finishRace();
       else {
         setGate();
         audio.chime();
-        toast(`CHECKPOINT ${game.checkpoint} / ${route.length}`);
+        toast(`CHECKPOINT ${game.checkpoint} / ${game.route.length}`);
         game.flash = 1;
       }
     }
@@ -691,7 +781,7 @@ async function main() {
     player.impact = Math.max(impact, player.impact);
     player.applyDamage();
     checkRedLight();
-    wanted.update(dt, player, game.time, camera, game.mode === 'free');
+    wanted.update(dt, player, game.time, camera, game.mode === 'free' && policeSetting !== 'off');
     for (const ev of wanted.events) {
       if (ev.type === 'up') toast(`WANTED  ${'★'.repeat(ev.level)}`);
       if (ev.type === 'evaded') { toast('YOU LOST THEM'); audio.chime(); }
@@ -701,14 +791,14 @@ async function main() {
 
   // Crimes count only in free roam, and only if a police car is watching (see wanted.js).
   function reportCrime(kind, x, z, stars, needWitness = true) {
-    if (game.mode !== 'free') return;
+    if (game.mode !== 'free' || policeSetting === 'off') return;
     wanted.crime(kind, x, z, stars, game.time, needWitness);
   }
 
   // Running a red: entering a crossing against the light at speed.
   let inCrossing = false;
   function checkRedLight() {
-    const rx = nearestRoad(roadsX, player.x), rz = nearestRoad(roadsZ, player.z);
+    const rx = nearestRoadX(player.x), rz = nearestRoadZ(player.z);
     const inside = Math.abs(player.x - rx) < ROAD_HALF - 1 && Math.abs(player.z - rz) < ROAD_HALF - 1;
     if (inside && !inCrossing && Math.abs(player.speed) > 9) {
       const axis = Math.abs(player.vx) > Math.abs(player.vz) ? 1 : 0;
@@ -721,7 +811,7 @@ async function main() {
     toast('BUSTED');
     game.flash = 1.5;
     audio.impact(4);
-    player.reset(spawn.x, spawn.z, spawn.heading);
+    player.safeRespawn(); // released on the spot, car repaired
     game.lastX = player.x;
     game.lastZ = player.z;
     rig.snap(player);
@@ -729,6 +819,7 @@ async function main() {
 
   // --- Frame loop -------------------------------------------------------
   const clock = new THREE.Clock();
+  let lodTimer = 0;
   renderer.info.autoReset = false;
   function frame() {
     requestAnimationFrame(frame);
@@ -754,7 +845,9 @@ async function main() {
     const focus = tmpV.set(player.x - Math.sin(player.heading) * pipeline.quality.shadowRange * 0.35, 0, player.z - Math.cos(player.heading) * pipeline.quality.shadowRange * 0.35);
     atmosphere.update(dt, game.time, focus, camera);
     leafSun.value.copy(atmosphere.sun.color).multiplyScalar(atmosphere.elevation > -1 ? atmosphere.sun.intensity : 0.1);
-    city.update(atmosphere.lampFactor, game.time, camera, dt);
+    city.update(atmosphere.lampFactor, game.time);
+    lodTimer -= rawDt;
+    if (lodTimer <= 0) { lodTimer = 0.2; updateLod(camera.position.x, camera.position.z); }
     props.update(game.time, atmosphere.lampFactor);
     furniture.update(atmosphere.lampFactor);
     coast.mirrorHide.length = 0;
@@ -791,6 +884,7 @@ async function main() {
     const wetTarget = roadSetting === 'wet' ? 0.9 : roadSetting === 'dry' ? 0 : THREE.MathUtils.smoothstep(atmosphere.lampFactor, 0.15, 0.85) * 0.85;
     // The live cycle already changes slowly; a jump in time or setting should show at once.
     roadUniforms.wetness.value = wetTarget;
+    world.wetness = wetTarget;
     // Camera swing blur: where the screen center sat last frame, from the previous view.
     camera.updateMatrixWorld();
     curVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -822,13 +916,13 @@ async function main() {
       clockEl.textContent = label;
       sunIcon.textContent = atmosphere.elevation > -1.5 ? '☀' : '☾';
     }
-    const district = districtAt(player.x, player.z)[0];
+    const district = districtAt(player.x, player.z);
     const gearRatio = player.gear > 0 ? player.def.gears[player.gear - 1] * player.def.final : player.def.gears[0] * player.def.final;
     audio.update({
       rpm: player.rpm, throttle: player.throttle, speed: player.speed, slip: player.slip + player.wheelspin * 12,
       boosting: player.boosting, active: game.state === 'play' && !game.paused, shoreDistance: Math.abs(camera.position.x - SHORE_X), time: game.time,
       gear: player.gear, ratio: gearRatio, night: atmosphere.nightFactor,
-      city: CITY_NOISE[district] ?? 0.5, nearTrees: district === 'SOUTHBANK' || district === 'PALM DISTRICT' ? 0.6 : 0.2,
+      city: district[2], nearTrees: district[3] > 0.5 ? 0.6 : 0.2,
     });
     if (game.state === 'play' && !game.paused) pipeline.adapt(rawDt);
     if (fpsOn) {
@@ -853,6 +947,7 @@ async function main() {
   await progress('Warming up the engine…');
   rig.orbit(player, 0);
   atmosphere.update(0, 0, tmpV.set(player.x, 0, player.z), camera);
+  updateLod(player.x, player.z);
   try {
     await renderer.compileAsync(scene, camera);
   } catch { /* fall back to lazy compilation */ }
@@ -885,7 +980,7 @@ async function main() {
     traffic: () => traffic.cars.map(c => ({ x: +c.x.toFixed(1), z: +c.z.toFixed(1), speed: +c.speed.toFixed(1), axis: c.axis, turn: !!c.turn, hit: !!c.hit })),
     reset: resetCar,
     camera: cameraSwitch,
-    debug: { scene, atmosphere, pipeline, renderer, camera, rig, traffic, pedestrians, player, knock, world, audio, wanted, hud, game, input },
+    debug: { scene, atmosphere, pipeline, renderer, camera, rig, traffic, pedestrians, player, knock, world, audio, wanted, hud, game, input, city, vegetation, lodStats },
     selectCar,
   };
 }

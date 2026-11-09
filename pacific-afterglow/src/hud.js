@@ -1,36 +1,61 @@
-import { roadsX, roadsZ, ROAD_HALF, SHORE_X, BEACH_START, PROMENADE, PIER, blockCentersX, blockCentersZ, BLOCK_SIZE, districtAt, streetName } from './world/layout.js';
+import {
+  roadsX, roadsZ, ROAD_HALF, SHORE_X, BEACH_START, PROMENADE, PIERS, BLOCK_SIZE, districtAt, streetName, BOUNDS, WEST, EAST, NORTH, SOUTH,
+  DISTRICTS, districtKey,
+} from './world/layout.js';
+import { allBlocks } from './world/plan.js';
 import { routeBetween, routeLength } from './gps.js';
 
 const $ = id => document.getElementById(id);
-const MAP = { x0: -760, x1: 420, z0: -640, z1: 640 };
+const MAP = { x0: -760, x1: EAST + 140, z0: BOUNDS.minZ - 90, z1: BOUNDS.maxZ + 90 };
+const MAP_SCALE = 0.6; // pixels per metre of the pre-drawn city image
 
 // The static city map is drawn once; the radar rotates it under the car every frame.
 function drawStaticMap(colliders) {
   const c = document.createElement('canvas');
-  c.width = MAP.x1 - MAP.x0;
-  c.height = MAP.z1 - MAP.z0;
+  c.width = Math.round((MAP.x1 - MAP.x0) * MAP_SCALE);
+  c.height = Math.round((MAP.z1 - MAP.z0) * MAP_SCALE);
   const g = c.getContext('2d');
+  g.scale(MAP_SCALE, MAP_SCALE);
   g.translate(-MAP.x0, -MAP.z0);
+  const W = MAP.x1 - MAP.x0, H = MAP.z1 - MAP.z0;
   g.fillStyle = '#16343f';
-  g.fillRect(MAP.x0, MAP.z0, c.width, c.height);
+  g.fillRect(MAP.x0, MAP.z0, W, H);
+  // Hills beyond the city limits.
+  g.fillStyle = '#243229';
+  g.fillRect(SHORE_X, MAP.z0, MAP.x1 - SHORE_X, H);
   g.fillStyle = '#1e2a2e';
-  g.fillRect(SHORE_X, MAP.z0, MAP.x1 - SHORE_X, c.height);
+  g.fillRect(SHORE_X, BOUNDS.minZ, BOUNDS.maxX - SHORE_X, BOUNDS.maxZ - BOUNDS.minZ);
   g.fillStyle = '#6d6047';
-  g.fillRect(SHORE_X, MAP.z0, BEACH_START - SHORE_X, c.height);
+  g.fillRect(SHORE_X, MAP.z0, BEACH_START - SHORE_X, H);
   g.fillStyle = '#2d4433';
-  g.fillRect(BEACH_START, MAP.z0, PROMENADE.to - BEACH_START, c.height);
-  g.fillStyle = '#29353a';
-  for (const x of blockCentersX) for (const z of blockCentersZ) g.fillRect(x - BLOCK_SIZE / 2, z - BLOCK_SIZE / 2, BLOCK_SIZE, BLOCK_SIZE);
-  g.fillStyle = '#2f4a35';
-  for (const [x, z] of [[-80, 80], [240, 400]]) g.fillRect(x - 55, z - 55, 110, 110);
+  g.fillRect(BEACH_START, MAP.z0, PROMENADE.to - BEACH_START, H);
+  for (const [x, z, plan] of allBlocks()) {
+    g.fillStyle = '#29353a';
+    g.fillRect(x - BLOCK_SIZE / 2, z - BLOCK_SIZE / 2, BLOCK_SIZE, BLOCK_SIZE);
+    if (plan.kind === 'park') { g.fillStyle = '#2f4a35'; g.fillRect(x - 55, z - 55, 110, 110); }
+    if (plan.kind === 'parking') { g.fillStyle = '#323b40'; g.fillRect(x - 45, z - 45, 104, 104); }
+  }
   g.fillStyle = '#3e4f56';
   for (const b of colliders) g.fillRect(b.x - b.w, b.z - b.d, b.w * 2, b.d * 2);
   g.fillStyle = '#5b6b6e';
-  for (const x of roadsX) g.fillRect(x - ROAD_HALF, roadsZ[0] - ROAD_HALF, ROAD_HALF * 2, roadsZ[roadsZ.length - 1] - roadsZ[0] + ROAD_HALF * 2);
-  for (const z of roadsZ) g.fillRect(roadsX[0] - ROAD_HALF, z - ROAD_HALF, roadsX[roadsX.length - 1] - roadsX[0] + ROAD_HALF * 2, ROAD_HALF * 2);
+  for (const x of roadsX) g.fillRect(x - ROAD_HALF, NORTH - ROAD_HALF, ROAD_HALF * 2, SOUTH - NORTH + ROAD_HALF * 2);
+  for (const z of roadsZ) g.fillRect(WEST - ROAD_HALF, z - ROAD_HALF, EAST - WEST + ROAD_HALF * 2, ROAD_HALF * 2);
   g.fillStyle = '#7d6a52';
-  g.fillRect(PIER.x1, PIER.z - PIER.halfWidth, PIER.rampStart - PIER.x1, PIER.halfWidth * 2);
+  for (const P of PIERS) g.fillRect(P.x1, P.z - P.halfWidth, P.rampStart - P.x1, P.halfWidth * 2);
   return c;
+}
+
+// Where to print each district's name on the big map: the middle of its blocks.
+function districtLabels() {
+  const sums = {};
+  for (const [x, z] of allBlocks()) {
+    const k = districtKey(x, z);
+    const s = sums[k] || (sums[k] = [0, 0, 0]);
+    s[0] += x; s[1] += z; s[2]++;
+  }
+  const out = Object.entries(sums).map(([k, [x, z, n]]) => [DISTRICTS[k][0], x / n, z / n]);
+  out.push([DISTRICTS.ocean[0], -385, 0]);
+  return out;
 }
 
 export class Hud {
@@ -39,6 +64,9 @@ export class Hud {
     this.ctx = this.canvas.getContext('2d');
     this.mapImage = drawStaticMap(colliders);
     this.expanded = false;
+    this.labels = districtLabels();
+    this.view = { zoom: 1, x: (MAP.x0 + MAP.x1) / 2, z: (MAP.z0 + MAP.z1) / 2 };
+    this.raceKey = '';
     this.route = null; // GPS polyline to the current target
     this.routeKey = '';
     this.routeAt = [0, 0];
@@ -66,11 +94,16 @@ export class Hud {
       this.route = routeBetween(car.x, car.z, target[0], target[1]);
       this.routeKey = key;
       this.routeAt = [car.x, car.z];
-      if (game.mode === 'race') {
-        const rest = [];
-        for (let i = game.checkpoint; i < game.route.length - 1; i++) rest.push(routeBetween(...game.route[i], ...game.route[i + 1]));
-        this.raceRoute = rest;
-      } else this.raceRoute = null;
+      // The rest of the run only changes when a checkpoint is passed.
+      const raceKey = game.mode === 'race' ? `${game.raceId}:${game.checkpoint}` : '';
+      if (raceKey !== this.raceKey) {
+        this.raceKey = raceKey;
+        this.raceRoute = null;
+        if (raceKey) {
+          this.raceRoute = [];
+          for (let i = game.checkpoint; i < game.route.length - 1; i++) this.raceRoute.push(routeBetween(...game.route[i], ...game.route[i + 1]));
+        }
+      }
     }
   }
 
@@ -114,16 +147,56 @@ export class Hud {
     this.drawMap(car, game, traffic, wanted);
   }
 
+  // Scale of the big map in canvas pixels per metre, at the current zoom.
+  mapScale() {
+    return Math.min(this.canvas.width / (MAP.x1 - MAP.x0), this.canvas.height / (MAP.z1 - MAP.z0)) * this.view.zoom;
+  }
+
+  // Canvas pixel -> world position on the big map.
+  mapPoint(clientX, clientY) {
+    const r = this.canvas.getBoundingClientRect();
+    const px = ((clientX - r.left) / r.width) * this.canvas.width, py = ((clientY - r.top) / r.height) * this.canvas.height;
+    const scale = this.mapScale();
+    return [(px - this.canvas.width / 2) / scale + this.view.x, (py - this.canvas.height / 2) / scale + this.view.z];
+  }
+
+  clampView() {
+    const v = this.view;
+    v.zoom = Math.min(Math.max(v.zoom, 1), 8);
+    const halfW = (MAP.x1 - MAP.x0) / 2 * (1 - 1 / v.zoom), halfH = (MAP.z1 - MAP.z0) / 2 * (1 - 1 / v.zoom);
+    v.x = Math.min(Math.max(v.x, (MAP.x0 + MAP.x1) / 2 - halfW), (MAP.x0 + MAP.x1) / 2 + halfW);
+    v.z = Math.min(Math.max(v.z, (MAP.z0 + MAP.z1) / 2 - halfH), (MAP.z0 + MAP.z1) / 2 + halfH);
+  }
+
+  // Zoom the big map about a point on screen (mouse wheel, pinch or the +/- keys).
+  zoomAt(factor, clientX, clientY) {
+    if (!this.expanded) return;
+    const r = this.canvas.getBoundingClientRect();
+    const [wx, wz] = this.mapPoint(clientX ?? r.left + r.width / 2, clientY ?? r.top + r.height / 2);
+    const before = this.view.zoom;
+    this.view.zoom = Math.min(Math.max(before * factor, 1), 8);
+    const k = before / this.view.zoom;
+    this.view.x = wx + (this.view.x - wx) * k;
+    this.view.z = wz + (this.view.z - wz) * k;
+    this.clampView();
+  }
+
+  // Drag the big map by a distance in CSS pixels.
+  panBy(dx, dy) {
+    if (!this.expanded) return;
+    const r = this.canvas.getBoundingClientRect();
+    const scale = this.mapScale() * (r.width / this.canvas.width);
+    this.view.x -= dx / scale;
+    this.view.z -= dy / scale;
+    this.clampView();
+  }
+
   // Click on the full-screen map: set (or clear) a waypoint.
   pick(clientX, clientY, game) {
     if (!this.expanded) return;
-    const r = this.canvas.getBoundingClientRect();
-    const px = ((clientX - r.left) / r.width) * this.canvas.width, py = ((clientY - r.top) / r.height) * this.canvas.height;
-    const scale = Math.min(this.canvas.width / (MAP.x1 - MAP.x0), this.canvas.height / (MAP.z1 - MAP.z0));
-    const x = (px - this.canvas.width / 2) / scale + (MAP.x0 + MAP.x1) / 2;
-    const z = (py - this.canvas.height / 2) / scale + (MAP.z0 + MAP.z1) / 2;
-    if (game.waypoint && Math.hypot(game.waypoint[0] - x, game.waypoint[1] - z) < 30) game.waypoint = null;
-    else game.waypoint = [Math.min(Math.max(x, roadsX[0]), roadsX[roadsX.length - 1]), Math.min(Math.max(z, roadsZ[0]), roadsZ[roadsZ.length - 1])];
+    const [x, z] = this.mapPoint(clientX, clientY);
+    if (game.waypoint && Math.hypot(game.waypoint[0] - x, game.waypoint[1] - z) < 40 / this.view.zoom + 12) game.waypoint = null;
+    else game.waypoint = [Math.min(Math.max(x, WEST), EAST), Math.min(Math.max(z, NORTH), SOUTH)];
     this.routeKey = '';
   }
 
@@ -147,18 +220,29 @@ export class Hud {
     ctx.fillRect(0, 0, w, h);
     ctx.save();
     if (this.expanded) {
-      const scale = Math.min(w / (MAP.x1 - MAP.x0), h / (MAP.z1 - MAP.z0));
+      const scale = this.mapScale();
       ctx.translate(w / 2, h / 2);
       ctx.scale(scale, scale);
-      ctx.translate(-(MAP.x0 + MAP.x1) / 2, -(MAP.z0 + MAP.z1) / 2);
+      ctx.translate(-this.view.x, -this.view.z);
     } else {
       ctx.translate(w / 2, h * 0.62);
       ctx.scale(0.85, 0.85);
       ctx.rotate(car.heading);
       ctx.translate(-car.x, -car.z);
     }
-    ctx.drawImage(this.mapImage, MAP.x0, MAP.z0);
-    const z = this.expanded ? 1.6 : 1; // line widths scale up on the big map
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(this.mapImage, MAP.x0, MAP.z0, MAP.x1 - MAP.x0, MAP.z1 - MAP.z0);
+    // Marker and line sizes are in metres; on the big map they are sized to stay readable.
+    const z = this.expanded ? 3.4 / Math.sqrt(this.view.zoom) : 1;
+    if (this.expanded) {
+      ctx.fillStyle = '#fff4dc66';
+      ctx.font = `700 ${Math.round(46 / Math.sqrt(this.view.zoom))}px "Barlow Condensed", Barlow, Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const [name, lx, lz] of this.labels) {
+        if (name === 'OCEAN DRIVE') { ctx.save(); ctx.translate(lx, lz); ctx.rotate(-Math.PI / 2); ctx.fillText(name, 0, 0); ctx.restore(); } else ctx.fillText(name, lx, lz);
+      }
+    }
     ctx.lineJoin = ctx.lineCap = 'round';
     // The rest of the Sunset Run, faint, then the GPS line to the next target on top.
     if (this.raceRoute) {
@@ -177,7 +261,7 @@ export class Hud {
     }
     // Traffic, then police with their search rings while you are wanted.
     ctx.fillStyle = '#c9d3d6';
-    for (const t of traffic.cars) if (!t.police) ctx.fillRect(t.x - 2.5, t.z - 2.5, 5, 5);
+    for (const t of traffic.cars) if (!t.police) ctx.fillRect(t.x - 2.5 * z, t.z - 2.5 * z, 5 * z, 5 * z);
     const flash = Math.floor(performance.now() / 180) % 2;
     for (const t of traffic.police) {
       const chasing = t.mode === 'chase';
@@ -201,7 +285,7 @@ export class Hud {
         ctx.fill();
         if (this.expanded) {
           ctx.fillStyle = '#17212a';
-          ctx.font = '700 22px Barlow, Arial';
+          ctx.font = `700 ${Math.round(9 * z)}px Barlow, Arial`;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillText(String(i + 1), x, cz + 1);
@@ -224,7 +308,7 @@ export class Hud {
     // Player arrow.
     ctx.translate(car.x, car.z);
     ctx.rotate(-car.heading);
-    const s = this.expanded ? 2.4 : 1;
+    const s = this.expanded ? 1.5 * z : 1;
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 8;
     ctx.fillStyle = '#ff8a52';
@@ -241,7 +325,7 @@ export class Hud {
       ctx.font = '600 20px Barlow, Arial';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(game.mode === 'race' ? 'SUNSET RUN · FOLLOW THE ORANGE LINE' : 'CLICK THE MAP TO SET A WAYPOINT · CLICK IT AGAIN TO CLEAR', 24, 22);
+      ctx.fillText(game.mode === 'race' ? `${game.raceName} · FOLLOW THE ORANGE LINE` : 'CLICK TO SET A WAYPOINT · SCROLL OR PINCH TO ZOOM · DRAG TO MOVE', 24, 22);
       ctx.fillStyle = '#5f8dff'; ctx.fillRect(24, h - 44, 14, 14);
       ctx.fillStyle = '#c9d3d6'; ctx.fillRect(170, h - 44, 14, 14);
       ctx.fillStyle = '#fff4dccc';
@@ -260,8 +344,12 @@ export class Hud {
     }
   }
 
-  setExpanded(on) {
+  setExpanded(on, car = null) {
     this.expanded = on;
+    // Open on the whole city; zooming in from there keeps the car in view.
+    this.view.zoom = 1;
+    if (car) { this.view.x = car.x; this.view.z = car.z; }
+    this.clampView();
     this.canvas.width = on ? 1100 : 480;
     this.canvas.height = on ? 1100 : 360;
   }

@@ -3,7 +3,7 @@ import { Reflector } from 'three/addons/objects/Reflector.js';
 import { NOISE, SKY } from '../core/glsl.js';
 import { atmoUniforms } from './atmosphere.js';
 import { proceduralMaterial, canvasTexture } from '../core/materials.js';
-import { SHORE_X, WATER_Y, PIER, BEACH_START, pierHeight } from './layout.js';
+import { SHORE_X, WATER_Y, PIER, PIERS, BEACH_START, pierHeight, BOUNDS } from './layout.js';
 import { range, pick } from '../core/rng.js';
 import { roadUniforms } from './ground.js';
 import { batchStatic } from '../core/batch.js';
@@ -108,8 +108,8 @@ void main() {
 }`;
 
 export function buildCoast(scene, renderer) {
-  const width = 2400, depth = 3400;
-  const geo = new THREE.PlaneGeometry(width, depth, 120, 170);
+  const width = 3200, depth = BOUNDS.maxZ - BOUNDS.minZ + 3000;
+  const geo = new THREE.PlaneGeometry(width, depth, 128, 256);
   const reflector = new Reflector(geo, { textureWidth: 512, textureHeight: 512, clipBias: 0.003, multisample: 0 });
   const mirrorUniforms = reflector.material.uniforms;
   const uniforms = {
@@ -178,6 +178,7 @@ export function buildCoast(scene, renderer) {
   let mirrorEnabled = true;
 
   const pier = buildPier(scene, renderer);
+  for (const P of PIERS) if (P.plain) pier.lamps.push(...buildPlainPier(scene, renderer, P));
   const beach = buildBeachProps(scene);
 
   return {
@@ -255,7 +256,7 @@ function buildPier(scene, renderer) {
   });
   pileMesh.castShadow = true;
   group.add(pileMesh);
-  PIER.piles = piles.filter(([x]) => x > SHORE_X - 4);
+  PIER.piles = piles.filter(([x]) => x > SHORE_X - 4).map(([x, zz]) => ({ x, z: zz, r: 0.45 }));
 
   // Railings and lamps.
   const railMat = new THREE.MeshStandardMaterial({ color: 0xe8e4da, roughness: 0.5, metalness: 0.3 });
@@ -430,9 +431,90 @@ function buildPier(scene, renderer) {
       }
       leds.instanceColor.needsUpdate = true;
       lampHeadMat.emissiveIntensity = night * 3;
+      pierLampMat.emissiveIntensity = night * 3;
       signMat.emissiveIntensity = 0.3 + night * 1.8;
     },
   };
+}
+
+// The fishing pier: a long plain deck with a bait shop and benches at the end.
+const pierLampMat = new THREE.MeshStandardMaterial({ color: 0xfff2d6, emissive: 0xffd08a, emissiveIntensity: 0 });
+function buildPlainPier(scene, renderer, P) {
+  const group = new THREE.Group();
+  const { x0, x1, z, halfWidth, deckY } = P;
+  const wood = woodMaterial();
+  const deckLen = x0 - x1;
+  const m = new THREE.Matrix4();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(deckLen, 0.6, halfWidth * 2), wood);
+  deck.position.set((x0 + x1) / 2, deckY - 0.3, z);
+  const rampLen = P.rampStart - x0;
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(rampLen, deckY), 0.6, halfWidth * 2), wood);
+  ramp.position.set((P.rampStart + x0) / 2, (deckY + 0.16) / 2 - 0.3, z);
+  ramp.rotation.z = -Math.atan2(deckY - 0.16, rampLen);
+  // A side platform at the seaward end carries the bait shop, outside the rail.
+  const head = new THREE.Mesh(new THREE.BoxGeometry(13, 0.6, 9), wood);
+  head.position.set(x1 + 9, deckY - 0.31, z + halfWidth + 4.5);
+  for (const o of [deck, ramp, head]) { o.castShadow = o.receiveShadow = true; group.add(o); }
+  const piles = [];
+  for (let x = P.rampStart - 8; x >= x1; x -= 9) for (const dz of [-halfWidth + 1, 0, halfWidth - 1]) piles.push([x, z + dz]);
+  const pileMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.32, 0.38, 1, 8), new THREE.MeshStandardMaterial({ color: 0x4b3b2d, roughness: 0.9 }), piles.length);
+  piles.forEach(([x, zz], i) => {
+    const bottom = -6, top = (pierHeight(x, z) ?? deckY) - 0.5;
+    m.compose(new THREE.Vector3(x, (bottom + top) / 2, zz), new THREE.Quaternion(), new THREE.Vector3(1, top - bottom, 1));
+    pileMesh.setMatrixAt(i, m);
+  });
+  pileMesh.castShadow = true;
+  group.add(pileMesh);
+  P.piles = piles.filter(([x]) => x > SHORE_X - 4).map(([x, zz]) => ({ x, z: zz, r: 0.45 }));
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x6f6a60, roughness: 0.6, metalness: 0.3 });
+  for (const side of [-1, 1]) for (const y of [0.55, 1.05]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(deckLen, 0.08, 0.08), railMat);
+    rail.position.set((x0 + x1) / 2, deckY + y, z + side * (halfWidth - 0.1));
+    group.add(rail);
+  }
+  const postCount = Math.floor(deckLen / 3);
+  const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 1.1, 0.1), railMat, postCount * 2);
+  for (let i = 0; i < postCount; i++) for (const [k, side] of [-1, 1].entries()) {
+    m.makeTranslation(x0 - i * 3, deckY + 0.55, z + side * (halfWidth - 0.1));
+    posts.setMatrixAt(i * 2 + k, m);
+  }
+  group.add(posts);
+  // Bait shop.
+  const shopMat = new THREE.MeshStandardMaterial({ color: 0x7fb0a8, roughness: 0.75 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x8a3b2c, roughness: 0.6 });
+  const shop = new THREE.Mesh(new THREE.BoxGeometry(9, 4.2, 6), shopMat);
+  shop.position.set(x1 + 9, deckY + 2.1, z + halfWidth + 5);
+  shop.castShadow = shop.receiveShadow = true;
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(10.2, 0.35, 7.2), roofMat);
+  roof.position.set(x1 + 9, deckY + 4.35, z + halfWidth + 5);
+  group.add(shop, roof);
+  const signTex = canvasTexture(renderer, 512, 128, (c, w, h) => {
+    c.fillStyle = '#10222a';
+    c.fillRect(0, 0, w, h);
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = '800 76px "Barlow Condensed", Impact, sans-serif';
+    c.fillStyle = '#ffe9b8';
+    c.fillText('BAIT & TACKLE', w / 2, h / 2 + 4);
+  });
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(7, 1.75), new THREE.MeshStandardMaterial({ map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 0.5, roughness: 0.6 }));
+  sign.position.set(x1 + 9, deckY + 3.4, z + halfWidth + 1.98);
+  sign.rotation.y = Math.PI;
+  group.add(sign);
+  const lampPositions = [];
+  for (let x = x0 - 6; x > x1 + 4; x -= 18) for (const side of [-1, 1]) lampPositions.push([x, z + side * (halfWidth - 0.4)]);
+  const lampPole = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.09, 4.5, 6), railMat, lampPositions.length);
+  const lampHead = new THREE.InstancedMesh(new THREE.SphereGeometry(0.28, 10, 8), pierLampMat, lampPositions.length);
+  lampPositions.forEach(([x, zz], i) => {
+    m.makeTranslation(x, deckY + 2.25, zz);
+    lampPole.setMatrixAt(i, m);
+    m.makeTranslation(x, deckY + 4.6, zz);
+    lampHead.setMatrixAt(i, m);
+  });
+  group.add(lampPole, lampHead);
+  batchStatic(group);
+  scene.add(group);
+  return lampPositions.map(([x, zz]) => [x, deckY + 4.6, zz]);
 }
 
 function buildBeachProps(scene) {
@@ -442,8 +524,8 @@ function buildBeachProps(scene) {
   const hutMat = new THREE.MeshStandardMaterial({ color: 0x5fa9c9, roughness: 0.6 });
   const trimMat = new THREE.MeshStandardMaterial({ color: 0xf1ead8, roughness: 0.6 });
   const roofMat = new THREE.MeshStandardMaterial({ color: 0xd84c3a, roughness: 0.6 });
-  for (let zz = -520; zz <= 520; zz += 130) {
-    if (Math.abs(zz - PIER.z) < 40) continue;
+  for (let zz = BOUNDS.minZ + 36; zz <= BOUNDS.maxZ - 30; zz += 130) {
+    if (PIERS.some(P => Math.abs(zz - P.z) < 40)) continue;
     const t = new THREE.Group();
     const hut = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.4, 3.2), hutMat);
     hut.position.y = 3.2;
@@ -471,14 +553,14 @@ function buildBeachProps(scene) {
   }
   // Beach umbrellas.
   const umbrellaColors = ['#e8553a', '#f0c24b', '#3b8fc2', '#f3efe4', '#45a37f'];
-  const count = 40;
+  const count = 130;
   const canopy = new THREE.InstancedMesh(new THREE.ConeGeometry(1.4, 0.55, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, side: THREE.DoubleSide }), count);
   const pole = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.03, 2.3, 4), trimMat, count);
   const towels = new THREE.InstancedMesh(new THREE.BoxGeometry(0.9, 0.02, 1.9), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), count);
   const c = new THREE.Color(), q = new THREE.Quaternion();
   for (let i = 0; i < count; i++) {
-    let zz = range(-520, 520);
-    if (Math.abs(zz - PIER.z) < 14) zz += 30;
+    let zz = range(BOUNDS.minZ + 30, BOUNDS.maxZ - 30);
+    if (PIERS.some(P => Math.abs(zz - P.z) < 14)) zz += 30;
     const x = range(-398, -366);
     const y = -0.02 - (BEACH_START - x) * 0.0105;
     q.setFromEuler(new THREE.Euler(range(-0.12, 0.12), 0, range(-0.12, 0.12)));

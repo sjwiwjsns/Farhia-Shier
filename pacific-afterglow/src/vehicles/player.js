@@ -2,47 +2,78 @@ import * as THREE from 'three';
 import { carGeometry, carMaterials, paintMaterial } from './carModel.js';
 import { makeBeamMaterial } from '../world/props.js';
 import {
-  surfaceAt, groundHeight, pierHeight, PIER, BOUNDS, SLAB_H, roadsX, roadsZ, nearestRoad,
+  surfaceAt, groundHeight, pierHeight, pierAt, BOUNDS, SLAB_H, nearestRoadX, nearestRoadZ, WEST, EAST, NORTH, SOUTH,
 } from '../world/layout.js';
 
 const damp = THREE.MathUtils.damp;
 const clamp = THREE.MathUtils.clamp;
 
 // --- Car roster ---------------------------------------------------------------
-// Three player cars. Each one has its own engine, gearbox, grip and body motion.
-// stats are 0..1 for the selection screen only.
+// Three player cars, described the way a spec sheet would: mass, weight distribution,
+// an engine torque curve in newton metres, real gear ratios, drag and tyre grip. The
+// simulation below works everything else out from these. stats are 0..1 for the
+// selection screen only.
 export const CARS = {
   coupe: {
-    name: 'CALDERA GT', model: 'coupe', blurb: 'Grand tourer · balanced and forgiving',
-    stats: { speed: 0.58, accel: 0.6, grip: 0.72 },
-    power: 12.5, curve: [0.55, 1.15, 0.95], gears: [3.25, 2.15, 1.6, 1.25, 1.02, 0.86], final: 3.55,
-    idle: 900, redline: 7400, drag: 0.0029, brake: 28, maxSpeed: 64,
-    grip: 11, slideHold: 0.55, lat: 15, latDrift: 24, steer: 0.62, yawDamp: 7.5, powerSlide: 0,
-    roll: 0.0065, rollMax: 0.09, pitch: 0.0028, nitro: 9, engine: 'v8',
+    name: 'CALDERA GT', model: 'coupe', blurb: 'Grand tourer · 450 hp V8, rear drive, balanced',
+    stats: { speed: 0.8, accel: 0.72, grip: 0.76 }, spec: '450 HP · 1,580 KG · 305 KM/H',
+    mass: 1580, front: 0.52, cgH: 0.47, drive: 'rwd',
+    torque: [[900, 360], [2500, 480], [4500, 520], [6200, 500], [6900, 468], [7400, 405]],
+    idle: 900, redline: 7400, gears: [3.31, 2.13, 1.55, 1.19, 0.97, 0.79], final: 3.7, eff: 0.88, shift: 0.2,
+    cdA: 0.7, clA: 0.3, aeroFront: 0.45, mu: 1.1, rollFront: 0.57, brakeBias: 0.63, brakeG: 1.3, steerLock: 0.6,
+    roll: 0.0065, rollMax: 0.09, pitch: 0.0028, nitro: 0.45, engine: 'v8',
   },
   muscle: {
-    name: 'VANTA SS', model: 'muscle', blurb: 'Muscle car · huge torque, loose tail',
-    stats: { speed: 0.66, accel: 0.76, grip: 0.45 },
-    power: 14.2, curve: [0.86, 0.6, 0.72], gears: [2.9, 1.9, 1.4, 1.1, 0.88], final: 3.6,
-    idle: 750, redline: 6400, drag: 0.0026, brake: 24, maxSpeed: 62,
-    grip: 8.4, slideHold: 0.45, lat: 12.8, latDrift: 27, steer: 0.56, yawDamp: 6, powerSlide: 0.55,
-    roll: 0.0095, rollMax: 0.12, pitch: 0.0042, nitro: 10.5, engine: 'bigblock',
+    name: 'VANTA SS', model: 'muscle', blurb: 'Muscle car · 465 hp big-block, huge torque, loose tail',
+    stats: { speed: 0.74, accel: 0.74, grip: 0.5 }, spec: '465 HP · 1,760 KG · 290 KM/H',
+    mass: 1760, front: 0.54, cgH: 0.53, drive: 'rwd',
+    torque: [[750, 500], [2000, 610], [3800, 650], [5000, 622], [5800, 570], [6400, 495]],
+    idle: 750, redline: 6400, gears: [2.66, 1.78, 1.3, 1.0, 0.74], final: 3.73, eff: 0.85, shift: 0.28,
+    cdA: 0.92, clA: 0.05, aeroFront: 0.5, mu: 1.04, rollFront: 0.52, brakeBias: 0.66, brakeG: 1.15, steerLock: 0.58,
+    roll: 0.0095, rollMax: 0.12, pitch: 0.0042, nitro: 0.5, engine: 'bigblock',
   },
   super: {
-    name: 'VENTUS R', model: 'super', blurb: 'Mid-engine supercar · track grip, 220 km/h',
-    stats: { speed: 0.95, accel: 0.94, grip: 0.95 },
-    power: 16, curve: [0.45, 1.25, 0.88], gears: [3.4, 2.3, 1.75, 1.4, 1.15, 0.97], final: 3.3,
-    idle: 1100, redline: 8800, drag: 0.0016, brake: 33, maxSpeed: 80,
-    grip: 13.5, slideHold: 0.65, lat: 19, latDrift: 22, steer: 0.6, yawDamp: 9, powerSlide: 0,
-    roll: 0.0035, rollMax: 0.05, pitch: 0.0018, nitro: 9, engine: 'v10',
+    name: 'VENTUS R', model: 'super', blurb: 'Mid-engine supercar · 640 hp V10, track grip',
+    stats: { speed: 0.97, accel: 0.95, grip: 0.96 }, spec: '640 HP · 1,420 KG · 345 KM/H',
+    mass: 1420, front: 0.42, cgH: 0.41, drive: 'rwd',
+    torque: [[1100, 370], [3000, 500], [5000, 580], [6800, 600], [8200, 555], [8800, 495]],
+    idle: 1100, redline: 8800, gears: [3.13, 2.19, 1.63, 1.29, 1.03, 0.84, 0.69], final: 3.9, eff: 0.9, shift: 0.09,
+    cdA: 0.78, clA: 1.15, aeroFront: 0.4, mu: 1.22, rollFront: 0.6, brakeBias: 0.58, brakeG: 1.5, steerLock: 0.56,
+    roll: 0.0035, rollMax: 0.05, pitch: 0.0018, nitro: 0.4, engine: 'v10',
   },
 };
 export const CAR_ORDER = ['coupe', 'muscle', 'super'];
 
-function torqueCurve(def, rpm) {
-  // Normalized torque against engine speed; each car shapes its own band.
-  const x = rpm / def.redline, [a, b, c] = def.curve;
-  return clamp(a + b * x - c * x * x * x, 0.35, 1);
+// Handling modes. Easy is a modern car with every driver aid on plus a little steering
+// help for keys and thumbs; Sport keeps ABS and a loose traction control that lets the
+// tail move; Simulation is the bare machine. tc is how much of the engine's excess the
+// traction control takes away (1 all of it, 0 none).
+export const HANDLING = {
+  easy: { label: 'EASY HANDLING', abs: true, tc: 1, esc: true, grip: 1.16, steerMargin: 0.06, counter: 0.85, align: true, wet: 0.35 },
+  sport: { label: 'SPORT HANDLING', abs: true, tc: 0.55, esc: false, grip: 1.0, steerMargin: 0.1, counter: 0.55, align: false, wet: 1 },
+  sim: { label: 'SIMULATION HANDLING', abs: false, tc: 0, esc: false, grip: 1.0, steerMargin: 0.15, counter: 0.25, align: false, wet: 1 },
+};
+
+const G = 9.81, AIR = 1.2;
+// Grip and rolling drag per surface: [friction multiplier, rolling resistance coefficient].
+const SURFACES = { road: [1, 0.013], curb: [0.9, 0.02], grass: [0.55, 0.09], sand: [0.45, 0.24] };
+
+// Engine torque in N·m at an engine speed, from the car's curve.
+function torqueAt(def, rpm) {
+  const c = def.torque;
+  if (rpm <= c[0][0]) return c[0][1];
+  for (let i = 1; i < c.length; i++) {
+    if (rpm <= c[i][0]) return c[i - 1][1] + (c[i][1] - c[i - 1][1]) * (rpm - c[i - 1][0]) / (c[i][0] - c[i - 1][0]);
+  }
+  return c[c.length - 1][1];
+}
+
+// Magic-formula tyre: normalised force for a slip angle. Peaks near 8 degrees and falls
+// to about three quarters once the tyre is sliding, which is what makes a drift holdable.
+function tyreCurve(alpha) {
+  const B = 9.5, C = 1.45, E = 0.25;
+  const x = B * alpha;
+  return Math.sin(C * Math.atan(x - E * (x - Math.atan(x))));
 }
 
 // Deterministic per-position noise, so coincident vertices of a non-indexed mesh move together.
@@ -70,7 +101,8 @@ function splitSides(geo) {
 // --- Player car ---------------------------------------------------------------
 export class PlayerCar {
   constructor(scene, renderer, key = 'coupe') {
-    this.assist = true; // Easy handling; false is the original Sport feel
+    this.mode = 'easy'; // 'easy', 'sport' or 'sim' (see HANDLING)
+    this.aids = HANDLING.easy;
     this.mats = carMaterials(renderer);
     this.paint = paintMaterial('#df6339');
     this.group = new THREE.Group();
@@ -116,6 +148,15 @@ export class PlayerCar {
     for (const w of this.wheels || []) this.group.remove(w.pivot);
     const geo = carGeometry(this.def.model);
     this.dims = geo.type;
+    // Chassis constants worked out once from the spec sheet and the body's dimensions.
+    {
+      const D = this.def, L = (geo.type.wheels[1] - geo.type.wheels[0]) * geo.type.length;
+      this.chassis = {
+        L, a: L * (1 - D.front), b: L * D.front, track: geo.type.track * 2, R: geo.type.wheelR,
+        Iz: D.mass * L * (1 - D.front) * L * D.front * 1.05, Fz0: D.mass * G / 4,
+        peakTorque: Math.max(...D.torque.map(t => t[1])),
+      };
+    }
     this.exhausts = geo.exhausts.map(e => e.clone());
     const m = this.mats;
     const slot = { paint: this.paint, glass: m.glass, trim: m.trim, dark: m.dark, chrome: m.chrome, plate: m.plate };
@@ -184,6 +225,14 @@ export class PlayerCar {
     this.repair();
   }
 
+  // Easy handling (the default) keeps the assists described in HANDLING.
+  get assist() { return this.mode === 'easy'; }
+  set assist(on) { this.setHandling(on ? 'easy' : 'sport'); }
+  setHandling(mode) {
+    this.mode = HANDLING[mode] ? mode : 'easy';
+    this.aids = HANDLING[this.mode];
+  }
+
   setColor(hex) {
     this.paint.color.set(hex);
   }
@@ -199,6 +248,14 @@ export class PlayerCar {
     this.vz = 0;
     this.yawRate = 0;
     this.steer = 0;
+    this.wheelAngle = 0;
+    this.ax = 0; // body accelerations, filtered: they drive weight transfer and body motion
+    this.ay = 0;
+    this.lock = 0; // 0..1, wheels locked under braking
+    this.escActive = false;
+    this.handbrakeTimer = 0;
+    this.shiftHold = 0;
+    this.pedal = 0;
     this.gear = 1;
     this.rpm = this.def.idle;
     this.shiftTimer = 0;
@@ -238,120 +295,237 @@ export class PlayerCar {
   groundAt(x, z, currentY) {
     const pier = pierHeight(x, z);
     const base = groundHeight(x);
-    if (pier !== null && (currentY > pier - 1.2 || x > PIER.x0)) return pier;
+    if (pier !== null && (currentY > pier - 1.2 || x > pierAt(x, z).x0)) return pier;
     const s = surfaceAt(x, z);
     return s === 'curb' || s === 'grass' ? base + SLAB_H : base;
   }
 
+  // One simulation step. The tyre model is stiff, so each call is integrated in two halves.
   update(dt, input, world) {
-    const D = this.def;
-    const fx = -Math.sin(this.heading), fz = -Math.cos(this.heading);
-    const rx = Math.cos(this.heading), rz = -Math.sin(this.heading);
-    let vLong = this.vx * fx + this.vz * fz;
-    let vLat = this.vx * rx + this.vz * rz;
-    const absV = Math.abs(vLong);
+    const D = this.def, C = this.chassis, A = this.aids;
+    const lastX = this.x, lastZ = this.z;
     this.surface = surfaceAt(this.x, this.z);
     const onPier = pierHeight(this.x, this.z) !== null && this.y > 1;
+    const surf = onPier ? SURFACES.curb : SURFACES[this.surface] || SURFACES.road;
     const loose = this.surface === 'sand' && !onPier ? 1 : this.surface === 'grass' ? 0.5 : 0;
+    const wet = this.surface === 'road' ? (world.wetness || 0) * 0.22 * A.wet : 0;
+    const mu = D.mu * surf[0] * A.grip * (1 - wet);
 
+    // --- Controls -----------------------------------------------------------------
     this.throttle = input.throttle;
     this.brake = input.brake;
     this.handbrake = input.handbrake;
-    const steerTarget = input.steer;
-    // Easy handling turns in a touch more gently and lets go faster, so taps don't overshoot.
-    const easy = this.assist;
-    const steerRate = Math.abs(steerTarget) > Math.abs(this.steer) ? (easy ? 4.2 : 5.5) : (easy ? 10 : 8);
-    this.steer = damp(this.steer, steerTarget, steerRate, dt);
+    const fx = -Math.sin(this.heading), fz = -Math.cos(this.heading);
+    const speedNow = this.vx * fx + this.vz * fz;
+    const absV = Math.abs(speedNow);
+    // The brake pedal becomes the reverse pedal once the car has stopped (and back again).
+    if (this.gear === -1) {
+      if (speedNow > -0.6 && input.throttle > 0 && input.brake === 0) this.gear = 1;
+    } else if (speedNow < 0.6 && input.brake > 0 && input.throttle === 0) this.gear = -1;
+    else if (speedNow < -1.5) this.gear = -1;
+    const reversing = this.gear === -1;
+    // A foot takes a moment to cross the pedal's travel, which is also what makes a
+    // keyboard's all-or-nothing throttle driveable.
+    const wantPedal = reversing ? input.brake : input.throttle; // toward where the gearbox points
+    this.pedal += clamp(wantPedal - this.pedal, -7 * dt, (this.pedal < 0.35 ? 5 : 2.4) * dt);
+    if (this.pedal < 0.001) this.pedal = 0;
+    const pedal = this.pedal;
+    const braking = reversing ? input.throttle : input.brake;
 
-    // Nitro.
-    this.boosting = input.nitro && input.throttle > 0 && this.nitro > 1 && vLong > 3;
+    // Nitrous: more torque while it lasts.
+    this.boosting = input.nitro && input.throttle > 0 && this.nitro > 1 && speedNow > 3 && !reversing;
     this.nitro = clamp(this.nitro + (this.boosting ? -22 : 9) * dt, 0, 100);
 
-    // Gearbox: automatic with short shift cuts.
+    // Gearbox: automatic. It shifts up early on a light foot and holds gears under power.
     const gears = D.gears;
-    const wheelRpm = (absV / (2 * Math.PI * this.dims.wheelR)) * 60;
-    const reversing = vLong < -0.5 || (this.brake > 0 && absV < 1.2 && this.throttle === 0);
-    if (reversing) this.gear = -1;
-    else if (this.gear === -1) this.gear = 1;
-    const ratio = this.gear === -1 ? gears[0] : gears[this.gear - 1];
-    const engineRpm = wheelRpm * ratio * D.final;
+    const ratio = (reversing ? gears[0] * 1.05 : gears[this.gear - 1]) * D.final;
+    const wheelRpm = (absV / C.R) * (30 / Math.PI);
+    const engineRpm = wheelRpm * ratio;
+    this.shiftHold -= dt;
     if (this.shiftTimer > 0) this.shiftTimer -= dt;
-    else if (this.gear > 0) {
-      if (engineRpm > D.redline - 300 && this.gear < gears.length) { this.gear++; this.shiftTimer = 0.22; this.onShift?.(1); }
-      else if (this.gear > 1 && engineRpm < D.redline * 0.36 && !(this.throttle && engineRpm > D.redline * 0.27)) { this.gear--; this.shiftTimer = 0.12; this.onShift?.(-1); }
+    else if (!reversing && this.shiftHold <= 0) {
+      const up = D.redline * (0.5 + 0.47 * pedal);
+      const down = D.redline * (0.2 + 0.14 * pedal);
+      const lowerRpm = this.gear > 1 ? wheelRpm * gears[this.gear - 2] * D.final : Infinity;
+      if (engineRpm > up && this.gear < gears.length) {
+        this.gear++; this.shiftTimer = D.shift; this.shiftHold = D.shift + 0.5; this.onShift?.(1);
+      } else if (this.gear > 1 && (engineRpm < down || (pedal > 0.9 && lowerRpm < D.redline * 0.78))) {
+        this.gear--; this.shiftTimer = D.shift * 0.7; this.shiftHold = D.shift + 0.7; this.onShift?.(-1);
+      }
     }
-    // Free revving when the clutch is out or the wheels spin.
-    const launch = this.throttle > 0 && absV < 6 && this.gear === 1;
-    const targetRpm = clamp(Math.max(engineRpm, D.idle + (launch ? D.redline * 0.51 : 0) * this.throttle), D.idle, D.redline);
-    this.rpm = damp(this.rpm, this.shiftTimer > 0 ? targetRpm * 0.82 : targetRpm, 12, dt);
+    // Below the clutch's bite point the engine runs free of the wheels (launch revs).
+    const launchRpm = D.idle + (D.redline * 0.44 - D.idle) * pedal;
+    const slipping = engineRpm < launchRpm;
+    const targetRpm = clamp(Math.max(engineRpm, launchRpm), D.idle, D.redline);
+    this.rpm = damp(this.rpm, this.shiftTimer > 0 ? targetRpm * 0.84 : targetRpm, slipping ? 7 : 16, dt);
 
-    // Longitudinal forces.
-    let accel = 0;
-    if (this.throttle > 0 && this.gear > 0 && this.shiftTimer <= 0) {
-      accel += D.power * torqueCurve(D, this.rpm) * (ratio / gears[0]) * this.throttle * (1 - loose * 0.35);
-      if (this.boosting) accel += D.nitro;
+    // Torque at the driven wheels, as a force at the contact patch.
+    let driveForce = 0;
+    if (this.shiftTimer <= 0) {
+      if (pedal > 0 && this.rpm < D.redline - 40) {
+        driveForce = torqueAt(D, this.rpm) * pedal * (this.boosting ? 1 + D.nitro : 1) * ratio * D.eff / C.R;
+      } else if (pedal === 0 && absV > 2) {
+        driveForce = -C.peakTorque * 0.1 * (this.rpm / D.redline) * ratio / C.R; // engine braking
+      }
     }
-    if (this.brake > 0) {
-      if (vLong > 0.6) accel -= D.brake * this.brake;
-      else accel -= 7 * this.brake; // reverse
-    }
-    if (this.throttle > 0 && vLong < -0.6) accel += 26; // throttle while rolling back brakes
-    // Aero drag and rolling resistance, more on sand.
-    accel -= vLong * Math.abs(vLong) * (D.drag + loose * 0.006);
-    accel -= Math.sign(vLong) * Math.min(Math.abs(vLong) / dt, 0.25 + loose * 2.6);
-    if (!this.throttle && !this.brake) accel -= Math.sign(vLong) * Math.min(Math.abs(vLong) / dt, 0.9);
-    if (this.handbrake) accel -= Math.sign(vLong) * Math.min(Math.abs(vLong) / dt, 5);
-    vLong += accel * dt;
-    vLong = clamp(vLong, -14, D.maxSpeed + (this.boosting ? 10 : 0));
+    if (reversing) driveForce = -driveForce;
+    const brakeForce = braking * D.brakeG * D.mass * G;
 
-    // Lateral grip: strong normally, breaks away with the handbrake or on sand.
-    let grip = D.grip * (easy ? 1.5 : 1) - loose * (easy ? 3 : 6);
-    if (this.handbrake) grip = easy ? 1.8 : 1.2;
-    const slipRatio = Math.abs(vLat) / (absV + 4);
-    if (slipRatio > 0.18 && !this.handbrake) grip *= easy ? 0.9 : D.slideHold; // already sliding: hold the drift
-    // Rear-drive torque breaks the tail loose in low gears.
-    if (D.powerSlide && !easy && this.gear > 0 && this.gear <= 2) {
-      grip *= 1 - D.powerSlide * this.throttle * Math.abs(this.steer) * clamp(absV / 14, 0, 1);
-    }
-    vLat *= Math.exp(-grip * dt);
-    // Stability control: once the handbrake is off, a slide straightens itself out.
-    if (easy && !this.handbrake) vLat *= Math.exp(-(slipRatio > 0.08 ? 7 : 2) * dt);
-    this.slip = Math.abs(vLat);
+    // Steering: the road wheels cannot usefully turn further than the tyres can use, so
+    // the lock narrows with speed. Hands off, they trail along the direction of travel,
+    // which is also what catches a slide.
+    const lx = -Math.cos(this.heading), lz = Math.sin(this.heading); // the car's left
+    const uNow = speedNow, vNow = this.vx * lx + this.vz * lz;
+    const speed = Math.hypot(uNow, vNow);
+    const steerSS = Math.atan(C.L * mu * G / Math.max(speed * speed, 1));
+    const maxSteer = Math.min(D.steerLock, steerSS + A.steerMargin + 0.085 + 0.12 * A.counter);
+    // Counter-steer comes from how far the tail has stepped out (the rear slip angle).
+    const trail = uNow > 4 ? clamp(Math.atan2(vNow - C.b * this.yawRate, uNow), -0.55, 0.55) * A.counter : 0;
+    const wantAngle = clamp(input.steer * maxSteer + trail, -D.steerLock, D.steerLock);
+    const turningIn = Math.abs(wantAngle) > Math.abs(this.wheelAngle);
+    const steerRate = (turningIn ? 1.5 : 2.6) * (0.55 + 0.45 * Math.min(1, Math.abs(wantAngle - this.wheelAngle) / 0.12)) + (uNow > 4 ? Math.abs(trail) * 3 : 0);
+    this.wheelAngle += clamp(wantAngle - this.wheelAngle, -steerRate * dt, steerRate * dt);
+    this.steer = this.wheelAngle / D.steerLock;
+    if (this.handbrake) this.handbrakeTimer = 0.7; else this.handbrakeTimer -= dt;
 
-    // Bicycle-model yaw with speed-sensitive steering.
-    const wheelbase = (this.dims.wheels[1] - this.dims.wheels[0]) * this.dims.length;
-    const maxSteer = D.steer / (1 + absV * (easy ? 0.05 : 0.04));
-    this.wheelAngle = this.steer * maxSteer;
-    let targetYaw = (vLong * Math.tan(this.wheelAngle)) / wheelbase;
-    // Tires can only hold so much cornering force; past that the car understeers.
-    const latLimit = (this.handbrake ? D.latDrift : D.lat) * (easy ? 1.3 : 1) * (1 - loose * 0.4);
-    const maxYaw = latLimit / Math.max(absV, 4);
-    targetYaw = clamp(targetYaw, -maxYaw, maxYaw);
-    if (this.handbrake && absV > 6) targetYaw *= 1.5;
-    if (slipRatio > 0.18) targetYaw += this.steer * 0.6 * Math.min(absV / 20, 1); // counter-steer authority mid-drift
-    this.yawRate = damp(this.yawRate, targetYaw, easy ? Math.max(D.yawDamp, 9.5) : D.yawDamp, dt);
-    this.heading += this.yawRate * dt;
-    // Road assist: with the wheel centred on a street, the car settles parallel to it, so
-    // nudges with the keys or a thumb never leave it crabbing toward the curb.
-    if (easy && Math.abs(input.steer) < 0.05 && Math.abs(this.steer) < 0.15 && absV > 5 && !this.handbrake && this.surface === 'road') {
+    // --- Dynamics -----------------------------------------------------------------
+    const h = dt / 2;
+    let spinSum = 0, lockSum = 0, slipSum = 0;
+    this.escActive = false;
+    for (let pass = 0; pass < 2; pass++) {
+      const sh = Math.sin(this.heading), ch = Math.cos(this.heading);
+      // Body frame: u forward, v to the left, r yaw rate (positive turns left).
+      let u = -this.vx * sh - this.vz * ch;
+      let v = -this.vx * ch + this.vz * sh;
+      let r = this.yawRate;
+      const delta = this.wheelAngle, cd = Math.cos(delta), sd = Math.sin(delta);
+
+      // Wheel loads: static split, aerodynamic downforce, then weight transfer from the
+      // accelerations the body is feeling. Tyres give a little less grip per newton as
+      // they are loaded up, which is why the outside pair cannot make up what the inside loses.
+      const q = 0.5 * AIR * u * u;
+      const down = q * D.clA;
+      const longShift = D.mass * this.ax * D.cgH / C.L;
+      const Fzf = Math.max(D.mass * G * C.b / C.L + down * D.aeroFront - longShift, 0);
+      const Fzr = Math.max(D.mass * G * C.a / C.L + down * (1 - D.aeroFront) + longShift, 0);
+      const latShift = D.mass * this.ay * D.cgH / C.track;
+      const axleGrip = (Fz, share) => {
+        const d = clamp(latShift * share, -Fz / 2, Fz / 2);
+        const w0 = Fz / 2 - d, w1 = Fz / 2 + d;
+        return mu * (w0 * (1 - 0.13 * (w0 / C.Fz0 - 1)) + w1 * (1 - 0.13 * (w1 / C.Fz0 - 1)));
+      };
+      const capF = Math.max(axleGrip(Fzf, D.rollFront), 1), capR = Math.max(axleGrip(Fzr, 1 - D.rollFront), 1);
+
+      // Slip angles from the velocity of each axle's contact patch.
+      const vyF = v + C.a * r, vyR = v - C.b * r;
+      const wxF = u * cd + vyF * sd, wyF = -u * sd + vyF * cd;
+      const alphaF = -Math.atan2(wyF, Math.max(Math.abs(wxF), 1.5));
+      const alphaR = -Math.atan2(vyR, Math.max(Math.abs(u), 1.5));
+      let FyF = tyreCurve(alphaF) * capF, FyR = tyreCurve(alphaR) * capR;
+
+      // Longitudinal demand per axle: brakes on both, engine on the rear.
+      const dirU = u > 0.05 ? 1 : u < -0.05 ? -1 : 0;
+      let brakeF = brakeForce * D.brakeBias, brakeR = brakeForce * (1 - D.brakeBias);
+      let FxF = 0, FxR = 0, lockF = false, lockR = this.handbrake;
+      // Anti-lock keeps each axle just inside what its tyres can hold while still steering.
+      const room = (cap, Fy) => cap * Math.sqrt(Math.max(0.04, 1 - Math.min(1, (Fy / cap) ** 2 * 0.85)));
+      if (A.abs) { brakeF = Math.min(brakeF, room(capF, FyF) * 0.97); brakeR = Math.min(brakeR, room(capR, FyR) * 0.97); } else {
+        lockF = brakeF > capF * 1.02;
+        lockR = lockR || brakeR > capR * 1.02;
+      }
+      let drive = driveForce;
+      const spin = Math.max(0, Math.abs(drive) / capR - 1);
+      // Traction control trims the engine toward what the rear tyres have left over from cornering.
+      if (A.tc) {
+        const lim = capR * 0.95 + (room(capR, FyR) - capR * 0.95) * A.tc;
+        drive = clamp(drive, -lim, lim);
+      }
+      FxF = -dirU * brakeF;
+      FxR = clamp(drive - dirU * brakeR, -capR * 0.95, capR * 0.95);
+      // A locked wheel just drags: its force opposes whichever way the patch is sliding.
+      if (lockF) {
+        const sl = Math.hypot(wxF, wyF);
+        if (sl > 0.3) { FxF = -capF * 0.82 * wxF / sl; FyF = -capF * 0.82 * wyF / sl; } else { FxF = 0; FyF *= 0.3; }
+      } else FyF = Math.sign(FyF) * Math.min(Math.abs(FyF), capF * Math.sqrt(Math.max(0, 1 - (FxF / capF) ** 2)));
+      if (lockR) {
+        const sl = Math.hypot(u, vyR);
+        if (sl > 0.3) { FxR = -capR * 0.8 * u / sl; FyR = -capR * 0.8 * vyR / sl; } else { FxR = 0; FyR *= 0.3; }
+      } else FyR = Math.sign(FyR) * Math.min(Math.abs(FyR), capR * Math.sqrt(Math.max(0, 1 - (FxR / capR) ** 2)));
+
+      // Stability control: brake a wheel to pull the yaw rate back to what the steering asks.
+      let Mz = 0;
+      if (A.esc && this.handbrakeTimer <= 0 && u > 7) {
+        const beta = Math.atan2(v, u);
+        const wantR = clamp(u * Math.tan(delta) / (C.L * (1 + 0.0022 * u * u)), -mu * G / u, mu * G / u);
+        const err = r - wantR;
+        if (Math.abs(err) > 0.07 || Math.abs(beta) > 0.09) {
+          Mz = C.Iz * clamp(-err * 6.5 + beta * 5, -3.2, 3.2);
+          u -= Math.min(Math.abs(err) + Math.abs(beta), 0.6) * 2.2 * h;
+          this.escActive = true;
+        }
+      }
+
+      // Resistances: air, and the tyres' rolling drag (which is what bogs a car down in sand).
+      const drag = q * D.cdA * Math.sign(u);
+      const rollMax = D.mass * Math.abs(u) / h;
+      const rolling = Math.sign(u) * Math.min(surf[1] * D.mass * G, rollMax);
+
+      const FX = FxF * cd - FyF * sd + FxR - drag - rolling;
+      const FY = FxF * sd + FyF * cd + FyR;
+      Mz += C.a * (FxF * sd + FyF * cd) - C.b * FyR;
+      const ax = FX / D.mass, ay = FY / D.mass;
+      const u0 = u;
+      u += (ax + v * r) * h;
+      v += (ay - u0 * r) * h;
+      r += (Mz / C.Iz) * h;
+      // Brakes stop the car; they never push it backwards.
+      if ((braking > 0 || this.handbrake) && pedal === 0 && u0 * u < 0) u = 0;
+      if (pedal === 0 && braking === 0 && Math.abs(u) < 0.06 && Math.abs(v) < 0.06) { u = 0; v = 0; }
+      // At walking pace tyres simply roll where they point (no slip to speak of).
+      const k = 1 - THREE.MathUtils.smoothstep(Math.hypot(u, v), 1.2, 5);
+      if (k > 0) {
+        const rKin = u * Math.tan(delta) / C.L;
+        const pull = k * (1 - Math.exp(-h * 28));
+        r += (rKin - r) * pull;
+        v += (C.b * rKin - v) * pull;
+      }
+      if (reversing) u = Math.max(u, -16);
+
+      // Body accelerations lag a little behind the tyres, as they do through real springs.
+      const lag = 1 - Math.exp(-h * 11);
+      this.ax += (ax - this.ax) * lag;
+      this.ay += (ay - this.ay) * lag;
+      this.yawRate = r;
+      this.heading += r * h;
+      const sh2 = Math.sin(this.heading), ch2 = Math.cos(this.heading);
+      this.vx = -sh2 * u - ch2 * v;
+      this.vz = -ch2 * u + sh2 * v;
+      this.x += this.vx * h;
+      this.z += this.vz * h;
+      spinSum += spin;
+      lockSum += (lockF || lockR) && Math.abs(u) > 2 ? 1 : 0;
+      // Sliding speed of the tyres once they are past their peak (smoke, squeal and skid marks).
+      const past = a => THREE.MathUtils.smoothstep(Math.abs(a), 0.1, 0.22);
+      slipSum += Math.max(Math.abs(vyR) * past(alphaR), Math.abs(wyF) * 0.7 * past(alphaF));
+    }
+    this.wheelspin = clamp(spinSum * 0.5 * (1.2 - 0.6 * A.tc), 0, 1) * (absV < 45 ? 1 : 0);
+    this.lock = lockSum / 2;
+    this.slip = slipSum / 2;
+
+    // Road assist (Easy): with the wheel centred on a street, the car settles parallel to
+    // it, so nudges with the keys or a thumb never leave it crabbing toward the curb.
+    if (A.align && Math.abs(input.steer) < 0.05 && Math.abs(this.wheelAngle) < 0.05 && absV > 5 && !this.handbrake && this.surface === 'road') {
       const quarter = Math.PI / 2;
-      const along = Math.round(this.heading / quarter) * quarter;
-      const off = this.heading - along;
-      if (Math.abs(off) < 0.4) {
-        this.heading -= off * Math.min(1, 2.2 * dt);
-        this.yawRate *= Math.exp(-4 * dt);
+      const off = this.heading - Math.round(this.heading / quarter) * quarter;
+      if (Math.abs(off) < 0.3) {
+        const turn = off * Math.min(1, 1.6 * dt);
+        this.heading -= turn;
+        const c = Math.cos(-turn), sn = Math.sin(-turn);
+        const nvx = this.vx * c + this.vz * sn, nvz = -this.vx * sn + this.vz * c;
+        this.vx = nvx; this.vz = nvz;
       }
     }
 
-    // Recombine in world space; the next step sees the slip angle that results.
-    this.vx = fx * vLong + rx * vLat;
-    this.vz = fz * vLong + rz * vLat;
-    const lastX = this.x, lastZ = this.z;
-    this.x += this.vx * dt;
-    this.z += this.vz * dt;
-
-    this.wheelspin = launch && this.throttle > 0 ? clamp(1 - absV / 8, 0, 1) : 0;
-    if (D.powerSlide && this.gear === 1 && this.throttle > 0.8) this.wheelspin = Math.max(this.wheelspin, clamp(1 - absV / 16, 0, 1));
     this.impact = 0;
     this.collide(world, lastX, lastZ);
     this.distance += Math.hypot(this.x - lastX, this.z - lastZ);
@@ -362,24 +536,27 @@ export class PlayerCar {
     if (gy - this.y > 0.08 && gy - this.y < 0.3) this.heaveVel -= (gy - this.y) * 9; // curb bump
     if (this.y - gy > 0.08 && this.y - gy < 0.3) this.heaveVel += (this.y - gy) * 5; // dropping off a curb
     this.y = damp(this.y, gy, gy > this.y ? 22 : 9, dt);
-    const longAccel = (vLong - this.prevLong) / dt;
-    this.prevLong = vLong;
-    const latAccel = vLong * this.yawRate;
     const slope = this.slopeAt();
-    this.spring('pitch', clamp(longAccel * D.pitch, -D.rollMax * 0.75, D.rollMax * 0.55) + slope, 70, 9, dt);
-    this.spring('roll', clamp(latAccel * D.roll, -D.rollMax, D.rollMax), 60, 7, dt);
+    // Loose ground and kerbs shake the body a little.
+    const rough = loose * Math.min(absV / 12, 1) * 0.012;
+    this.spring('pitch', clamp(this.ax * D.pitch, -D.rollMax * 0.75, D.rollMax * 0.55) + slope + (Math.random() - 0.5) * rough, 70, 9, dt);
+    this.spring('roll', clamp(this.ay * D.roll, -D.rollMax, D.rollMax) + (Math.random() - 0.5) * rough, 60, 7, dt);
     this.spring('heave', 0, 90, 10, dt);
     this.sync();
+    const vLong = this.speed;
     for (const w of this.wheels) {
-      w.spin.rotation.x -= (vLong * dt) / this.dims.wheelR * (w.side < 0 ? -1 : 1) * (w.front ? 1 : 1 + this.wheelspin * 2.5);
+      // Driven wheels spin up when they break traction; locked wheels stop turning.
+      const rate = w.front ? (this.lock && !this.handbrake ? 0.15 : 1) : this.handbrake || this.lock ? 0.05 : 1 + this.wheelspin * 2.5;
+      const roll = w.front || this.wheelspin < 0.05 ? vLong : Math.max(Math.abs(vLong), 6 * this.wheelspin) * (reversing ? -1 : 1);
+      w.spin.rotation.x -= (roll * rate * dt) / C.R * (w.side < 0 ? -1 : 1);
       if (w.front) w.pivot.rotation.y = this.wheelAngle;
     }
   }
 
   slopeAt() {
-    const p = pierHeight(this.x, this.z);
-    if (p !== null && this.x > PIER.x0 && this.y > 0.2) {
-      const grade = Math.atan2(PIER.deckY - SLAB_H, PIER.rampStart - PIER.x0);
+    const P = pierAt(this.x, this.z);
+    if (P && this.x > P.x0 && this.y > 0.2) {
+      const grade = Math.atan2(P.deckY - SLAB_H, P.rampStart - P.x0);
       // Positive pitch raises the nose; we climb when heading west.
       return grade * Math.sin(this.heading);
     }
@@ -409,11 +586,12 @@ export class PlayerCar {
     const r = 1.05; // two circles along the car
     const fx = -Math.sin(this.heading), fz = -Math.cos(this.heading);
     for (let iter = 0; iter < 2; iter++) {
-      for (const off of [-1.35, 1.35]) {
+      for (let k = 0; k < 2; k++) {
+        const off = k ? 1.35 : -1.35;
         const cx = this.x + fx * off, cz = this.z + fz * off;
         // Buildings and shelters (axis-aligned boxes).
-        for (const b of world.boxes || world.colliders) {
-          if (Math.abs(cx - b.x) > b.w + r || Math.abs(cz - b.z) > b.d + r) continue;
+        world.boxGrid.near(cx, cz, r, b => {
+          if (Math.abs(cx - b.x) > b.w + r || Math.abs(cz - b.z) > b.d + r) return;
           const px = clamp(cx, b.x - b.w, b.x + b.w), pz = clamp(cz, b.z - b.d, b.z + b.d);
           let nx = cx - px, nz = cz - pz;
           let d = Math.hypot(nx, nz);
@@ -423,33 +601,34 @@ export class PlayerCar {
             if (ox < oz) { nx = Math.sign(cx - b.x); nz = 0; d = -ox; } else { nx = 0; nz = Math.sign(cz - b.z); d = -oz; }
           } else { nx /= d; nz /= d; }
           if (d < r) this.resolve(nx, nz, r - d, 0.25, cx - nx * r, cz - nz * r);
-        }
+        });
         // Thin round obstacles: palm trunks and poles, plus the pier piles when driving under it.
-        const underPier = this.y < (pierHeight(cx, cz) ?? -9) - 1;
-        for (const list of underPier ? [world.circles, world.piles] : [world.circles]) {
-          for (const t of list) {
-            const dx = cx - t.x, dz = cz - t.z;
-            if (Math.abs(dx) > 3 || Math.abs(dz) > 3) continue;
-            const d = Math.hypot(dx, dz), min = r + t.r;
-            if (d < min && d > 1e-4) this.resolve(dx / d, dz / d, min - d, 0.2, t.x + (dx / d) * t.r, t.z + (dz / d) * t.r);
-          }
-        }
+        const hitCircle = t => {
+          const dx = cx - t.x, dz = cz - t.z;
+          if (Math.abs(dx) > 3 || Math.abs(dz) > 3) return;
+          const d = Math.hypot(dx, dz), min = r + t.r;
+          if (d < min && d > 1e-4) this.resolve(dx / d, dz / d, min - d, 0.2, t.x + (dx / d) * t.r, t.z + (dz / d) * t.r);
+        };
+        world.circleGrid.near(cx, cz, 3, hitCircle);
+        if (this.y < (pierHeight(cx, cz) ?? -9) - 1) world.pileGrid.near(cx, cz, 3, hitCircle);
       }
     }
     // Pier rails and the drop off its end.
-    if (this.y > 1.2 && pierHeight(lastX, lastZ) !== null) {
-      const lim = PIER.halfWidth - 1.1;
-      if (Math.abs(this.z - PIER.z) > lim) this.resolve(0, -Math.sign(this.z - PIER.z), Math.abs(this.z - PIER.z) - lim, 0.15);
-      if (this.x < PIER.x1 + 3) this.resolve(1, 0, PIER.x1 + 3 - this.x, 0.15);
+    const P = pierAt(lastX, lastZ) || pierAt(this.x, this.z);
+    if (P && this.y > 1.2) {
+      const lim = P.halfWidth - 1.1;
+      if (Math.abs(this.z - P.z) > lim) this.resolve(0, -Math.sign(this.z - P.z), Math.abs(this.z - P.z) - lim, 0.15);
+      if (this.x < P.x1 + 3) this.resolve(1, 0, P.x1 + 3 - this.x, 0.15);
     }
     // Walk under the pier ramp only where it is high enough.
     const ramp = pierHeight(this.x, this.z);
-    if (ramp !== null && this.x > PIER.x0 && this.y < ramp - 0.9 && this.x < -345) {
-      const side = Math.sign(this.z - PIER.z) || 1;
-      this.resolve(0, side, PIER.halfWidth + 0.2 - Math.abs(this.z - PIER.z), 0.2);
+    const R = pierAt(this.x, this.z);
+    if (R && this.x > R.x0 && this.y < ramp - 0.9 && this.x < -345) {
+      const side = Math.sign(this.z - R.z) || 1;
+      this.resolve(0, side, R.halfWidth + 0.2 - Math.abs(this.z - R.z), 0.2);
     }
     // World bounds (barriers and the sea).
-    const minX = this.y > 1.2 && Math.abs(this.z - PIER.z) < PIER.halfWidth ? PIER.x1 + 3 : BOUNDS.minX;
+    const minX = P && this.y > 1.2 ? P.x1 + 3 : BOUNDS.minX;
     if (this.x < minX) this.resolve(1, 0, minX - this.x, 0.2);
     if (this.x > BOUNDS.maxX) this.resolve(-1, 0, this.x - BOUNDS.maxX, 0.3);
     if (this.z < BOUNDS.minZ) this.resolve(0, 1, BOUNDS.minZ - this.z, 0.3);
@@ -486,6 +665,12 @@ export class PlayerCar {
       if (!this.contact || -vn > this.contact.speed) this.contact = { x: px, z: pz, speed: -vn, nx, nz };
       this.registerHit(px, pz, -vn);
       this.yawRate *= 0.6;
+      // A hit away from the centre of mass spins the car (the assisted mode damps this out).
+      if (!glancing) {
+        const j = -(1 + b) * vn;
+        const kick = ((pz - this.z) * nx - (px - this.x) * nz) * j / 2.6;
+        this.yawRate += clamp(kick * (this.assist ? 0.15 : 0.45), -2.2, 2.2);
+      }
     }
   }
 
@@ -599,13 +784,13 @@ export class PlayerCar {
 
   safeRespawn() {
     // Nearest lane on the closest road, facing along it.
-    const rx = nearestRoad(roadsX, this.x), rz = nearestRoad(roadsZ, this.z);
+    const rx = nearestRoadX(this.x), rz = nearestRoadZ(this.z);
     if (Math.abs(this.x - rx) < Math.abs(this.z - rz)) {
       const north = Math.cos(this.heading) > 0;
-      this.reset(rx + (north ? 3.4 : -3.4), clamp(this.z, -470, 470), north ? 0 : Math.PI);
+      this.reset(rx + (north ? 3.4 : -3.4), clamp(this.z, NORTH + 10, SOUTH - 10), north ? 0 : Math.PI);
     } else {
       const east = Math.sin(this.heading) < 0;
-      this.reset(clamp(this.x, -310, 310), rz + (east ? 3.4 : -3.4), east ? -Math.PI / 2 : Math.PI / 2);
+      this.reset(clamp(this.x, WEST + 10, EAST - 10), rz + (east ? 3.4 : -3.4), east ? -Math.PI / 2 : Math.PI / 2);
     }
   }
 }

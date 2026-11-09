@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { carGeometry, carMaterials, paintMaterial } from './carModel.js';
-import { roadsX, roadsZ, LANES, ROAD_HALF, BOUNDS, BUS_STOPS, busStopPos, PIER } from '../world/layout.js';
+import { roadsX, roadsZ, LANES, ROAD_HALF, BOUNDS, BUS_STOPS, busStopPos, PIERS, WEST, EAST, NORTH, SOUTH, nearestRoadX, nearestRoadZ, spawn } from '../world/layout.js';
+import { PointGrid } from '../core/grid.js';
 import { signalState } from '../world/props.js';
 import { rand, range, pick, chance } from '../core/rng.js';
 import { canvasTexture } from '../core/materials.js';
@@ -99,6 +100,7 @@ export class Traffic {
     this.police = [];
     this.world = null;
     this.peds = [];
+    this.policePace = 0.6; // 1 is the original, much faster pursuit
     const mats = carMaterials(renderer);
     this.headMat = perInstanceGlow(new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d6, emissiveIntensity: 1, roughness: 0.2 }), 'head-inst');
     this.tailMat = perInstanceGlow(new THREE.MeshStandardMaterial({ color: 0x3a0705, emissive: 0xff2010, emissiveIntensity: 1, roughness: 0.3 }), 'tail-inst');
@@ -173,7 +175,7 @@ export class Traffic {
       this.types[typeName] = T;
       for (let i = 0; i < count; i++) {
         const car = { type: T, slot: i, geo, police: typeName === 'police', mode: 'lane' };
-        this.spawnLane(car, -316, 246, 0, 420);
+        this.spawnLane(car, spawn.x, spawn.z, 0, 420);
         this.cars.push(car);
         if (car.police) this.police.push(car);
       }
@@ -215,30 +217,27 @@ export class Traffic {
     scene.add(this.pools);
     this.parkTimer = 0;
     this.nearParked = [];
-    this.refreshParked(-316, 246);
+    this.refreshParked(spawn.x, spawn.z);
   }
 
   // --- Parking --------------------------------------------------------------
   // Cars line both curbs of every block face, leaving room at corners and stops.
   layoutParking() {
     const out = [];
-    const stops = BUS_STOPS.map(b => busStopPos(b));
-    const segments = (list, max) => {
-      const segs = [];
-      const ends = [-max, ...list, max];
-      for (let i = 0; i < ends.length - 1; i++) segs.push([ends[i] + 27, ends[i + 1] - 27]);
-      return segs.filter(([a, b]) => b - a > 8);
-    };
-    for (const [axis, roads, cross, max] of [['ns', roadsX, roadsZ, 486], ['ew', roadsZ, roadsX, 326]]) {
+    const stops = new PointGrid(48);
+    for (const b of BUS_STOPS) { const [x, z] = busStopPos(b); stops.add({ x, z }); }
+    // One stretch of curb between each pair of crossings.
+    const segments = list => list.slice(0, -1).map((v, i) => [v + 27, list[i + 1] - 27]);
+    for (const [axis, roads, cross] of [['ns', roadsX, roadsZ], ['ew', roadsZ, roadsX]]) {
       for (const road of roads) for (const side of [-1, 1]) {
-        if (axis === 'ns' && road === roadsX[0] && side < 0) continue; // beach side of Ocean Drive
-        for (const [a, b] of segments(cross, max)) {
+        if (axis === 'ns' && road === WEST && side < 0) continue; // beach side of Ocean Drive
+        for (const [a, b] of segments(cross)) {
           for (let s0 = a + 3.6; s0 < b - 3; s0 += 7.2) {
             if (!chance(0.42)) continue;
             const s = s0 + range(-0.6, 0.6);
             const x = axis === 'ns' ? road + side * PARK_OFFSET : s, z = axis === 'ns' ? s : road + side * PARK_OFFSET;
-            if (stops.some(([bx, bz]) => Math.hypot(bx - x, bz - z) < 14)) continue;
-            if (Math.abs(z - PIER.z) < 20 && x < -300) continue;
+            if (stops.near(x, z, 14, st => Math.hypot(st.x - x, st.z - z) < 14)) continue;
+            if (x < -300 && PIERS.some(P => Math.abs(z - P.z) < 20)) continue;
             // Parked facing the direction of traffic on that side.
             const dir = axis === 'ns' ? -side : side;
             out.push({
@@ -249,6 +248,7 @@ export class Traffic {
         }
       }
     }
+    this.parkGrid = new PointGrid(80).addAll(out);
     return out;
   }
 
@@ -259,8 +259,10 @@ export class Traffic {
         for (let k = 0; k < 4; k++) { T.tire.setMatrixAt(i * 4 + k, ZERO); T.rim.setMatrixAt(i * 4 + k, ZERO); }
       }
     }
-    for (const p of this.parked) { p.d = Math.hypot(p.x - px, p.z - pz); p.slot = -1; }
-    const near = this.parked.filter(p => p.d < PARK_RADIUS).sort((a, b) => a.d - b.d);
+    for (const p of this.nearParked) p.slot = -1;
+    const near = [];
+    this.parkGrid.near(px, pz, PARK_RADIUS, p => { p.d = Math.hypot(p.x - px, p.z - pz); p.slot = -1; if (p.d < PARK_RADIUS) near.push(p); });
+    near.sort((a, b) => a.d - b.d);
     const used = {};
     this.nearParked = [];
     for (const p of near) {
@@ -302,8 +304,9 @@ export class Traffic {
       const road = pick(roads);
       const dir = rand() < 0.5 ? 1 : -1;
       const lane = rand() < 0.5 ? 0 : 1;
-      const lim = axis === 'ns' ? 470 : 310;
-      const s = THREE.MathUtils.clamp((axis === 'ns' ? pz : px) + range(-maxD, maxD), -lim, lim);
+      const s = axis === 'ns'
+        ? THREE.MathUtils.clamp(pz + range(-maxD, maxD), NORTH + 10, SOUTH - 10)
+        : THREE.MathUtils.clamp(px + range(-maxD, maxD), WEST + 10, EAST - 10);
       const [x, z] = lanePos(axis, road, dir, lane, s);
       const d = Math.hypot(x - px, z - pz);
       if (d < minD || d > maxD) continue;
@@ -316,7 +319,7 @@ export class Traffic {
       }
       Object.assign(car, { axis, road, dir, lane, s });
       Object.assign(car, {
-        mode: 'lane', cruise: car.police ? range(13, 16) : range(11, 16.5), speed: 9, turn: null, plan: null, decided: null,
+        mode: 'lane', cruise: car.police ? range(10.5, 12.5) : range(11, 16.5), speed: 9, turn: null, plan: null, decided: null,
         hit: null, offset: null, braking: false, blockedTime: 0, wheelSpin: 0, vx: 0, vz: 0,
       });
       this.place(car);
@@ -400,9 +403,8 @@ export class Traffic {
     const fx = -Math.sin(car.heading), fz = -Math.cos(car.heading);
     const axis = Math.abs(fz) > Math.abs(fx) ? 'ns' : 'ew';
     const dir = axis === 'ns' ? Math.sign(fz) || 1 : Math.sign(fx) || 1;
-    const roads = axis === 'ns' ? roadsX : roadsZ;
     const v = axis === 'ns' ? car.x : car.z;
-    const road = roads.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+    const road = axis === 'ns' ? nearestRoadX(v) : nearestRoadZ(v);
     const off = (v - road) * laneOffsetSign(axis, dir);
     const lane = Math.abs(off - LANES[0]) < Math.abs(off - LANES[1]) ? 0 : 1;
     const s = axis === 'ns' ? car.z : car.x;
@@ -536,17 +538,20 @@ export class Traffic {
   }
 
   // Police pursuit: steer at where the player is heading, feel around buildings.
+  // `policePace` scales how fast they drive: cruisers are ordinary sedans, not race cars.
   chase(car, dt, player) {
+    const pace = this.policePace;
     const dx = player.x - car.x, dz = player.z - car.z;
     const dist = Math.hypot(dx, dz);
-    const lead = Math.min(dist / 35, 1.1);
+    const lead = Math.min(dist / 35, 1.1) * pace;
     const tx = player.x + player.vx * lead, tz = player.z + player.vz * lead;
     let want = Math.atan2(-(tx - car.x), -(tz - car.z));
     // Feelers: if the way ahead is blocked by a building, turn toward the clearer side.
     const look = 10 + car.speed * 0.6;
+    const grid = this.world?.boxGrid;
     const blocked = a => {
       const x = car.x - Math.sin(a) * look, z = car.z - Math.cos(a) * look;
-      return (this.world?.colliders || []).some(b => Math.abs(x - b.x) < b.w + 1.8 && Math.abs(z - b.z) < b.d + 1.8);
+      return !!grid && grid.near(x, z, 2, b => Math.abs(x - b.x) < b.w + 1.8 && Math.abs(z - b.z) < b.d + 1.8);
     };
     if (blocked(want)) {
       for (const off of [0.5, -0.5, 1.0, -1.0, 1.6, -1.6]) if (!blocked(want + off)) { want += off; break; }
@@ -555,10 +560,11 @@ export class Traffic {
     const turnRate = 1.9 / (1 + car.speed * 0.012);
     car.heading += THREE.MathUtils.clamp(diff, -turnRate * dt, turnRate * dt);
     const pSpeed = Math.hypot(player.vx, player.vz);
-    let target = dist > 60 ? 50 : Math.min(52, pSpeed + 10);
-    if (Math.abs(diff) > 0.9) target = Math.min(target, 14);
+    const top = 50 * pace;
+    let target = dist > 60 ? top : Math.min(top + 2, pSpeed + 10 * pace);
+    if (Math.abs(diff) > 0.9) target = Math.min(target, 14 * Math.min(1, pace + 0.2));
     if (dist < 9 && pSpeed < 3) target = Math.min(target, 2); // box the player in
-    car.speed += THREE.MathUtils.clamp(target - car.speed, -14 * dt, 9 * dt);
+    car.speed += THREE.MathUtils.clamp(target - car.speed, -14 * dt, 9 * pace * dt);
     const fx = -Math.sin(car.heading), fz = -Math.cos(car.heading);
     // A little lateral slip so they slide through corners.
     car.vx += (fx * car.speed - car.vx) * Math.min(1, dt * 5);
@@ -571,13 +577,14 @@ export class Traffic {
   }
 
   collideWorld(car) {
-    const cols = this.world?.colliders;
-    if (!cols) return;
-    for (const b of cols) {
-      const ox = b.w + 1.1 - Math.abs(car.x - b.x), oz = b.d + 1.1 - Math.abs(car.z - b.z);
-      if (ox <= 0 || oz <= 0) continue;
-      if (ox < oz) { car.x += Math.sign(car.x - b.x) * ox; car.vx *= -0.2; } else { car.z += Math.sign(car.z - b.z) * oz; car.vz *= -0.2; }
-      car.speed *= 0.6;
+    const grid = this.world?.boxGrid;
+    if (grid) {
+      grid.near(car.x, car.z, 2, b => {
+        const ox = b.w + 1.1 - Math.abs(car.x - b.x), oz = b.d + 1.1 - Math.abs(car.z - b.z);
+        if (ox <= 0 || oz <= 0) return;
+        if (ox < oz) { car.x += Math.sign(car.x - b.x) * ox; car.vx *= -0.2; } else { car.z += Math.sign(car.z - b.z) * oz; car.vz *= -0.2; }
+        car.speed *= 0.6;
+      });
     }
     car.x = THREE.MathUtils.clamp(car.x, BOUNDS.minX + 60, BOUNDS.maxX);
     car.z = THREE.MathUtils.clamp(car.z, BOUNDS.minZ, BOUNDS.maxZ);

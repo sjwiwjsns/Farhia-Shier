@@ -6,30 +6,31 @@
 
 const MAX_STARS = 5;
 
-function blockedBy(colliders, ax, az, bx, bz) {
-  // Does the segment a-b cross any building footprint? (2D slab test per box)
-  for (const c of colliders) {
-    if (Math.max(ax, bx) < c.x - c.w || Math.min(ax, bx) > c.x + c.w || Math.max(az, bz) < c.z - c.d || Math.min(az, bz) > c.z + c.d) continue;
+// Does the segment a-b cross any building footprint? (2D slab test per box, looking only
+// at the boxes in the grid cells the segment passes through.)
+function blockedBy(grid, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az;
+  return grid.segment(ax, az, bx, bz, c => {
+    if (Math.max(ax, bx) < c.x - c.w || Math.min(ax, bx) > c.x + c.w || Math.max(az, bz) < c.z - c.d || Math.min(az, bz) > c.z + c.d) return false;
     let t0 = 0, t1 = 1;
-    const dx = bx - ax, dz = bz - az;
-    let hit = true;
-    for (const [o, d, lo, hi] of [[ax, dx, c.x - c.w, c.x + c.w], [az, dz, c.z - c.d, c.z + c.d]]) {
-      if (Math.abs(d) < 1e-6) { if (o < lo || o > hi) { hit = false; break; } continue; }
+    for (let k = 0; k < 2; k++) {
+      const o = k ? az : ax, d = k ? dz : dx, lo = k ? c.z - c.d : c.x - c.w, hi = k ? c.z + c.d : c.x + c.w;
+      if (Math.abs(d) < 1e-6) { if (o < lo || o > hi) return false; continue; }
       let u0 = (lo - o) / d, u1 = (hi - o) / d;
-      if (u0 > u1) [u0, u1] = [u1, u0];
+      if (u0 > u1) { const t = u0; u0 = u1; u1 = t; }
       t0 = Math.max(t0, u0);
       t1 = Math.min(t1, u1);
-      if (t0 > t1) { hit = false; break; }
+      if (t0 > t1) return false;
     }
-    if (hit) return true;
-  }
-  return false;
+    return true;
+  });
 }
 
 export class Wanted {
-  constructor(traffic, colliders) {
+  // grid: a BoxGrid of building footprints.
+  constructor(traffic, grid) {
     this.traffic = traffic;
-    this.colliders = colliders;
+    this.colliders = grid;
     this.reset();
   }
 
