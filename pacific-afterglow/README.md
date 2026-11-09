@@ -33,6 +33,7 @@ Then open http://localhost:4173. Opening `index.html` straight from disk will no
 | Q | | Next radio station (or off) |
 | T | | Cycle time of day |
 | H | | Horn |
+| F | | Show or hide the FPS counter (on by default) |
 | M | Back | Full-screen map: click to set a waypoint, scroll or pinch to zoom, drag to move, + and − keys |
 | R | RB | Reset and repair the car (restarts the run in time trial) |
 | Esc / P | Start | Pause and settings |

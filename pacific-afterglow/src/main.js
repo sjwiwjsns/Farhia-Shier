@@ -526,7 +526,8 @@ async function main() {
   $('race-select').onchange = e => selectRace(e.target.value);
   selectRace(store.get('pacific-race') || 'sunset');
   // Optional frame-rate readout (settings menu).
-  let fpsOn = store.get('pacific-fps') === 'on';
+  // The FPS counter is on unless the player has turned it off (F or the settings menu).
+  let fpsOn = store.get('pacific-fps') !== 'off';
   const fpsEl = $('fps');
   const fpsStats = { frames: 0, time: 0, worst: 0 };
   function setFps(on) {
@@ -569,6 +570,7 @@ async function main() {
     if (hud.expanded && (e.code === 'Equal' || e.code === 'NumpadAdd')) return hud.zoomAt(1.5);
     if (hud.expanded && (e.code === 'Minus' || e.code === 'NumpadSubtract')) return hud.zoomAt(1 / 1.5);
     if (e.code === 'KeyH') { audio.horn(3); return; }
+    if (e.code === 'KeyF') { setFps(!fpsOn); toast(fpsOn ? 'FPS COUNTER ON' : 'FPS COUNTER OFF'); return; }
     if (e.code === 'KeyQ') { setRadio(audio.station + 1 >= STATIONS.length ? -1 : audio.station + 1); return; }
     input.keys.add(e.code);
   });
