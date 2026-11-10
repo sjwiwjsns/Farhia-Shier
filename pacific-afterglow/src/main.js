@@ -9,6 +9,7 @@ import { buildProps, makeBeamMaterial, signalState } from './world/props.js';
 import { RACES, spawn, CHECKPOINT_RADIUS, nearestRoadX, nearestRoadZ, ROAD_HALF, SHORE_X, PIERS, SLAB_H, districtAt } from './world/layout.js';
 import { BoxGrid, PointGrid, updateLod, lodStats } from './core/grid.js';
 import { CarProbe } from './core/probe.js';
+import { FarShadow } from './core/lighting.js';
 import { carMaterials } from './vehicles/carModel.js';
 import { PlayerCar, CARS, CAR_ORDER, HANDLING } from './vehicles/player.js';
 import { Knockables } from './world/knockables.js';
@@ -72,6 +73,7 @@ async function main() {
   let carKey = store.get('pacific-car');
   if (!CARS[carKey]) carKey = 'coupe';
   const player = new PlayerCar(scene, renderer, carKey);
+  const farShadow = new FarShadow(renderer, scene);
   // Live reflections of the street on the player's paint, glass and brightwork.
   const probe = new CarProbe(renderer, scene);
   {
@@ -151,6 +153,10 @@ async function main() {
     atmosphere.setShadowQuality(q.shadow, q.shadowRange);
     coast.setReflections(q.reflections > 0, q.reflections);
     probe.setSize(q.carProbe);
+    farShadow.setSize(q.farShadow);
+    atmosphere.setSkyQuality(q.sky[0], q.sky[1], name !== 'low');
+    atmosphere.realLamps = q.lamps;
+    props.setRealLamps(q.lamps);
     $('quality').value = name;
   }
   pipeline.onResize = () => coast.resize(pipeline.quality.reflections);
@@ -833,6 +839,7 @@ async function main() {
   // --- Frame loop -------------------------------------------------------
   const clock = new THREE.Clock();
   const probeHide = [player.group];
+  let dofNow = 1;
   let lodTimer = 0;
   renderer.info.autoReset = false;
   function frame() {
@@ -919,9 +926,27 @@ async function main() {
     game.flash = Math.max(0, game.flash - dt * 3);
     g.flash.value = game.flash;
     g.night.value = atmosphere.nightFactor;
+    g.warmth.value = THREE.MathUtils.smoothstep(atmosphere.elevation, -6, 1) * (1 - THREE.MathUtils.smoothstep(atmosphere.elevation, 9, 24));
+    // Depth of field: the title screen and the cinematic camera focus on the car.
+    const wantDof = game.state !== 'play' ? 1 : rig.mode === 3 ? 0.75 : 0;
+    dofNow = THREE.MathUtils.damp(dofNow, wantDof, 4, dt);
+    g.dof.value = dofNow;
+    g.focus.value = Math.max(2, camera.position.distanceTo(player.group.position) - 0.6);
     if (pipeline.bloom) pipeline.bloom.strength = 0.36 + atmosphere.lampFactor * 0.22;
 
     pipeline.beginFrame();
+    // Far shadows are centred well ahead of the camera, where they are looked at.
+    camera.getWorldDirection(camDir);
+    farShadow.update(rawDt, tmpV.set(camera.position.x + camDir.x * 330, 0, camera.position.z + camDir.z * 330), atmosphere.lightDir, draw => {
+      // The sky dome, the sea surface and the checkpoint gate must not cast shadows.
+      const gateWas = gate.visible;
+      coast.mirror.paused = true;
+      atmosphere.sky.visible = coast.ocean.visible = gate.visible = false;
+      draw();
+      gate.visible = gateWas;
+      atmosphere.sky.visible = coast.ocean.visible = true;
+      coast.mirror.paused = false;
+    });
     if (probe.size && !game.paused) {
       probe.update(player.group.position, probeHide, Math.min(1, scene.environmentIntensity * 1.9), draw => {
         const sky = atmosphere.sky.material.uniforms.skyDisc;
@@ -1005,7 +1030,7 @@ async function main() {
     traffic: () => traffic.cars.map(c => ({ x: +c.x.toFixed(1), z: +c.z.toFixed(1), speed: +c.speed.toFixed(1), axis: c.axis, turn: !!c.turn, hit: !!c.hit })),
     reset: resetCar,
     camera: cameraSwitch,
-    debug: { scene, atmosphere, pipeline, renderer, camera, rig, traffic, pedestrians, player, knock, world, audio, wanted, hud, game, input, city, vegetation, lodStats },
+    debug: { scene, atmosphere, pipeline, renderer, camera, rig, traffic, pedestrians, player, knock, world, audio, wanted, hud, game, input, city, vegetation, lodStats, farShadow, probe },
     selectCar,
   };
 }

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { NOISE, SKY } from '../core/glsl.js';
+import { lightUniforms, LIGHT_PARS_GLSL, installLighting } from '../core/lighting.js';
+import { SkyBaker } from './sky.js';
 
 // Time of day drives everything: sun and moon position, sky scattering, light
 // colors, fog, reflections and how many windows, lamps and headlights glow.
@@ -24,7 +26,7 @@ export const atmoUniforms = {
   skyMie: { value: 0.006 },
   skyMieG: { value: 0.82 },
   skyIntensity: { value: 0.75 },
-  skyCloudCover: { value: 0.42 },
+  skyCloudCover: { value: 0.47 },
   skyTime: { value: 0 },
   skyNight: { value: 0 },
   skyCloudLit: { value: new THREE.Color() },
@@ -34,6 +36,13 @@ export const atmoUniforms = {
   fogHeightFalloff: { value: 0.012 },
   nightFactor: { value: 0 },
   worldTime: { value: 0 },
+  // The baked sky: two panoramas cross-faded (see sky.js), and the sun's disc.
+  skyPanoA: { value: null },
+  skyPanoB: { value: null },
+  skyPanoBlend: { value: 0 },
+  skySunColor: { value: new THREE.Color() },
+  fogPano: { value: 1 }, // 1: distance fog takes its colour from the sky behind it
+  mirrorPass: { value: 0 }, // 1 while the ocean mirror renders (it looks up from under the ground)
 };
 
 // Every lit material gets atmospheric fog that is brighter toward the sun and
@@ -55,6 +64,9 @@ THREE.ShaderChunk.fog_pars_fragment = `
   uniform vec3 fogSunColor;
   uniform vec3 fogSunDir;
   uniform float fogHeightFalloff;
+  uniform sampler2D paFogPanoA;
+  uniform sampler2D paFogPanoB;
+  uniform vec3 paFogPano; // cross-fade, sky intensity, on
   varying float vFogDepth;
   varying vec3 vFogWorld;
   vec3 pa_applyFog(vec3 color, vec3 worldPos) {
@@ -67,13 +79,26 @@ THREE.ShaderChunk.fog_pars_fragment = `
     float amount = 1.0 - exp(-fogDensity * dist * heightTerm);
     float sunAmt = pow(max(dot(dir, fogSunDir), 0.0), 7.0);
     vec3 fogCol = mix(fogColor, fogSunColor, sunAmt);
+    if (paFogPano.z > 0.5 && amount > 0.003) {
+      // Things fade into the sky that is actually behind them: orange toward a sunset,
+      // blue away from it. Sampled just above the horizon in the direction of view.
+      vec2 puv = vec2(atan(dir.z, dir.x) / 6.2831853 + 0.5, 0.21);
+      vec3 horizon = mix(texture2D(paFogPanoA, puv).rgb, texture2D(paFogPanoB, puv).rgb, paFogPano.x) * paFogPano.y;
+      // Haze is never as bright as the glare round the sun itself.
+      horizon /= max(1.0, dot(horizon, vec3(0.2126, 0.7152, 0.0722)) / 1.15);
+      fogCol = mix(fogCol, horizon, 0.55);
+    }
     return mix(color, fogCol, clamp(amount, 0.0, 1.0));
   }
-#endif`;
+#endif
+${LIGHT_PARS_GLSL}`;
+installLighting();
 THREE.ShaderChunk.fog_fragment = `
 #ifdef USE_FOG
   gl_FragColor.rgb = pa_applyFog(gl_FragColor.rgb, vFogWorld);
 #endif`;
+
+export const fogPanoUniforms = { paFogPanoA: atmoUniforms.skyPanoA, paFogPanoB: atmoUniforms.skyPanoB, paFogPano: { value: new THREE.Vector3(0, 1, 1) } };
 
 // Adds the shared atmosphere uniforms to a built-in material without
 // disturbing any onBeforeCompile hook it already has.
@@ -87,6 +112,7 @@ export function patchAtmosphere(material) {
     shader.uniforms.fogSunColor = atmoUniforms.fogSunColor;
     shader.uniforms.fogSunDir = atmoUniforms.fogSunDir;
     shader.uniforms.fogHeightFalloff = atmoUniforms.fogHeightFalloff;
+    Object.assign(shader.uniforms, lightUniforms, fogPanoUniforms);
   };
   material.customProgramCacheKey = () => prevKey + '|atmo';
   return material;
@@ -169,7 +195,7 @@ const HEMI_POWER = [[-15, 0.4], [-4, 0.42], [3, 0.32], [12, 0.45], [30, 0.6]];
 const FOG_COLOR = [[-15, C(0.03, 0.04, 0.075)], [-5, C(0.15, 0.15, 0.26)], [0, C(0.42, 0.33, 0.38)], [6, C(0.58, 0.45, 0.42)], [18, C(0.55, 0.62, 0.72)], [50, C(0.55, 0.66, 0.8)]];
 const FOG_SUN = [[-15, C(0.05, 0.06, 0.1)], [-5, C(0.4, 0.24, 0.22)], [0, C(1.15, 0.5, 0.22)], [6, C(1.2, 0.68, 0.38)], [20, C(0.9, 0.84, 0.76)], [50, C(0.75, 0.8, 0.86)]];
 const CLOUD_LIT = [[-12, C(0.04, 0.05, 0.08)], [-5, C(0.45, 0.25, 0.32)], [0, C(1.8, 0.72, 0.42)], [5, C(1.9, 1.1, 0.7)], [15, C(1.5, 1.4, 1.35)], [50, C(1.5, 1.5, 1.5)]];
-const CLOUD_SHADE = [[-12, C(0.02, 0.025, 0.04)], [-5, C(0.18, 0.13, 0.22)], [0, C(0.42, 0.26, 0.34)], [5, C(0.6, 0.45, 0.48)], [15, C(0.62, 0.66, 0.74)], [50, C(0.7, 0.74, 0.8)]];
+const CLOUD_SHADE = [[-12, C(0.02, 0.025, 0.04)], [-5, C(0.18, 0.13, 0.22)], [0, C(0.42, 0.26, 0.34)], [5, C(0.6, 0.45, 0.48)], [15, C(0.74, 0.78, 0.86)], [50, C(0.86, 0.9, 0.97)]];
 const FOG_DENSITY = [[-15, 0.0007], [-3, 0.0008], [3, 0.00085], [15, 0.0006], [50, 0.00045]];
 const EXPOSURE = [[-15, 1.35], [-5, 1.2], [0, 1.05], [6, 0.92], [20, 0.76], [50, 0.68]];
 const ENV_POWER = [[-15, 0.5], [-4, 0.45], [2, 0.36], [12, 0.45], [30, 0.6]];
@@ -203,6 +229,10 @@ export class Atmosphere {
     this.probeGround = ground;
     this.probeScene.add(ground);
     this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.baker = new SkyBaker(renderer, atmoUniforms);
+    this.baker.setQuality(1024, 28);
+    // A sky painted in one go (a jump in time) needs fresh image-based lighting at once.
+    this.baker.onComplete = whole => { if (whole) this.envDirty = true; };
     this.envTarget = null;
     this.envDirty = true;
     this.envTimer = 0;
@@ -221,6 +251,9 @@ export class Atmosphere {
     this.sunDir = new THREE.Vector3();
     this.moonDir = new THREE.Vector3();
     this.lightDir = new THREE.Vector3();
+    this.wind = new THREE.Vector2(); // how far the clouds have drifted, metres
+    this.realLamps = true; // street lamps light the scene (off on the lowest tier)
+    this.cloudShadows = 0.5;
     this.nightFactor = 0;
     this.elevation = 0;
     this.exposure = 0.8;
@@ -230,7 +263,14 @@ export class Atmosphere {
   setHours(h) {
     this.hours = ((h % 24) + 24) % 24;
     this.envDirty = true;
+    this.baker.pending = true; // repaint the whole sky for the new hour
     this.apply();
+  }
+
+  setSkyQuality(width, steps, fogPano) {
+    this.baker.setQuality(width, steps);
+    atmoUniforms.fogPano.value = fogPano ? 1 : 0;
+    this.envDirty = true;
   }
 
   setShadowQuality(size, range) {
@@ -326,9 +366,18 @@ export class Atmosphere {
       this.apply();
       if (Math.abs(this.hours - this.lastEnvHours) > 0.12) this.envDirty = true;
     }
-    if (this.envDirty) this.regenerateEnvironment();
 
     this.sky.position.copy(camera.position);
+    // Lamps, cloud shadows and the light they are masked against.
+    this.wind.set(time * 9, time * 3.5);
+    lightUniforms.paSunDirW.value.copy(this.lightDir);
+    lightUniforms.paLamp.value.x = this.realLamps ? this.lampFactor * 60 : 0;
+    lightUniforms.paCloud.value.set(this.cloudShadows * THREE.MathUtils.smoothstep(this.elevation, 1, 9), atmoUniforms.skyCloudCover.value, this.wind.x, this.wind.y);
+    // Repaint a little of the sky, then let the fog and the lighting probe follow it.
+    this.baker.update(this.wind, this.lightDir, 1);
+    fogPanoUniforms.paFogPano.value.set(atmoUniforms.skyPanoBlend.value, atmoUniforms.skyIntensity.value, atmoUniforms.fogPano.value);
+    atmoUniforms.skySunColor.value.copy(this.sun.color).multiplyScalar(this.elevation > -1.5 ? 26 : 0);
+    if (this.envDirty) this.regenerateEnvironment();
     // Shadow camera follows the car and snaps to whole texels in light space so
     // shadow edges stay still instead of crawling as the car moves.
     const range = this.shadowRange;

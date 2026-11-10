@@ -316,13 +316,16 @@ export function buildProps(scene, renderer, extraLamps = [], knock = null) {
   }
   scene.add(signGroup);
 
+  // With real lamp light on, the painted pools only add the hot spot under each head.
+  let poolStrength = 0.7;
   return {
     lamps,
     circles,
+    setRealLamps(on) { poolStrength = on ? 0.3 : 0.7; },
     update(time, lampFactor) {
       headMat.emissiveIntensity = lampFactor * 4;
       globeMat.emissiveIntensity = lampFactor * 2.6;
-      poolMat.opacity = lampFactor * 0.7;
+      poolMat.opacity = lampFactor * poolStrength;
       beamMat.uniforms.intensity.value = lampFactor * 0.09;
       for (const b of billboards) b.emissiveIntensity = 0.05 + lampFactor * 1.1;
       signalMat.uniforms.uState.value.set(signalState(0, time), signalState(1, time));

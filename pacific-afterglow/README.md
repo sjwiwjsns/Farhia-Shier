@@ -107,10 +107,22 @@ the original 180 km/h pursuit; Off removes the wanted level.
 **Light and atmosphere**
 - A live day cycle tied to the HUD clock (48 minutes per day), or fixed times from first
   light to midnight. Sun, moon, sky light, fog, exposure and every light follow it.
-- After dark: street lamps, headlights and tail lights, lit windows, neon, and wet roads
-  that reflect the whole city in long streaks and puddles (switchable in settings).
-- Sun shafts through gaps between buildings, bloom, a lens flare hidden by anything in front
-  of the sun, height fog that glows toward the sun, and soft shadows that follow the car.
+- A sky that is painted, not faked: a physical atmosphere, a deck of ray-marched cumulus
+  that shade themselves and glow at their edges, high cirrus, and an afterglow band along
+  the horizon either side of sunset. Fog takes its colour from the sky behind whatever it
+  hides, so the skyline melts into the actual sunset.
+- Shadows across the whole city: a sharp cascade round the car and a far one covering more
+  than a kilometre, so towers throw their evening shadows over whole districts. Clouds
+  cast drifting shadows too, each under the cloud you can see.
+- After dark the street lamps are real lights: every one lights the road, the cars passing
+  under it and the building fronts beside it (thousands of lamps, worked out in the shader).
+  Plus headlights and tail lights, lit windows and shops you can see into, neon, and wet
+  roads that reflect the city in long streaks and puddles (switchable in settings).
+- Ambient occlusion from the depth buffer on every tier but the lowest: cars sit on the
+  road, walls darken at their feet, gaps between buildings read as gaps.
+- Sun shafts cut by buildings and palms, bloom, a lens flare hidden by anything in front of
+  the sun, filmic tone mapping with a grade that follows the hour, and depth of field on
+  the title screen and the cinematic camera.
 - Ocean with swell, Fresnel reflection, planar reflections of the city, glitter and foam.
 
 **Camera and effects**: wider field of view with speed, motion blur (radial at speed and
@@ -141,10 +153,10 @@ directional when the camera swings round, keeping the car sharp), road rumble, i
 
 | Setting | Resolution cap | Extras |
 | --- | --- | --- |
-| Ultra | 2× | 4096 shadow map, ambient occlusion, ¾-resolution reflections, 256 px live car reflections |
-| High | 1.5× | 2048 shadows, half-resolution reflections and wet streets, 128 px live car reflections |
-| Balanced | 1.2× | 2048 shadows, sky-only ocean reflections |
-| Performance | 1× | 1024 shadows, no bloom or grading |
+| Ultra | 2× | 4096 shadows plus a far cascade, 16-sample occlusion, ¾-resolution reflections, 256 px live car reflections, finest clouds |
+| High | 1.5× | 2048 shadows plus a far cascade, 10-sample occlusion, half-resolution reflections and wet streets, 128 px live car reflections |
+| Balanced | 1.2× | 2048 shadows, a smaller far cascade, 6-sample occlusion, real street lamps, sky-only ocean reflections |
+| Performance | 1× | 1024 shadows, no far cascade, occlusion, bloom, grading or lamp lighting (lamps keep their painted pools) |
 
 Desktop defaults to High and touch devices to Balanced. Dynamic resolution lowers the
 render scale when the frame rate drops, and a sharpening pass keeps the picture crisp.
@@ -156,7 +168,9 @@ Performance work: everything repeated is instanced; the city is split into 320 m
 whose small details are hidden with distance and whose facades switch to a cheaper shader
 far away; collisions, line of sight and parking go through spatial grids, so the bigger
 city costs no more per frame to simulate; the shadow map is drawn once per frame however
-many passes use it; traffic, parked cars and pedestrians stream around the player; static props are
+many passes use it; the sky is repainted a sliver at a time into a panorama instead of
+being computed for every pixel; occlusion, shafts and depth of field read the depth buffer
+rather than drawing the city again; traffic, parked cars and pedestrians stream around the player; static props are
 merged by material; and details that can't show up in reflections are kept out of the
 reflection pass.
 

@@ -110,11 +110,14 @@ vec3 paWetReflection(vec3 worldPos, float puddle) {
   vec4 mc = mirrorMatrix * vec4(worldPos, 1.0);
   vec2 uv = mc.xy / mc.w;
   vec2 ripple = vec2(pa_noise(worldPos.xz * 2.2 + worldTime * 0.6), pa_noise(worldPos.xz * 2.2 + 17.0 - worldTime * 0.4)) - 0.5;
-  uv += ripple * mix(0.0045, 0.002, puddle);
+  // Damp asphalt is rough: it smears what it reflects toward the eye and breaks it up
+  // with its own grain. Only standing water gives a clean mirror.
+  float grain = pa_noise(worldPos.xz * 6.0);
+  uv += ripple * mix(0.011, 0.002, puddle) + vec2(grain - 0.5, 0.0) * 0.006 * (1.0 - puddle);
   vec3 sharp = texture2D(mirrorTex, uv).rgb;
   vec3 streak = (sharp + texture2D(mirrorTex, uv + vec2(0.0, 0.012)).rgb + texture2D(mirrorTex, uv + vec2(0.0, 0.03)).rgb
-    + texture2D(mirrorTex, uv - vec2(0.0, 0.014)).rgb) * 0.25;
-  return mix(streak * 0.85, sharp, puddle);
+    + texture2D(mirrorTex, uv + vec2(0.0, 0.06)).rgb + texture2D(mirrorTex, uv - vec2(0.0, 0.014)).rgb + texture2D(mirrorTex, uv - vec2(0.0, 0.034)).rgb) / 6.0;
+  return mix(streak * (0.45 + 0.5 * grain), sharp, puddle);
 }
 `;
 

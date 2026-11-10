@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { NOISE, SKY } from '../core/glsl.js';
-import { atmoUniforms } from './atmosphere.js';
+import { atmoUniforms, fogPanoUniforms } from './atmosphere.js';
 import { proceduralMaterial, canvasTexture } from '../core/materials.js';
 import { SHORE_X, WATER_Y, PIER, PIERS, BEACH_START, pierHeight, BOUNDS } from './layout.js';
 import { range, pick } from '../core/rng.js';
@@ -69,7 +69,9 @@ void main() {
   n = normalize(mix(n, vec3(0.0, 1.0, 0.0), smoothstep(250.0, 1400.0, dist) * 0.7));
 
   float cosV = max(dot(n, V), 0.0);
-  float fres = 0.02 + 0.98 * pow(1.0 - cosV, 5.0);
+  // A real sea is never a perfect mirror even at the horizon: its facets tilt toward the
+  // eye, so some of the water's own colour always shows through.
+  float fres = min(0.02 + 0.98 * pow(1.0 - cosV, 5.0), 0.64);
   vec3 R = reflect(-V, n);
   R.y = abs(R.y);
   vec3 refl;
@@ -115,6 +117,7 @@ export function buildCoast(scene, renderer) {
   const uniforms = {
     ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
     ...atmoUniforms,
+    ...fogPanoUniforms,
     fogSunColor: atmoUniforms.fogSunColor,
     fogSunDir: atmoUniforms.fogSunDir,
     fogHeightFalloff: atmoUniforms.fogHeightFalloff,
@@ -169,7 +172,9 @@ export function buildCoast(scene, renderer) {
     roadUniforms.mirrorTex.value = blankMirror;
     roadUniforms.useMirror.value = 0;
     for (const o of mirrorHide) o.visible = false;
+    atmoUniforms.mirrorPass.value = 1;
     reflectorRender.apply(this, args);
+    atmoUniforms.mirrorPass.value = 0;
     for (const o of mirrorHide) o.visible = true;
     oceanInverse.copy(reflector.matrixWorld).invert();
     roadUniforms.mirrorMatrix.value.copy(mirrorUniforms.textureMatrix.value).multiply(oceanInverse);

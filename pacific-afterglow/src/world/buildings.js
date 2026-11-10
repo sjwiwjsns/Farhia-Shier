@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { proceduralMaterial, canvasTexture } from '../core/materials.js';
 import { batchStatic } from '../core/batch.js';
-import { atmoUniforms } from './atmosphere.js';
+import { atmoUniforms, patchAtmosphere } from './atmosphere.js';
 import { rand, range, pick, chance } from '../core/rng.js';
 import { BLOCK_SIZE, SIDEWALK, SLAB_H, EAST, NORTH, SOUTH } from './layout.js';
 import { allBlocks } from './plan.js';
@@ -30,6 +30,7 @@ flat varying vec2 vFacExtra;
 flat varying float vFacTop;
 uniform float nightFactor;
 uniform float worldTime;
+uniform float mirrorPass;
 float fGlass; float fRough; float fMetal; vec3 fEmit; vec3 fTilt;
 
 #ifndef FACADE_LOW
@@ -68,6 +69,41 @@ vec3 paRoom(vec2 cell, vec2 size, vec3 V, vec3 T, vec3 N, float seed, float offi
   } else col = paintCol * 0.82;
   // Light falls off toward the back of the room.
   return col * (1.0 - 0.45 * hit.z / depth);
+}
+
+// The same trick for shop fronts: a sales floor behind the glass, with shelves of goods
+// on the walls, a tiled floor and strip lights overhead. glow is how brightly the surface
+// hit is lit when the shop is open.
+vec3 paShop(vec2 cell, vec2 size, vec3 V, vec3 T, vec3 N, float seed, out float glow) {
+  vec3 r = vec3(dot(V, T), V.y, max(-dot(V, N), 0.03));
+  float depth = 6.5;
+  float tx = abs(r.x) > 1e-4 ? (r.x > 0.0 ? size.x - cell.x : -cell.x) / r.x : 1e5;
+  float ty = abs(r.y) > 1e-4 ? (r.y > 0.0 ? size.y - cell.y : -cell.y) / r.y : 1e5;
+  float tz = depth / r.z;
+  float t = min(tx, min(ty, tz));
+  vec3 hit = vec3(cell, 0.0) + r * t;
+  vec3 col;
+  glow = 0.4;
+  if (t == ty) {
+    if (r.y > 0.0) {
+      float strip = step(abs(fract(hit.z / 2.2) - 0.5), 0.1);
+      col = mix(vec3(0.62), vec3(1.0), strip);
+      glow = mix(0.5, 2.2, strip);
+    } else {
+      vec2 tile = floor(hit.xz / 0.6);
+      col = vec3(0.44, 0.42, 0.38) * (0.84 + 0.16 * mod(tile.x + tile.y, 2.0));
+    }
+  } else {
+    // Shelving: boards with rows of goods in assorted packaging, plain wall above.
+    vec2 w = t == tz ? hit.xy : hit.zy;
+    vec2 item = floor(w / vec2(0.24, 0.42)), f = fract(w / vec2(0.24, 0.42));
+    vec3 goods = 0.3 + 0.5 * vec3(pa_hash12(item + seed), pa_hash12(item + seed + 7.7), pa_hash12(item + seed + 13.3));
+    goods = mix(vec3(dot(goods, vec3(0.3333))), goods, 0.6); // packaging is mostly muted, with the odd bright one
+    float onShelf = step(0.17, f.y) * step(0.1, f.x) * step(f.x, 0.9) * step(0.22, pa_hash12(item * 1.7 + seed));
+    col = mix(mix(vec3(0.13, 0.11, 0.09), goods, onShelf), vec3(0.72, 0.68, 0.62), step(2.5, w.y));
+    if (t == tx) col *= 0.78;
+  }
+  return col * (1.0 - 0.35 * hit.z / depth);
 }
 #endif
 
@@ -150,6 +186,19 @@ void paFacade(inout vec3 albedo) {
     vec3 warm = mix(vec3(1.0, 0.75, 0.45), vec3(0.95, 0.95, 0.85), step(0.6, h));
     float shopGlow = 0.25 + 0.75 * pa_hash12(vec2(sid * 1.3 + 7.0, faceId * 3.0 + seed));
     fEmit = warm * glass * lit * shopGlow * (0.45 + 0.55 * smoothstep(0.45, 3.5, y)) * mix(0.05, 0.62, nightFactor);
+    #ifndef FACADE_LOW
+      // Up close the glass shows the shop behind it.
+      vec3 toShop = vPaWorld - cameraPosition;
+      // (Not in the mirror: seen from under the street a shop is all ceiling lights.)
+      float nearShop = (1.0 - smoothstep(55.0, 110.0, length(toShop))) * glass * (1.0 - mirrorPass);
+      if (nearShop > 0.01) {
+        float shopLight;
+        vec3 shopRoom = paShop(vec2(sf * shopW, y), vec2(shopW, 3.7), normalize(toShop),
+          an.x > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0), vFacN, sid * 3.7 + seed, shopLight);
+        albedo = mix(albedo, shopRoom * 0.3, nearShop * 0.75 * (1.0 - nightFactor * 0.7));
+        fEmit = mix(fEmit, warm * shopRoom * shopLight * lit * (0.5 + 0.5 * shopGlow) * mix(0.04, 0.85, nightFactor), nearShop);
+      }
+    #endif
     fEmit += fasciaCol * fascia * step(0.5, h) * nightFactor * 0.9;
     fTilt = vec3(h - 0.5, 0.0, 0.0) * 0.02 * glass;
     return;
@@ -311,7 +360,7 @@ void paFacade(inout vec3 albedo) {
   #ifndef FACADE_LOW
     // Close up, the flat glow gives way to a real room behind the glass.
     vec3 toPix = vPaWorld - cameraPosition;
-    float roomFade = (1.0 - smoothstep(70.0, 150.0, length(toPix))) * (1.0 - step(0.5, spandrel));
+    float roomFade = (1.0 - smoothstep(70.0, 150.0, length(toPix))) * (1.0 - step(0.5, spandrel)) * (1.0 - mirrorPass);
     if (roomFade > 0.01) {
       float ceilGlow;
       vec3 room = paRoom(vec2(fu * cellW, fv * floorH), vec2(cellW, floorH), normalize(toPix),
@@ -333,7 +382,7 @@ void paFacade(inout vec3 albedo) {
 
 function makeFacadeMaterial(low = false) {
   const mat = proceduralMaterial(low ? 'facade-low' : 'facade', { color: 0xffffff, roughness: 0.85, metalness: 0.0 }, {
-    uniforms: { nightFactor: atmoUniforms.nightFactor, worldTime: atmoUniforms.worldTime },
+    uniforms: { nightFactor: atmoUniforms.nightFactor, worldTime: atmoUniforms.worldTime, mirrorPass: atmoUniforms.mirrorPass },
     vertexPars: `
       attribute vec4 aStyle; attribute vec3 aGlass; attribute vec2 aExtra;
       varying vec3 vFacLocal; flat varying vec3 vFacSize; flat varying vec3 vFacN; flat varying vec4 vFacStyle;
@@ -878,7 +927,9 @@ export function buildCity(scene, renderer) {
     sign: { geometry: geo.sign, material: signMat, shadow: false, lod: 520 },
   };
   const MIRROR_SKIP = new Set(['tileRoof', 'ac', 'tank', 'antenna', 'fireEscape', 'balconyGlass', 'balconyRail', 'balconySlab']);
-  const facadeLow = makeFacadeMaterial(true);
+  // The distance variant is swapped in by the LOD pass, after the scene's materials have been
+  // patched for the atmosphere, so it is patched here.
+  const facadeLow = patchAtmosphere(makeFacadeMaterial(true));
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), color = new THREE.Color();
   const up = new THREE.Vector3(0, 1, 0);
   for (const [key, recs] of batches) {

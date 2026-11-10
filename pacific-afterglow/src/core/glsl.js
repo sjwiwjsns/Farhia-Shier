@@ -42,17 +42,15 @@ float pa_band(float x, float lo, float hi, float w) {
 }
 `;
 
-// Physically based (Preetham) daylight with a procedural cloud deck and stars.
-// Shared by the sky dome, the reflection probe and the ocean fallback reflection.
-export const SKY = /* glsl */`
+// Physically based (Preetham) daylight. Used by the sky bake (world/sky.js), which paints
+// it and the clouds into the panorama everything else reads.
+export const ATMOSPHERE = /* glsl */`
 uniform vec3 skySunDir;
 uniform float skyTurbidity;
 uniform float skyRayleigh;
 uniform float skyMie;
 uniform float skyMieG;
-uniform float skyIntensity;
 uniform float skyCloudCover;
-uniform float skyTime;
 uniform float skyNight;
 uniform vec3 skyMoonDir;
 uniform vec3 skyCloudLit;
@@ -67,11 +65,11 @@ float pa_sunIntensity(float zenithAngleCos) {
   return 1000.0 * max(0.0, 1.0 - pow(2.718281828, -((1.6110731556870734 - acos(zenithAngleCos)) / 1.5)));
 }
 
-vec3 pa_atmosphere(vec3 dir, bool withDisc) {
+vec3 pa_atmosphere(vec3 dir) {
   vec3 up = vec3(0.0, 1.0, 0.0);
   vec3 sunDir = skySunDir;
   float sunE = pa_sunIntensity(dot(sunDir, up));
-  float sunfade = 1.0 - clamp(1.0 - exp(sunDir.y * 450000.0 / 450000.0 * 2.2), 0.0, 1.0);
+  float sunfade = 1.0 - clamp(1.0 - exp(sunDir.y * 2.2), 0.0, 1.0);
   float rayleighCoefficient = skyRayleigh - (1.0 - sunfade);
   vec3 betaR = PA_TOTAL_RAYLEIGH * rayleighCoefficient;
   vec3 betaM = 0.434 * (0.2 * skyTurbidity * 10E-18) * PA_MIE_CONST * skyMie;
@@ -92,68 +90,50 @@ vec3 pa_atmosphere(vec3 dir, bool withDisc) {
   vec3 Lin = pow(sunE * ((betaRTheta + betaMTheta) / (betaR + betaM)) * (1.0 - Fex), vec3(1.5));
   Lin *= mix(vec3(1.0), pow(sunE * ((betaRTheta + betaMTheta) / (betaR + betaM)) * Fex, vec3(0.5)),
              clamp(pow(1.0 - dot(up, sunDir), 5.0), 0.0, 1.0));
-  vec3 L0 = vec3(0.1) * Fex;
-  if (withDisc) {
-    float cosSun = dot(normalize(dir), sunDir);
-    float disc = smoothstep(0.99990, 0.99996, cosSun);
-    L0 += sunE * 19000.0 * Fex * disc * step(-0.01, dir.y);
-  }
-  vec3 col = (Lin + L0) * 0.04 + vec3(0.0, 0.0003, 0.00075);
-  col = pow(col, vec3(1.0 / (1.2 + 1.2 * sunfade)));
-  return col;
+  vec3 col = (Lin + vec3(0.1) * Fex) * 0.04 + vec3(0.0, 0.0003, 0.00075);
+  return pow(col, vec3(1.0 / (1.2 + 1.2 * sunfade)));
+}
+`;
+
+// The sky as everything else sees it: a lookup into the baked panorama (two of them,
+// cross-faded), with the things too sharp to bake drawn on top: the sun's disc, the moon
+// and the stars, each dimmed by the cloud in front of it.
+export const SKY = /* glsl */`
+uniform vec3 skySunDir;
+uniform vec3 skyMoonDir;
+uniform float skyIntensity;
+uniform float skyTime;
+uniform float skyNight;
+uniform sampler2D skyPanoA;
+uniform sampler2D skyPanoB;
+uniform float skyPanoBlend;
+uniform vec3 skySunColor;
+
+vec2 pa_panoUv(vec3 dir) {
+  float e = clamp((asin(clamp(dir.y, -1.0, 1.0)) + 0.035) / 1.6057963, 0.0, 1.0);
+  return vec2(atan(dir.z, dir.x) / 6.2831853 + 0.5, sqrt(e));
+}
+// rgb: sky and clouds. a: how clear the view is to what lies beyond the clouds.
+vec4 pa_skyPano(vec3 dir) {
+  vec2 uv = pa_panoUv(dir);
+  return mix(texture2D(skyPanoA, uv), texture2D(skyPanoB, uv), skyPanoBlend);
 }
 
-float pa_cloudNoise(vec2 p) {
-  float v = 0.0, a = 0.5;
-  mat2 r = mat2(0.8, -0.6, 0.6, 0.8);
-  for (int i = 0; i < 6; i++) { v += a * pa_noise(p); p = r * p * 2.02 + 3.7; a *= 0.5; }
-  return v;
-}
-
-// Returns the sky radiance (pre-exposure, linear-ish) for a world direction.
+// Returns the sky radiance (pre-exposure, linear) for a world direction.
 vec3 pa_sky(vec3 dir, bool withDisc, bool withClouds) {
   dir = normalize(dir);
-  vec3 col = pa_atmosphere(dir, withDisc);
-  float day = smoothstep(-0.12, 0.08, skySunDir.y);
-
-  // Night sky: deep blue gradient, moon glow and stars.
-  vec3 night = mix(vec3(0.010, 0.016, 0.034), vec3(0.002, 0.004, 0.012), clamp(dir.y * 1.6, 0.0, 1.0));
-  night += vec3(0.05, 0.035, 0.03) * exp(-max(dir.y, 0.0) * 9.0) * 0.6; // city light pollution
-  float moonCos = dot(dir, skyMoonDir);
-  night += vec3(0.55, 0.62, 0.75) * smoothstep(0.9993, 0.9996, moonCos) * 2.0;
-  night += vec3(0.05, 0.07, 0.11) * pow(max(moonCos, 0.0), 40.0);
-  if (dir.y > 0.0) {
+  vec4 s = pa_skyPano(dir);
+  vec3 col = s.rgb;
+  if (skyNight > 0.01 && dir.y > 0.0) {
+    vec3 beyond = vec3(0.55, 0.62, 0.75) * smoothstep(0.9993, 0.9996, dot(dir, skyMoonDir)) * 2.0;
     vec3 sd = dir * 380.0;
-    float s = pa_hash13(floor(sd));
-    vec3 cellPos = fract(sd) - 0.5;
-    float star = smoothstep(0.996, 1.0, s) * smoothstep(0.42, 0.0, length(cellPos));
-    star *= 0.6 + 0.4 * sin(skyTime * 3.0 + s * 80.0);
-    night += vec3(0.9, 0.92, 1.0) * star * smoothstep(0.0, 0.25, dir.y) * 1.4;
+    float h = pa_hash13(floor(sd));
+    float star = smoothstep(0.996, 1.0, h) * smoothstep(0.42, 0.0, length(fract(sd) - 0.5));
+    star *= 0.6 + 0.4 * sin(skyTime * 3.0 + h * 80.0);
+    beyond += vec3(0.9, 0.92, 1.0) * star * smoothstep(0.0, 0.25, dir.y) * 1.4;
+    col += beyond * skyNight * s.a;
   }
-  col = col * day + night * skyNight;
-
-  if (withClouds && dir.y > 0.0) {
-    // Project onto a flat cloud deck. Two layers: puffy low cumulus and high wispy cirrus.
-    vec2 uv = dir.xz / (dir.y + 0.08);
-    vec2 wind = vec2(skyTime * 0.004, skyTime * 0.0015);
-    float n = pa_cloudNoise(uv * 1.4 + wind);
-    float cover = skyCloudCover;
-    float dens = smoothstep(1.0 - cover, 1.0 - cover + 0.32, n);
-    float cirrus = pa_fbm(vec2(uv.x * 0.6, uv.y * 3.5) + wind * 2.0);
-    cirrus = smoothstep(0.55, 0.95, cirrus) * 0.45;
-    // Fake self shadowing: sample toward the sun.
-    vec2 toSun = normalize(skySunDir.xz + 1e-4) * 0.06;
-    float nShadow = pa_cloudNoise(uv * 1.4 + wind + toSun);
-    float lit = clamp(0.5 + (n - nShadow) * 6.0, 0.0, 1.0);
-    float sunCos = max(dot(dir, skySunDir), 0.0);
-    float silver = pow(sunCos, 12.0) * 2.5 + pow(sunCos, 3.0) * 0.6;
-    vec3 cloudCol = mix(skyCloudShade, skyCloudLit, lit) * (1.0 + silver);
-    float horizonFade = smoothstep(0.0, 0.12, dir.y);
-    float alpha = clamp(dens * 0.92 + cirrus, 0.0, 1.0) * horizonFade;
-    // Clouds dissolve into the haze near the horizon.
-    cloudCol = mix(cloudCol, col, 1.0 - smoothstep(0.0, 0.35, dir.y) * 0.85);
-    col = mix(col, cloudCol, alpha);
-  }
+  if (withDisc) col += skySunColor * smoothstep(0.99990, 0.99996, dot(dir, skySunDir)) * step(-0.01, dir.y) * s.a * s.a;
   return col * skyIntensity;
 }
 `;
