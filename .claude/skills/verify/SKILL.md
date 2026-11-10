@@ -224,3 +224,23 @@ Translated AJ headlines join the **main wire and the war map**, not just their o
 - Live-mode failure shows "Live mode hiccuped … local core" and the error banner stays OUT of replayed history.
 
 Collect `pageerror` + console errors — must be empty except deliberate live-mode probe network noise.
+
+## Pacific Afterglow (`pacific-afterglow/`)
+
+Three.js driving game; `src/` is bundled into `dist/game.js` (committed). Rebuild after any `src/` edit:
+
+```bash
+cd pacific-afterglow && npm ci && npm run build
+python3 -m http.server 4173 --bind 127.0.0.1 --directory dist &
+```
+
+Drive it with Playwright (`chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] })`), wait for `window.__pacific`, click `#drive`.
+
+- Software GL is slow (0.1–2 s per frame): use a 960×540 viewport, give `page.screenshot` a 120 s timeout, and set `localStorage['pacific-quality'] = 'low'` for anything that is not a picture.
+- Test logic without rendering: `__pacific.step(seconds, { throttle, brake, steer, handbrake, nitro })`, `teleport(x, z, heading)`, `setTime(h)`, `selectCar(key)`, `debug.player.setHandling('easy'|'sport'|'sim')`, `debug.traffic.frozen = true`.
+- For beauty shots set `debug.game.paused = true` and place `debug.camera` by hand; hide `#hud`.
+- Shader compile errors only show up as console errors at runtime, so always collect `console` and `pageerror`.
+- GL errors (for example `GL_INVALID_OPERATION: ... sampler type`) arrive as console *warnings* and make draw calls vanish silently. Filter the collected console for `GL_` and treat any hit as a failure.
+- The four graphics tiers take different shader paths (Performance has no lamp lighting, far shadows, occlusion or bloom). Boot and screenshot each one, by day and at night, after any rendering change: `__pacific.setQuality('ultra'|'high'|'medium'|'low')`.
+- `debug.pipeline.debugView = 'ao'` or `'depth'` shows those buffers. `setTime()` repaints the whole sky panorama, which takes 20-30 s in software GL.
+- A script that drives a time trial must slow for the corner after each checkpoint (aim ~16 m along `debug.hud.route`, look ~70 m ahead for the speed limit); a naive chaser overshoots and wedges itself on a building.

@@ -1,0 +1,334 @@
+import * as THREE from 'three';
+import { canvasTexture } from '../core/materials.js';
+import { batchStatic } from '../core/batch.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { roadsX, roadsZ, ROAD_HALF, SLAB_H, PROMENADE, PIERS, BOUNDS, WEST, EAST, NORTH, SOUTH } from './layout.js';
+import { allBlocks } from './plan.js';
+import { instancedChunks } from '../core/grid.js';
+import { hash2 } from '../core/rng.js';
+import { terrainHeight } from './ground.js';
+
+// Traffic signal timing shared by the lamps and the traffic AI.
+// Axis 0 controls north/south traffic, axis 1 east/west.
+const CYCLE = 28;
+export function signalState(axis, time) {
+  const t = ((time % CYCLE) + CYCLE) % CYCLE;
+  const local = axis === 0 ? t : (t + 14) % CYCLE;
+  if (local < 10) return 2; // green
+  if (local < 13) return 1; // yellow
+  return 0; // red
+}
+
+function lightPoolTexture(renderer) {
+  return canvasTexture(renderer, 128, 128, (c, w, h) => {
+    const g = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+    g.addColorStop(0.7, 'rgba(255,255,255,0.15)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, h);
+  });
+}
+
+const beamVertex = /* glsl */`
+varying float vH;
+varying vec3 vN;
+varying vec3 vW;
+void main() {
+  vH = uv.y;
+  vec4 local = vec4(position, 1.0);
+  vec3 n = normal;
+  #ifdef USE_INSTANCING
+    local = instanceMatrix * local;
+    n = mat3(instanceMatrix) * n;
+  #endif
+  vec4 w = modelMatrix * local;
+  vW = w.xyz;
+  vN = normalize(mat3(modelMatrix) * n);
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`;
+const beamFragment = /* glsl */`
+uniform vec3 color;
+uniform float intensity;
+varying float vH;
+varying vec3 vN;
+varying vec3 vW;
+void main() {
+  vec3 v = normalize(cameraPosition - vW);
+  float edge = pow(abs(dot(v, normalize(vN))), 1.5);
+  float fade = smoothstep(0.0, 0.9, vH) * (1.0 - smoothstep(0.92, 1.0, vH));
+  float dist = length(cameraPosition - vW);
+  float a = edge * fade * intensity * smoothstep(4.0, 14.0, dist);
+  gl_FragColor = vec4(color * a, 1.0);
+}`;
+
+export function makeBeamMaterial(color, intensity = 0) {
+  return new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color(color) }, intensity: { value: intensity } },
+    vertexShader: beamVertex,
+    fragmentShader: beamFragment,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  });
+}
+
+export function buildProps(scene, renderer, extraLamps = [], knock = null) {
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), v = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1);
+  const one = new THREE.Vector3(1, 1, 1);
+  const up = new THREE.Vector3(0, 1, 0);
+  const metal = new THREE.MeshStandardMaterial({ color: 0x3f4648, roughness: 0.45, metalness: 0.7 });
+  const lamps = []; // [poleX, poleZ, dirX, dirZ]
+  const crossClear = ROAD_HALF + 7;
+
+  for (const x of roadsX) {
+    for (let z = NORTH - 40; z <= SOUTH + 40; z += 38) {
+      if (roadsZ.some(r => Math.abs(z - r) < crossClear)) continue;
+      for (const side of [-1, 1]) {
+        if (x === WEST && side < 0) continue; // the beach side has palms instead
+        lamps.push([x + side * (ROAD_HALF + 0.9), z + (side > 0 ? 19 : 0), -side, 0]);
+      }
+    }
+  }
+  for (const z of roadsZ) {
+    for (let x = WEST + 20; x <= EAST; x += 38) {
+      if (roadsX.some(r => Math.abs(x - r) < crossClear)) continue;
+      for (const side of [-1, 1]) lamps.push([x + (side > 0 ? 19 : 0), z + side * (ROAD_HALF + 0.9), 0, -side]);
+    }
+  }
+  // Promenade lamps (decorative, no arm).
+  const promenade = [];
+  for (let z = BOUNDS.minZ + 16; z <= BOUNDS.maxZ - 16; z += 24) if (PIERS.every(P => Math.abs(z - P.z) > 12)) promenade.push([(PROMENADE.from + PROMENADE.to) / 2, z]);
+
+  // Pole and arm are one piece of metal, and one draw call.
+  const shaft = new THREE.CylinderGeometry(0.09, 0.14, 9, 8);
+  shaft.translate(0, 4.5, 0);
+  const armGeo = new THREE.BoxGeometry(0.1, 0.1, 2.6);
+  armGeo.translate(0, 8.85, 1.3);
+  const poleGeo = mergeGeometries([shaft, armGeo]);
+  const headGeo = new THREE.BoxGeometry(0.42, 0.16, 0.9);
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x777777, emissive: 0xffd6a0, emissiveIntensity: 0, roughness: 0.3 });
+  const at = l => [l[0], l[1]];
+  const yawOf = ([, , dx, dz]) => q.setFromAxisAngle(up, Math.atan2(dx, dz));
+  const shadowed = mesh => { mesh.castShadow = true; };
+  const poles = instancedChunks(scene, lamps, poleGeo, metal, { at, far: 650, setup: shadowed, set: (mesh, i, l) => mesh.setMatrixAt(i, m.compose(v.set(l[0], SLAB_H, l[1]), yawOf(l), one)) });
+  const heads = instancedChunks(scene, lamps, headGeo, headMat, { at, far: 1700, set: (mesh, i, l) => mesh.setMatrixAt(i, m.compose(v.set(l[0] + l[2] * 2.5, SLAB_H + 8.78, l[1] + l[3] * 2.5), yawOf(l), one)) });
+
+  const globeMat = new THREE.MeshStandardMaterial({ color: 0xfff6e8, emissive: 0xffcf8a, emissiveIntensity: 0, roughness: 0.2 });
+  const promPoles = instancedChunks(scene, promenade, new THREE.CylinderGeometry(0.07, 0.1, 4.2, 8), metal, { at, far: 500, set: (mesh, i, [x, z]) => mesh.setMatrixAt(i, m.makeTranslation(x, SLAB_H + 2.1, z)) });
+  const globes = instancedChunks(scene, promenade, new THREE.SphereGeometry(0.3, 12, 8), globeMat, { at, far: 1400, set: (mesh, i, [x, z]) => mesh.setMatrixAt(i, m.makeTranslation(x, SLAB_H + 4.4, z)) });
+
+  // Light pools painted on the ground under lamps at night: [x, z, size, k, y].
+  const poolPositions = [
+    ...lamps.map(([x, z, dx, dz]) => [x + dx * 2.6, z + dz * 2.6, 13, 1, 0]),
+    ...promenade.map(([x, z]) => [x, z, 8, 0.8, 0]),
+    ...extraLamps.map(([x, y, z]) => [x, z, 7, 0.7, y - 4.6]),
+  ];
+  const poolMat = new THREE.MeshBasicMaterial({
+    map: lightPoolTexture(renderer), color: 0xffb46a, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, opacity: 0, polygonOffset: true, polygonOffsetFactor: -2, fog: true,
+  });
+  const poolGeo = new THREE.PlaneGeometry(1, 1);
+  poolGeo.rotateX(-Math.PI / 2);
+  const overlay = order => mesh => { mesh.renderOrder = order; mesh.userData.noAO = true; mesh.layers.set(1); };
+  const pools = instancedChunks(scene, poolPositions, poolGeo, poolMat, {
+    at, far: 800, setup: overlay(2),
+    set: (mesh, i, [x, z, size, k, y]) => mesh.setMatrixAt(i, m.compose(v.set(x, y + 0.04 + (k < 1 ? SLAB_H : 0), z), q.identity(), s.set(size, 1, size))),
+  });
+
+  // Soft volumetric cones under the street lamps.
+  const beamGeo = new THREE.CylinderGeometry(0.25, 3.6, 8.6, 18, 1, true);
+  beamGeo.translate(0, -4.3, 0);
+  const beamMat = makeBeamMaterial(0xffb46a);
+  const beams = instancedChunks(scene, lamps, beamGeo, beamMat, { at, far: 380, setup: overlay(3), set: (mesh, i, [x, z, dx, dz]) => mesh.setMatrixAt(i, m.makeTranslation(x + dx * 2.5, SLAB_H + 8.7, z + dz * 2.5)) });
+
+  // Traffic signals: one head per approach, hung above the lanes on a mast arm.
+  const heads2 = [], masts = [];
+  for (const x of roadsX) for (const z of roadsZ) {
+    // Approaches: [laneSideX, laneSideZ, facingX, facingZ, axis]
+    const approaches = [
+      [x + 6, z - 16, 0, 1, 0], // northbound traffic sees it on the far (north) side
+      [x - 6, z + 16, 0, -1, 0],
+      [x + 16, z + 6, -1, 0, 1], // eastbound
+      [x - 16, z - 6, 1, 0, 1],
+    ];
+    for (const [hx, hz, fx, fz, axis] of approaches) {
+      // Skip approaches that come from outside the grid.
+      if (axis === 0 && ((fz > 0 && z === SOUTH) || (fz < 0 && z === NORTH))) continue;
+      if (axis === 1 && ((fx < 0 && x === WEST) || (fx > 0 && x === EAST))) continue;
+      heads2.push([hx, hz, fx, fz, axis]);
+      // Mast from the curb on the right of the approaching driver.
+      const px = axis === 0 ? x + 14.2 * Math.sign(hx - x) : hx;
+      const pz = axis === 0 ? hz : z + 14.2 * Math.sign(hz - z);
+      masts.push([px, pz, hx, hz]);
+    }
+  }
+  const mastPoleGeo = new THREE.CylinderGeometry(0.16, 0.2, 7, 8);
+  mastPoleGeo.translate(0, 3.5, 0);
+  instancedChunks(scene, masts, mastPoleGeo, metal, { at, far: 650, setup: shadowed, set: (mesh, i, [px, pz]) => mesh.setMatrixAt(i, m.makeTranslation(px, SLAB_H, pz)) });
+  instancedChunks(scene, masts, new THREE.BoxGeometry(1, 0.16, 0.16), metal, {
+    at, far: 650, setup: shadowed,
+    set: (mesh, i, [px, pz, hx, hz]) => {
+      q.setFromAxisAngle(up, Math.atan2(-(hz - pz), hx - px));
+      mesh.setMatrixAt(i, m.compose(v.set((px + hx) / 2, 6.8, (pz + hz) / 2), q, s.set(Math.hypot(hx - px, hz - pz) + 1, 1, 1)));
+    },
+  });
+  const housingMat = new THREE.MeshStandardMaterial({ color: 0x1d2224, roughness: 0.5, metalness: 0.4 });
+  instancedChunks(scene, heads2, new THREE.BoxGeometry(0.5, 1.4, 0.36), housingMat, {
+    at, far: 650, set: (mesh, i, [hx, hz, fx, fz]) => mesh.setMatrixAt(i, m.compose(v.set(hx, 6.1, hz), q.setFromAxisAngle(up, Math.atan2(fx, fz)), one)),
+  });
+  // The three lamps of every head are one instanced mesh per chunk; the shader lights the
+  // right one from the shared signal state, so nothing is rewritten per frame.
+  const lampGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.06, 12);
+  lampGeo.rotateX(Math.PI / 2);
+  const signalMat = new THREE.ShaderMaterial({
+    uniforms: { uState: { value: new THREE.Vector2() } },
+    vertexShader: /* glsl */`
+      attribute vec2 aSig;
+      uniform vec2 uState;
+      varying vec3 vCol;
+      void main() {
+        float st = aSig.x < 0.5 ? uState.x : uState.y;
+        vec3 c = aSig.y < 0.5 ? vec3(7.0, 0.35, 0.2) : aSig.y < 1.5 ? vec3(7.0, 3.6, 0.3) : vec3(0.3, 6.0, 2.2);
+        vCol = abs(st - aSig.y) < 0.5 ? c : vec3(0.05);
+        gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: 'varying vec3 vCol;\nvoid main() { gl_FragColor = vec4(vCol, 1.0); }',
+  });
+  const signalLamps = heads2.flatMap(([hx, hz, fx, fz, axis]) => [0, 1, 2].map(k => [hx, hz, fx, fz, axis, k]));
+  instancedChunks(scene, signalLamps, lampGeo, signalMat, {
+    at, far: 900, cloneGeometry: true,
+    set: (mesh, i, [hx, hz, fx, fz, , k]) => mesh.setMatrixAt(i, m.compose(v.set(hx + fx * 0.2, 6.55 - k * 0.43, hz + fz * 0.2), q.setFromAxisAngle(up, Math.atan2(fx, fz)), one)),
+    setup: (mesh, list) => mesh.geometry.setAttribute('aSig', new THREE.InstancedBufferAttribute(new Float32Array(list.flatMap(l => [l[4], l[5]])), 2)),
+  });
+
+  // Lamp posts fold over when hit hard enough; their light pool and cone go with them.
+  if (knock) {
+    lamps.forEach(([x, z], i) => knock.add(
+      [poles.refs[i], heads.refs[i]],
+      [pools.refs[i], beams.refs[i]],
+      { type: 'lamp', x, z, y: SLAB_H, r: 0.18, mass: 0.22, solid: 6, kind: 'topple', sparks: true },
+    ));
+    promenade.forEach(([x, z], j) => knock.add(
+      [promPoles.refs[j], globes.refs[j]],
+      [pools.refs[lamps.length + j]],
+      { type: 'lamp', x, z, y: SLAB_H, r: 0.14, mass: 0.12, solid: 4, kind: 'topple', sparks: true },
+    ));
+  }
+  // Signal masts are anchored for good.
+  const circles = masts.map(([px, pz]) => ({ x: px, z: pz, r: 0.3 }));
+
+  // Billboards with original ads, lit after dark.
+  const ads = [
+    ['SURF FIZZ', 'TASTE THE SWELL', '#ff6b4a', '#14303d'],
+    ['HORIZON AIR', 'FLY THE COAST', '#ffd36b', '#1a2a52'],
+    ['VISTA BANK', 'YOUR MONEY. YOUR VIEW.', '#9fe3d3', '#10302c'],
+    ['NEON NIGHTS', 'THE PIER · FRIDAYS', '#ff63c3', '#1d0f2e'],
+    ['CALDERA GT', 'BUILT FOR THE COAST ROAD', '#ff7a3d', '#141a20'],
+    ['SOLSTICE', 'SUNSCREEN · SPF 50', '#ffe2a8', '#c2542e'],
+    ['RADIO KZRO', '88.1 · COAST FUNK ALL NIGHT', '#8cf5c0', '#12202b'],
+    ['LAUREL PARK', 'JAZZ UNDER THE JACARANDAS', '#d6b8ff', '#22183a'],
+  ];
+  // [x, z, yaw]: yaw -PI/2 faces west, PI faces north, 0 south.
+  const billboardSpots = [
+    [-215, -432, -Math.PI / 2], [100, 212, Math.PI], [-136, 30, -Math.PI / 2], [270, 362, Math.PI],
+  ];
+  // Car parks elsewhere get one at their south-east corner; more line the outer roads.
+  for (const [cx, cz, plan] of allBlocks()) {
+    if (plan.kind !== 'parking' || (cx <= 320 && Math.abs(cz) <= 480)) continue;
+    billboardSpots.push([cx + 46, cz + 52, hash2(cx, cz) < 0.5 ? 0 : Math.PI / 2]);
+  }
+  for (let z = NORTH + 200, k = 0; z < SOUTH; z += 450, k++) billboardSpots.push([EAST + 25, z + (k % 2) * 50, -Math.PI / 2]);
+  for (let x = WEST + 380; x < EAST; x += 520) billboardSpots.push([x, NORTH - 30, 0], [x + 130, SOUTH + 30, Math.PI]);
+  const billboards = [];
+  const boardRoot = new THREE.Group();
+  const adMats = ads.map(([title, tag, accent, bg]) => {
+    const tex = canvasTexture(renderer, 1024, 384, (c, w, h) => {
+      const g = c.createLinearGradient(0, 0, w, h);
+      g.addColorStop(0, bg);
+      g.addColorStop(1, '#000000');
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+      c.fillStyle = accent;
+      c.beginPath();
+      c.arc(w * 0.82, h * 0.5, h * 0.36, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = '#fff6e6';
+      c.font = '800 120px "Barlow Condensed", Impact, sans-serif';
+      c.fillText(title, 48, 170);
+      c.fillStyle = accent;
+      c.font = '600 46px "Barlow", Arial, sans-serif';
+      c.fillText(tag, 52, 250);
+      c.fillStyle = '#ffffff40';
+      c.fillRect(52, 290, 300, 6);
+    });
+    const mat = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0, roughness: 0.55 });
+    billboards.push(mat);
+    return mat;
+  });
+  billboardSpots.forEach(([x, z, ry], i) => {
+    const group = new THREE.Group();
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(14, 5.25), adMats[i % adMats.length]);
+    board.position.y = 14;
+    const back = new THREE.Mesh(new THREE.BoxGeometry(14.4, 5.6, 0.3), metal);
+    back.position.set(0, 14, -0.2);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 11.5, 10), metal);
+    post.position.y = 5.75;
+    group.add(board, back, post);
+    group.position.set(x, SLAB_H, z);
+    group.rotation.y = ry;
+    circles.push({ x, z, r: 0.5 });
+    group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    boardRoot.add(group);
+  });
+  batchStatic(boardRoot); // posts and frames share one material; so does every copy of an ad
+  scene.add(boardRoot);
+
+  // The hillside sign overlooking the city.
+  const letters = 'VISTA PACÍFICA';
+  const letterMat = new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.7, side: THREE.DoubleSide, alphaTest: 0.5 });
+  const letterTextures = new Map();
+  const signGroup = new THREE.Group();
+  let lz = -520;
+  for (const ch of letters) {
+    if (ch === ' ') { lz += 38; continue; }
+    if (!letterTextures.has(ch)) {
+      letterTextures.set(ch, canvasTexture(renderer, 128, 160, (c, w, h) => {
+        c.clearRect(0, 0, w, h);
+        c.fillStyle = '#fff';
+        c.font = '800 168px "Barlow Condensed", Impact, sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'alphabetic';
+        c.fillText(ch, w / 2, h - 8);
+      }));
+    }
+    const mat = letterMat.clone();
+    mat.map = letterTextures.get(ch);
+    const letter = new THREE.Mesh(new THREE.PlaneGeometry(26, 33), mat);
+    const lx = EAST + 330;
+    letter.position.set(lx, Math.min(terrainHeight(lx, lz - 10), terrainHeight(lx, lz + 10)) + 15, lz);
+    letter.rotation.y = -Math.PI / 2;
+    letter.castShadow = true;
+    signGroup.add(letter);
+    lz += 30;
+  }
+  scene.add(signGroup);
+
+  // With real lamp light on, the painted pools only add the hot spot under each head.
+  let poolStrength = 0.7;
+  return {
+    lamps,
+    circles,
+    setRealLamps(on) { poolStrength = on ? 0.3 : 0.7; },
+    update(time, lampFactor) {
+      headMat.emissiveIntensity = lampFactor * 4;
+      globeMat.emissiveIntensity = lampFactor * 2.6;
+      poolMat.opacity = lampFactor * poolStrength;
+      beamMat.uniforms.intensity.value = lampFactor * 0.09;
+      for (const b of billboards) b.emissiveIntensity = 0.05 + lampFactor * 1.1;
+      signalMat.uniforms.uState.value.set(signalState(0, time), signalState(1, time));
+    },
+  };
+}
