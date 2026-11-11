@@ -1035,7 +1035,24 @@ async function main() {
     await renderer.compileAsync(scene, camera);
   } catch { /* fall back to lazy compilation */ }
   frame();
-  requestAnimationFrame(() => $('loading').classList.add('hidden'));
+  // The city is ready, but the loading screen stays until the player is: its photos keep
+  // changing every five seconds until a click, tap or key press.
+  const loading = $('loading');
+  loading.classList.add('ready');
+  loading.querySelector('b').textContent = 'THE COAST IS CLEAR';
+  $('loading-step').textContent = mobile ? 'TAP TO START' : 'CLICK OR PRESS ANY KEY TO START';
+  const dismiss = e => {
+    if (e.type === 'keydown') {
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key) || e.key.startsWith('F')) return;
+      e.stopImmediatePropagation(); // this key only starts the game, it doesn't also drive off
+      audio.unlock();
+    }
+    removeEventListener('keydown', dismiss, true);
+    loading.removeEventListener('pointerdown', dismiss);
+    loading.classList.add('hidden');
+  };
+  addEventListener('keydown', dismiss, true);
+  loading.addEventListener('pointerdown', dismiss);
 
   // Hooks for automated testing and curious players.
   window.__pacific = {

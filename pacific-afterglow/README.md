@@ -219,6 +219,9 @@ High and Ultra.
 ## Project layout
 
 `src/` is the source; `dist/game.js` is the bundle built from it. `dist/index.html`,
-`dist/style.css` and `dist/favicon.svg` are authored directly. See `HANDOFF.md` for a map
+`dist/style.css` and `dist/favicon.svg` are authored directly. The loading screen shows the photos in
+`dist/loading/` (thirteen pictures, each with a tiny pre-blurred backdrop), starting from a random
+one and changing every five seconds; the cycle is pure CSS, so it keeps turning while the city is
+built. Once the city is ready the photos keep cycling until you click, tap or press a key. See `HANDOFF.md` for a map
 of the code. Three.js is MIT licensed (see `dist/THIRD_PARTY_LICENSES.txt`). The Barlow
 typefaces load from Google Fonts, with system fonts as fallback.
