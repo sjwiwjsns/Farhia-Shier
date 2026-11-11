@@ -86,11 +86,29 @@ the original 180 km/h pursuit; Off removes the wanted level.
   with towers past 250 m, Midtown, Northshore, Laurel Park and its four-block park, the
   Arts District, the Port, the Marina, Eastside and the Foothills. Hills ring the city.
 - A second, longer fishing pier at the Marina alongside the funfair pier.
-- Eleven building types, among them glass towers, offices, art deco blocks, brick walk-ups
-  with fire escapes, condos with balconies, hotels with canopies and blade signs, parking
-  garages, motels and warehouses. Heights, setbacks and widths vary block by block.
-- Lit shop fronts with signs and awnings, rooftop AC units, water tanks and antennas, and
-  windows that are on or off at random after dark. Up close every window looks into its
+- Twelve building types: glass towers, offices, art deco blocks, brick walk-ups with fire
+  escapes, condos with balconies, hotels with canopies and blade signs, shops, parking
+  garages, coastal stucco houses, motels, warehouses and civic halls with columns, a
+  pediment and sometimes a dome. Heights, setbacks and widths vary block by block, and on
+  most blocks the buildings stand wall to wall along the street.
+- Buildings with depth: windows are set back into the wall, with frames, glazing bars,
+  sills and lintels, and reveals that the sun lights on one side and shades on the other;
+  blinds are pulled to different heights and curtains hang at the sides. Fins, sunshades,
+  piers, cornices, canopies, balconies and party walls are real pieces that throw shadows.
+  Walls are brick, dressed stone, precast panels with joints, stucco, metal cladding or
+  curtain wall, each drawn at any distance without a texture to blur.
+- A skyline with shapes in it: stepped towers, round towers, twin slabs either side of a
+  core, glass shafts inside a concrete frame with an open crown, pyramid roofs in copper
+  and slate, plant rooms behind louvres, helipads and roof terraces, and names in lights
+  on some of the tallest. One landmark stands over all of it: a 300 m round tower with a
+  flared lookout and a mast, on its own plaza on Centro Blvd.
+- Street level is built up too: each shop has a tiled stall riser, a display window in
+  panes, a glazed door, a fascia with its sign and stone piers either side; offices,
+  condos and hotels have double-height lobbies behind glass with their doors under a
+  canopy; houses and walk-ups have a painted front door with steps and a lamp over it.
+- After dark, windows light floor by floor in offices and one by one in homes, shops and
+  lobbies glow, the old stone towers are floodlit, crowns carry bands of light, and the
+  landmark's rings drift between coral and amber. Up close every window looks into its
   own room (walls, floor, ceiling light) that shifts in parallax as you pass.
 - AI traffic in six vehicle types (taxis and police among them) that keeps to its lane,
   stops at red lights, turns at intersections and reacts when you hit it. Hundreds of
@@ -151,22 +169,41 @@ directional when the camera swings round, keeping the car sharp), road rumble, i
 
 ## Graphics settings
 
-| Setting | Resolution cap | Extras |
+| Setting | Extras | Full facade detail out to |
 | --- | --- | --- |
-| Ultra | 2× | 4096 shadows plus a far cascade, 16-sample occlusion, ¾-resolution reflections, 256 px live car reflections, finest clouds |
-| High | 1.5× | 2048 shadows plus a far cascade, 10-sample occlusion, half-resolution reflections and wet streets, 128 px live car reflections |
-| Balanced | 1.2× | 2048 shadows, a smaller far cascade, 6-sample occlusion, real street lamps, sky-only ocean reflections |
-| Performance | 1× | 1024 shadows, no far cascade, occlusion, bloom, grading or lamp lighting (lamps keep their painted pools) |
+| Ultra | 4096 shadows plus a far cascade, 16-sample occlusion, ¾-resolution reflections, 256 px live car reflections, finest clouds | 520 m |
+| High | 2048 shadows plus a far cascade, 10-sample occlusion, half-resolution reflections and wet streets, 128 px live car reflections | 360 m |
+| Balanced | 2048 shadows, a smaller far cascade, 6-sample occlusion, real street lamps, sky-only ocean reflections | 240 m |
+| Performance | 1024 shadows, no far cascade, occlusion, bloom, grading or lamp lighting (lamps keep their painted pools) | 130 m |
 
-Desktop defaults to High and touch devices to Balanced. Dynamic resolution lowers the
-render scale when the frame rate drops, and a sharpening pass keeps the picture crisp.
-Settings also cover handling, police, time trial, time of day, wet
-roads, radio, car, camera and an FPS counter (frame time, draw calls, triangles, render scale). Choices
-and the best time are stored in the current browser only.
+Desktop defaults to High, tablets to Balanced and phones to Performance.
+
+**Resolution** is its own setting, and it is fixed unless you choose Auto:
+
+| Resolution | Renders |
+| --- | --- |
+| 1080p (the default) | 1920 × 1080 pixels' worth, whatever the shape of the window, or every pixel the screen has if that is fewer |
+| 1440p | 2560 × 1440 pixels' worth, on the same terms |
+| Native (sharpest) | one rendered pixel per screen pixel, however dense the screen |
+| 720p (faster) | 1280 × 720 pixels' worth |
+| Auto | follows the graphics setting (1× to 2× the window) and lowers the scale when the frame rate drops |
+
+The settings panel shows the size actually being rendered, and so does the FPS counter. If
+a fixed resolution runs below 24 frames a second the game says so once and points at Auto.
+
+**Film effects** sets how much the lens adds: Subtle (the default) keeps a trace of grain,
+colour fringing and motion blur; Clean turns all three off; Cinematic is the heavier look
+the game used to have. A sharpening pass runs on every tier, and the haze is thinner than
+it was, so the far end of an avenue reads clearly.
+
+Settings also cover handling, police, time trial, time of day, wet roads, radio, car,
+camera and an FPS counter (frame time, draw calls, triangles, render size). Choices and
+the best time are stored in the current browser only.
 
 Performance work: everything repeated is instanced; the city is split into 320 m chunks
 whose small details are hidden with distance and whose facades switch to a cheaper shader
-far away; collisions, line of sight and parking go through spatial grids, so the bigger
+far away (how far depends on the graphics setting); every piece of trim on every building
+is one of two instanced shapes sharing one material; collisions, line of sight and parking go through spatial grids, so the bigger
 city costs no more per frame to simulate; the shadow map is drawn once per frame however
 many passes use it; the sky is repainted a sliver at a time into a panorama instead of
 being computed for every pixel; occlusion, shafts and depth of field read the depth buffer
