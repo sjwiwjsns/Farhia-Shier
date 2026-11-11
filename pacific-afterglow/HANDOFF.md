@@ -78,6 +78,12 @@ Rebuild `dist/game.js` after editing anything in `src/`; never edit the bundle.
 - Trim is two instanced shapes (box and drum) sharing one material; `aMetal` per instance
   picks painted or metal. A `belt` runs through the building, so keep its top below the
   roof; `cornice()` uses a facade part for the top course because that part carries the roof.
+  Trim has no collision of its own, so keep ground-level pieces within 0.3 m of the wall;
+  a post that stands free on the ground goes into `city.posts` (round colliders with a
+  lamp post's radius: the car collides as two circles and anything thinner slides inside it).
+- Pieces placed with `facePoint()` use the wall's own coordinate. A group rotated by
+  `f.rot` runs its local x the other way on the +x and −z faces; mirror any offset there
+  (as the hotel canopy does), or it lands a bay away from the door the shader drew.
 - The facade's own edge filter (`fa_step`, `fa_band`) is a straight ramp a little over a
   pixel wide, swapped in for `pa_aastep`/`pa_band` in that shader's text. It is cheaper and
   crisper than the smoothstep version, which the ground still uses.

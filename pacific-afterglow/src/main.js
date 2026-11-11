@@ -114,7 +114,7 @@ async function main() {
 
   // Everything solid goes into spatial grids, so collision cost does not grow with the city.
   const boxes = [...city.colliders, ...furniture.solids];
-  const circles = [...vegetation.trunkColliders, ...props.circles, ...furniture.circles];
+  const circles = [...vegetation.trunkColliders, ...props.circles, ...furniture.circles, ...city.posts];
   const world = {
     colliders: city.colliders,
     boxes, circles,

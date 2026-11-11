@@ -209,6 +209,10 @@ function stripeTexture(renderer) {
 }
 
 const AROUND = [FACES.px, FACES.nx, FACES.pz, FACES.nz];
+// Collision radius of a slim post: the same as a lamp post's, and much wider than the post.
+// The car collides as two circles with a waist between them; a thinner obstacle slides
+// round the front one and ends up inside the car.
+const POST_R = 0.5;
 const doorMask = faces => faces.reduce((mask, f) => mask | (f.nx > 0 ? DOOR.px : f.nx < 0 ? DOOR.nx : f.nz > 0 ? DOOR.pz : DOOR.nz), 0);
 // Where the shader puts the lobby doors on a wall this long: the middle of its middle bay.
 const lobbyDoorAt = faceW => { const n = Math.max(Math.floor(faceW / 4.6), 1); return (Math.floor(n / 2) + 0.5) * (faceW / n) - faceW / 2; };
@@ -220,6 +224,7 @@ export function buildCity(scene, renderer) {
   const emptyLots = [];
   const special = []; // individual meshes (hotel signs, canopies, garage signs, neon)
   const glow = []; // lit strips: crown bands, canopy soffits, lamp heads
+  const posts = []; // slim posts standing on the ground, solid to the car
   const beacons = [];
   const signs = []; // coastal neon
   const houses = [];
@@ -307,6 +312,7 @@ export function buildCity(scene, renderer) {
     if (reach > 2.2) for (const side of [-1, 1]) {
       const [px, pz] = facePoint(b, f, t + side * 2.8, reach - 0.3);
       drum('drumMetal', px, SLAB_H, pz, 0.16, 4.32 - SLAB_H, '#2a2d30');
+      posts.push({ x: px, z: pz, r: POST_R });
     }
   }
   // A plant room behind louvres, set in from the roof edge.
@@ -718,6 +724,7 @@ export function buildCity(scene, renderer) {
       for (let t = -fl / 2 + 0.5; t <= fl / 2 - 0.4; t += 4.2) {
         const [px, pz] = facePoint(b, f, t, 1.4);
         drum('drum', px, SLAB_H, pz, 0.16, 3.68, '#e8e4da');
+        posts.push({ x: px, z: pz, r: POST_R });
       }
       put('tileRoof', b.x, b.z, { pos: [b.x, b.top, b.z], rot: 0, scale: [b.w, Math.min(b.w, b.d) * 0.28, b.d] });
       const [sx, sz] = facePoint(lot, f, -faceLength(lot, f) / 2 + 4, -2);
@@ -1025,16 +1032,20 @@ export function buildCity(scene, renderer) {
       const fl = faceLength(b, f);
       const g = new THREE.Group();
       const color = pick(['#ffd27a', '#ff7aa8', '#7ad7ff']);
-      // Canopy over the entrance with downlights.
+      // Canopy over the entrance with downlights. The group is turned to face the street,
+      // which on two of the four faces runs its local x against the wall's own coordinate.
+      const lt = f === FACES.px || f === FACES.nz ? -t : t;
       const canopy = new THREE.Mesh(new THREE.BoxGeometry(7, 0.35, 3.4), darkMetal);
-      canopy.position.set(t, 4.25, 1.7);
+      canopy.position.set(lt, 4.25, 1.7);
       const under = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.05, 3.0), warmLight);
-      under.position.set(t, 4.05, 1.7);
+      under.position.set(lt, 4.05, 1.7);
       g.add(canopy, under);
       for (const sx of [-3.2, 3.2]) {
         const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 4.1, 8), darkMetal);
-        post.position.set(t + sx, 2.05, 3.3);
+        post.position.set(lt + sx, 2.05, 3.3);
         g.add(post);
+        const [px, pz] = facePoint(b, f, t + sx, 3.3);
+        posts.push({ x: px, z: pz, r: POST_R });
       }
       // Blade sign near the corner, readable along the street.
       const letters = name.replace('HOTEL ', '').replace('THE ', '');
@@ -1191,6 +1202,7 @@ export function buildCity(scene, renderer) {
 
   const api = {
     colliders,
+    posts,
     buildingTops,
     emptyLots,
     topsGrid,
