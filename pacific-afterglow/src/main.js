@@ -157,9 +157,11 @@ async function main() {
     atmosphere.setSkyQuality(q.sky[0], q.sky[1], name !== 'low');
     atmosphere.realLamps = q.lamps;
     props.setRealLamps(q.lamps);
+    city.setDetail(q.facade);
     $('quality').value = name;
   }
-  pipeline.onResize = () => coast.resize(pipeline.quality.reflections);
+  const slow = { time: 0, frames: 0, told: false };
+  pipeline.onResize = () => { coast.resize(pipeline.quality.reflections); const note = $('res-note'); if (note) note.textContent = `RENDERING ${pipeline.size.x} × ${pipeline.size.y}`; };
 
   let cycleStarted = false;
   function applyTime(name) {
@@ -543,6 +545,25 @@ async function main() {
     fpsEl.classList.toggle('hidden', !on);
   }
   $('fps-select').onchange = e => setFps(e.target.value === 'on');
+  // Resolution: a fixed 1080p by default; Auto trades sharpness for frame rate on its own.
+  const showRenderSize = () => { $('res-note').textContent = `RENDERING ${pipeline.size.x} × ${pipeline.size.y}`; };
+  function setResolution(mode) {
+    pipeline.setResolution(mode);
+    store.set('pacific-res', pipeline.resolution);
+    $('res-select').value = pipeline.resolution;
+    slow.told = false;
+    showRenderSize();
+  }
+  $('res-select').onchange = e => setResolution(e.target.value);
+  setResolution(store.get('pacific-res') || '1080p');
+  // Film effects: grain, colour fringing and motion blur. Clean turns them off.
+  function setFilm(name) {
+    pipeline.setFilm(name);
+    store.set('pacific-film', pipeline.filmName);
+    $('film-select').value = pipeline.filmName;
+  }
+  $('film-select').onchange = e => setFilm(e.target.value);
+  setFilm(store.get('pacific-film') || 'subtle');
   setFps(fpsOn);
   const savedRadio = Number(store.get('pacific-radio') ?? 0);
   setRadio(Number.isInteger(savedRadio) && savedRadio < STATIONS.length ? savedRadio : 0, false);
@@ -915,24 +936,24 @@ async function main() {
       let bx = tmpV.x * 0.5, by = tmpV.y * 0.5;
       const len = Math.hypot(bx, by);
       if (len < 0.12) { // anything bigger is a camera cut, not motion
-        const k = len > 0.035 ? 0.035 / len : 1;
+        const k = (len > 0.035 ? 0.035 / len : 1) * pipeline.film.blur;
         g.camBlur.value.set(bx * k, by * k);
       }
     }
     prevVP.copy(curVP);
     hasPrevVP = true;
     const speed01 = THREE.MathUtils.clamp((Math.abs(player.speed) - 30) / 35, 0, 1);
-    g.speedBlur.value = game.state === 'play' && pipeline.quality.grade ? speed01 * 0.6 + (player.boosting ? 0.45 : 0) : 0;
+    g.speedBlur.value = game.state === 'play' && pipeline.quality.grade ? (speed01 * 0.6 + (player.boosting ? 0.45 : 0)) * pipeline.film.blur : 0;
     game.flash = Math.max(0, game.flash - dt * 3);
     g.flash.value = game.flash;
     g.night.value = atmosphere.nightFactor;
     g.warmth.value = THREE.MathUtils.smoothstep(atmosphere.elevation, -6, 1) * (1 - THREE.MathUtils.smoothstep(atmosphere.elevation, 9, 24));
     // Depth of field: the title screen and the cinematic camera focus on the car.
-    const wantDof = game.state !== 'play' ? 1 : rig.mode === 3 ? 0.75 : 0;
+    const wantDof = game.state !== 'play' ? 0.7 : rig.mode === 3 ? 0.6 : 0;
     dofNow = THREE.MathUtils.damp(dofNow, wantDof, 4, dt);
     g.dof.value = dofNow;
     g.focus.value = Math.max(2, camera.position.distanceTo(player.group.position) - 0.6);
-    if (pipeline.bloom) pipeline.bloom.strength = 0.36 + atmosphere.lampFactor * 0.22;
+    if (pipeline.bloom) pipeline.bloom.strength = 0.28 + atmosphere.lampFactor * 0.2;
 
     pipeline.beginFrame();
     // Far shadows are centred well ahead of the camera, where they are looked at.
@@ -974,14 +995,26 @@ async function main() {
       gear: player.gear, ratio: gearRatio, night: atmosphere.nightFactor,
       city: district[2], nearTrees: district[3] > 0.5 ? 0.6 : 0.2,
     });
-    if (game.state === 'play' && !game.paused) pipeline.adapt(rawDt);
+    if (game.state === 'play' && !game.paused) {
+      pipeline.adapt(rawDt);
+      // A fixed resolution never drops. If frames are really slow, say once where the setting is.
+      if (pipeline.resolution !== 'auto' && !slow.told) {
+        slow.time += rawDt;
+        slow.frames++;
+        if (slow.time > 6) {
+          if (slow.frames / slow.time < 24) { slow.told = true; toast('LOW FRAME RATE · TRY RESOLUTION: AUTO IN SETTINGS'); }
+          slow.time = 0;
+          slow.frames = 0;
+        }
+      }
+    }
     if (fpsOn) {
       fpsStats.frames++;
       fpsStats.time += rawDt;
       fpsStats.worst = Math.max(fpsStats.worst, rawDt);
       if (fpsStats.time >= 0.5) {
         const fps = fpsStats.frames / fpsStats.time, ms = (fpsStats.time / fpsStats.frames) * 1000;
-        fpsEl.textContent = `${Math.round(fps)} FPS · ${ms.toFixed(1)} MS · WORST ${(fpsStats.worst * 1000).toFixed(0)} · ${renderer.info.render.calls} DRAWS · ${(renderer.info.render.triangles / 1e6).toFixed(1)}M TRIS · ${Math.round(pipeline.scale * 100)}% RES`;
+        fpsEl.textContent = `${Math.round(fps)} FPS · ${ms.toFixed(1)} MS · WORST ${(fpsStats.worst * 1000).toFixed(0)} · ${renderer.info.render.calls} DRAWS · ${(renderer.info.render.triangles / 1e6).toFixed(1)}M TRIS · ${pipeline.size.x}×${pipeline.size.y}`;
         fpsEl.classList.toggle('slow', fps < 50 && fps >= 30);
         fpsEl.classList.toggle('bad', fps < 30);
         fpsStats.frames = 0;

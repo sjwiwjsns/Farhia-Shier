@@ -17,10 +17,22 @@ import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 //   ao: occlusion samples (0 off)   farShadow: far shadow cascade size (0 off)
 //   sky: [panorama width, cloud march steps]   lamps: street lamps really light the street
 export const QUALITY = {
-  ultra: { label: 'Ultra', pixelRatio: 2, msaa: 4, shadow: 4096, shadowRange: 150, farShadow: 2048, ao: 16, reflections: 0.75, bloom: true, grade: true, shafts: true, carProbe: 256, sharpen: 0.3, lamps: true, dof: true, sky: [1024, 36] },
-  high: { label: 'High', pixelRatio: 1.5, msaa: 4, shadow: 2048, shadowRange: 120, farShadow: 2048, ao: 10, reflections: 0.5, bloom: true, grade: true, shafts: true, carProbe: 128, sharpen: 0.3, lamps: true, dof: true, sky: [1024, 28] },
-  medium: { label: 'Balanced', pixelRatio: 1.2, msaa: 2, shadow: 2048, shadowRange: 90, farShadow: 1024, ao: 6, reflections: 0, bloom: true, grade: true, shafts: true, carProbe: 0, sharpen: 0.22, lamps: true, dof: false, sky: [768, 20] },
-  low: { label: 'Performance', pixelRatio: 1, msaa: 0, shadow: 1024, shadowRange: 70, farShadow: 0, ao: 0, reflections: 0, bloom: false, grade: false, shafts: false, carProbe: 0, sharpen: 0, lamps: false, dof: false, sky: [512, 14] },
+  ultra: { label: 'Ultra', pixelRatio: 2, msaa: 4, shadow: 4096, shadowRange: 150, farShadow: 2048, ao: 16, reflections: 0.75, bloom: true, grade: true, shafts: true, carProbe: 256, sharpen: 0.55, lamps: true, dof: true, sky: [1024, 36], facade: 520 },
+  high: { label: 'High', pixelRatio: 1.5, msaa: 4, shadow: 2048, shadowRange: 120, farShadow: 2048, ao: 10, reflections: 0.5, bloom: true, grade: true, shafts: true, carProbe: 128, sharpen: 0.55, lamps: true, dof: true, sky: [1024, 28], facade: 360 },
+  medium: { label: 'Balanced', pixelRatio: 1.2, msaa: 2, shadow: 2048, shadowRange: 90, farShadow: 1024, ao: 6, reflections: 0, bloom: true, grade: true, shafts: true, carProbe: 0, sharpen: 0.45, lamps: true, dof: false, sky: [768, 20], facade: 240 },
+  low: { label: 'Performance', pixelRatio: 1, msaa: 0, shadow: 1024, shadowRange: 70, farShadow: 0, ao: 0, reflections: 0, bloom: false, grade: false, shafts: false, carProbe: 0, sharpen: 0.3, lamps: false, dof: false, sky: [512, 14], facade: 130 },
+};
+
+// Render resolution. A fixed mode holds a pixel budget ("1080p" is 1080p's worth of pixels
+// whatever the screen's shape, or every pixel the screen has if that is fewer) and never
+// drops below it. 'auto' follows the quality tier and lowers the scale when frames run slow.
+export const RESOLUTIONS = { auto: 0, '720p': 1280 * 720, '1080p': 1920 * 1080, '1440p': 2560 * 1440, native: Infinity };
+
+// How much camera character the lens pass adds: colour fringing, grain, motion blur, vignette.
+export const FILM = {
+  clean: { aberration: 0, grain: 0, blur: 0, vignette: 0.14 },
+  subtle: { aberration: 0.0005, grain: 0.015, blur: 0.55, vignette: 0.26 },
+  cinematic: { aberration: 0.0015, grain: 0.035, blur: 1, vignette: 0.32 },
 };
 
 const QUAD_VERTEX = /* glsl */`
@@ -332,6 +344,9 @@ export class Pipeline {
     this.frameTimes = [];
     this.adaptTimer = 0;
     this.quad = new FullScreenQuad(null);
+    this.resolution = '1080p';
+    this.filmName = 'subtle';
+    this.film = FILM.subtle;
     this.targets = null;
     this.size = new THREE.Vector2();
   }
@@ -350,7 +365,7 @@ export class Pipeline {
     this.aoBlurMat = q.ao ? quadMaterial(AOBlurShader) : null;
     this.lightMat = quadMaterial(LightShader);
     this.lensMat = quadMaterial(LensShader);
-    this.bloomPass = q.bloom ? new UnrealBloomPass(new THREE.Vector2(4, 4), 0.42, 0.62, 0.92) : null;
+    this.bloomPass = q.bloom ? new UnrealBloomPass(new THREE.Vector2(4, 4), 0.34, 0.5, 1.0) : null;
     // The names the rest of the game drives.
     this.grade = { uniforms: this.lensMat.uniforms };
     this.shafts = { uniforms: this.lightMat.uniforms };
@@ -358,9 +373,28 @@ export class Pipeline {
     const u = this.lensMat.uniforms;
     u.sharpen.value = q.sharpen;
     u.grade.value = q.grade ? 1 : 0;
-    if (!q.grade) { u.grain.value = 0; u.aberration.value = 0; }
+    this.applyFilm();
     this.disposeTargets();
     this.applySize();
+  }
+
+  setFilm(name) {
+    this.filmName = name in FILM ? name : 'subtle';
+    this.film = FILM[this.filmName];
+    if (this.lensMat) this.applyFilm();
+  }
+
+  applyFilm() {
+    const u = this.lensMat.uniforms, f = this.film, on = this.quality.grade;
+    u.aberration.value = on ? f.aberration : 0;
+    u.grain.value = on ? f.grain : 0;
+    u.vignette.value = f.vignette;
+  }
+
+  setResolution(mode) {
+    this.resolution = mode in RESOLUTIONS ? mode : '1080p';
+    this.scale = 1;
+    if (this.quality) this.applySize();
   }
 
   disposeTargets() {
@@ -394,8 +428,9 @@ export class Pipeline {
   }
 
   applySize() {
-    const w = innerWidth, h = innerHeight;
-    const pr = Math.min(devicePixelRatio || 1, this.quality.pixelRatio) * this.scale;
+    const w = innerWidth, h = innerHeight, dpr = devicePixelRatio || 1;
+    const budget = RESOLUTIONS[this.resolution];
+    const pr = budget ? Math.min(dpr, Math.sqrt(budget / (w * h))) : Math.min(dpr, this.quality.pixelRatio) * this.scale;
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(w, h);
     const pw = Math.max(2, Math.round(w * pr)), ph = Math.max(2, Math.round(h * pr));
@@ -412,6 +447,7 @@ export class Pipeline {
 
   // Lower or raise the render scale to hold ~55+ fps.
   adapt(dt) {
+    if (this.resolution !== 'auto') return; // a fixed resolution is a promise
     this.frameTimes.push(dt);
     if (this.frameTimes.length > 90) this.frameTimes.shift();
     this.adaptTimer += dt;
