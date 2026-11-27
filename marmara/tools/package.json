@@ -1,0 +1,12 @@
+{
+  "name": "marmara-3d-data",
+  "private": true,
+  "description": "Rebuilds data/beylikduzu.json and data/trees.json (see README.md)",
+  "type": "module",
+  "dependencies": {
+    "@mapbox/vector-tile": "2.0.3",
+    "pbf": "4.0.1",
+    "pngjs": "7.0.0",
+    "polygon-clipping": "0.15.7"
+  }
+}
