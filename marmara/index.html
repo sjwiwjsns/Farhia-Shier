@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Marmara 3D</title>
+  <meta name="description" content="A 3D map of the Marmara region of Turkey, from the Bulgarian border to Bursa and Sapanca, with satellite, street and topography modes and every building in Beylikdüzü modelled in 3D.">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d1117'/%3E%3Cpath d='M8 46 22 26l8 10 10-16 16 26z' fill='%23e8a33a'/%3E%3Cpath d='M8 46h48' stroke='%233d84b8' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="satellite" class="panel-open">
+  <div id="map" aria-label="3D map of the Marmara region"></div>
+
+  <div id="boot" role="status">
+    <div class="boot-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <div id="bootText">Loading the Marmara region…</div>
+    </div>
+  </div>
+
+  <button id="panelToggle" class="fab" type="button" aria-label="Show or hide the side panel" title="Panel">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+
+  <aside id="panel" aria-label="Map controls">
+    <header class="brand">
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#11161d"/><path d="M8 46 22 26l8 10 10-16 16 26z" fill="#e8a33a"/><path d="M8 46h48" stroke="#3d84b8" stroke-width="4"/></svg>
+      <div>
+        <h1>Marmara 3D</h1>
+        <p>Bulgaria · Istanbul · Bursa · Sapanca</p>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-title">Beylikdüzü, building by building</div>
+      <div class="hero-sub" id="cityStats" hidden><b id="statBuildings">–</b> buildings · <b id="statTrees">–</b> trees</div>
+      <button id="heroBtn" class="btn primary" type="button">Fly to Paradise AVM</button>
+    </section>
+
+    <div class="modes" role="group" aria-label="Map mode">
+      <button type="button" data-mode-btn="satellite" aria-pressed="true" title="Satellite (1)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0Zm2 0h14M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+        Satellite</button>
+      <button type="button" data-mode-btn="map" aria-pressed="false" title="Street map (2)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        Map</button>
+      <button type="button" data-mode-btn="topo" aria-pressed="false" title="Topography (3)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 19 6-9 4 5 3-4 7 8zM4 8c3-2 5 1 8-1s5 1 8-1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        Topography</button>
+    </div>
+
+    <section class="block">
+      <h2>Places</h2>
+      <div id="places" class="places"></div>
+    </section>
+
+    <section class="block">
+      <h2>Display</h2>
+      <label class="toggle"><input type="checkbox" id="tTerrain" checked><span>3D terrain</span></label>
+      <label class="toggle"><input type="checkbox" id="tBuildings" checked><span>3D buildings</span></label>
+      <label class="toggle"><input type="checkbox" id="tTrees" checked><span>Trees (Beylikdüzü)</span></label>
+      <label class="toggle"><input type="checkbox" id="tLabels" checked><span>Labels</span></label>
+      <div class="slider">
+        <div class="sl-head"><span>Terrain height</span><output id="exagVal">1.2×</output></div>
+        <input type="range" id="exag" min="0.5" max="3" step="0.1" value="1.2" aria-label="Terrain exaggeration">
+      </div>
+      <div class="slider">
+        <div class="sl-head"><span>Time of day <small id="sunInfo"></small></span><output id="timeVal">15:30</output></div>
+        <input type="range" id="time" min="0" max="24" step="0.05" value="15.5" aria-label="Time of day">
+        <div class="chips">
+          <button type="button" data-hour="8.5">Morning</button>
+          <button type="button" data-hour="12.5">Noon</button>
+          <button type="button" data-hour="16.1" id="goldenChip">Golden hour</button>
+          <button type="button" data-hour="20">Night</button>
+          <button type="button" id="nowBtn">Now</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="credits">
+      Beylikdüzü footprints: <a href="https://overturemaps.org" target="_blank" rel="noopener">Overture Maps</a> (OpenStreetMap + Microsoft ML Buildings).
+      Roads, places &amp; names © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors via <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a>.
+      Imagery © Esri, Maxar, Earthstar Geographics. Terrain: AWS Terrain Tiles (SRTM, GMTED, ETOPO1).
+      Most buildings have no height on record, so their floors are estimated from the footprint — click any building to see its source.
+      Trees are placed along real streets and parks, not surveyed one by one.
+    </footer>
+  </aside>
+
+  <div class="topbar">
+    <button id="overview" class="chip" type="button" title="Whole region">Whole region</button>
+    <button id="orbitBtn" class="chip" type="button" aria-pressed="false" title="Orbit (O)">Orbit</button>
+  </div>
+
+  <div id="status" class="status" hidden><div class="spinner small" aria-hidden="true"></div><span id="statusText"></span></div>
+
+  <div id="info" class="info" hidden role="dialog" aria-labelledby="infoName">
+    <button id="infoClose" class="x" type="button" aria-label="Close">×</button>
+    <div id="infoName" class="info-name"></div>
+    <div id="infoType" class="info-type"></div>
+    <div id="infoRows" class="rows"></div>
+  </div>
+
+  <div id="legend" class="legend" hidden>
+    <div class="lg-title">Elevation</div>
+    <div class="lg-bar"></div>
+    <div class="lg-ticks"><span>−1000</span><span>0</span><span>500</span><span>1000</span><span>2500 m</span></div>
+  </div>
+
+  <div id="readout" class="readout" aria-live="off"></div>
+
+  <script src="vendor/maplibre-gl.js"></script>
+  <script src="vendor/maplibre-contour.min.js"></script>
+  <script src="vendor/earcut.min.js"></script>
+  <script src="city3d.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
